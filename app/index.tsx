@@ -1,45 +1,57 @@
-import React from 'react';
-import { StyleSheet } from 'react-native';
-import { Link } from 'expo-router';
+import { Link } from "expo-router";
+import React from "react";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-import { ThemedView } from '@/components/themed-view';
-import { ThemedText } from '@/components/themed-text';
-
-export default function Index() {
+export default function Landing() {
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title">Accueil</ThemedText>
+    <View style={styles.container}>
+      <Text style={styles.title}>Bienvenue</Text>
 
-      <ThemedText style={styles.lead}>
-        Bienvenue dans l'application. Cette page d'accueil utilise les composants thémés
-        du projet pour rester cohérente avec le style.
-      </ThemedText>
-
-      <ThemedText style={styles.paragraph}>
-        Pour commencer :
-      </ThemedText>
-
-      <Link href="/(tabs)">
-        <Link.Trigger>
-          <ThemedText type="link">Aller à l'exploration</ThemedText>
-        </Link.Trigger>
-        <Link.Preview />
+      <Link href="/auth" asChild>
+        <TouchableOpacity style={styles.button}>
+          <Text style={styles.buttonText}>Aller à authentification</Text>
+        </TouchableOpacity>
       </Link>
-    </ThemedView>
+
+      <Link href="/storage" asChild>
+        <TouchableOpacity
+          style={StyleSheet.flatten([styles.button, styles.secondary])}
+        >
+          <Text style={styles.buttonText}>Aller au storage</Text>
+        </TouchableOpacity>
+      </Link>
+
+      <Link href="/firestore" asChild>
+        <TouchableOpacity
+          style={StyleSheet.flatten([
+            styles.button,
+            { backgroundColor: "#8E44AD" },
+          ])}
+        >
+          <Text style={styles.buttonText}>Exemple Firestore (CRUD)</Text>
+        </TouchableOpacity>
+      </Link>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
-    gap: 12,
-    justifyContent: 'center',
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
   },
-  lead: {
-    fontSize: 18,
+  title: { fontSize: 28, fontWeight: "700", marginBottom: 24 },
+  button: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    minWidth: "80%",
+    alignItems: "center",
+    marginBottom: 12,
   },
-  paragraph: {
-    marginTop: 8,
-  },
+  secondary: { backgroundColor: "#34C759" },
+  buttonText: { color: "white", fontSize: 16, fontWeight: "600" },
 });
