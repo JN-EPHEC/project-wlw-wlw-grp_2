@@ -1,9 +1,10 @@
+import { router } from "expo-router";
 import {
-    createUserWithEmailAndPassword,
-    onAuthStateChanged,
-    signInWithEmailAndPassword,
-    signOut,
-    User,
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  User,
 } from "firebase/auth";
 import React, { useEffect, useState } from "react";
 import { Alert, Button, StyleSheet, Text, TextInput, View } from "react-native";
@@ -18,6 +19,7 @@ const AuthComponent = () => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
+        router.replace ("/home")
         // L'utilisateur est connecté
         setUser(currentUser);
       } else {
