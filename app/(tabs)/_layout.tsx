@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Link } from "expo-router";
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
@@ -6,16 +7,20 @@ export default function BottomNavigation() {
   return (
     <View style={styles.bottomNav}>
       {/* Accueil */}
-      <TouchableOpacity style={styles.navItem}>
-        <Ionicons name="home" size={32} color="#6A4EFB" />
-        <Text style={[styles.navText, { color: '#6A4EFB' }]}>Accueil</Text>
-      </TouchableOpacity>
+      <Link href="/home" style={styles.navItem} asChild>
+  <TouchableOpacity>
+    <Ionicons name="home" size={32} color="#6A4EFB" />
+    <Text style={[styles.navText, { color: '#6A4EFB' }]}>Accueil</Text>
+  </TouchableOpacity>
+</Link>
 
       {/* Explorer */}
-      <TouchableOpacity style={styles.navItem}>
-        <Ionicons name="search" size={32} color="#B0B0B0" />
-        <Text style={styles.navText}>Explorer</Text>
-      </TouchableOpacity>
+      <Link href="/explore" style={styles.navItem} asChild>
+  <TouchableOpacity>
+    <Ionicons name="search" size={32} color="#B0B0B0" />
+    <Text style={styles.navText}>Explorer</Text>
+  </TouchableOpacity>
+</Link>
 
       {/* Bouton + au centre */}
       <TouchableOpacity style={styles.navItemCenter}>
