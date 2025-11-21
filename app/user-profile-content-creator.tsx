@@ -2,12 +2,10 @@ import React, { useState } from 'react';
 import { Dimensions, FlatList, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Link } from 'expo-router';
-// Removed react-native-svg usage because the dependency/types were causing a build error.
 
 function Avatar() {
     const bg = useThemeColor({ light: '#EEE5FF', dark: '#2A2540' }, 'background');
@@ -20,11 +18,9 @@ function Avatar() {
 
 export default function UserProfileContentCreator() {
     const [tab, setTab] = useState<'videos' | 'history' | 'saved'>('videos');
-    // `openedTab` is the category currently expanded (shows its contents). Null = none expanded.
     const [openedTab, setOpenedTab] = useState<'videos' | 'history' | 'saved' | null>(null);
 
     function handleTabPress(newTab: 'videos' | 'history' | 'saved') {
-        // If user clicks the same tab again -> collapse it. Otherwise open the clicked tab.
         setTab(newTab);
         setOpenedTab(prev => (prev === newTab ? null : newTab));
     }
@@ -50,7 +46,7 @@ export default function UserProfileContentCreator() {
     ];
 
     return (
-        <ThemedView style={styles.screen}>
+        <View style={styles.screen}>
             <ScrollView contentContainerStyle={styles.content}>
                 {/* Header */}
                 <View style={styles.headerRow}>
@@ -93,7 +89,7 @@ export default function UserProfileContentCreator() {
                         </View>
                     </View>
 
-                    {/* Progress Card (styled like mock) */}
+                    {/* Progress Card */}
                     <View style={styles.progressCard}>
                         <View style={styles.progressTitleRow}>
                             <View style={styles.titleLeft}>
@@ -103,13 +99,12 @@ export default function UserProfileContentCreator() {
                             <ThemedText style={styles.levelBadge}>Niveau 2</ThemedText>
                         </View>
 
-                        {/* Simple progress track (no external svg dependency) */}
+                        {/* Simple progress track */}
                         {(() => {
                             const barWidth = Math.min(SCREEN_WIDTH - 48, 360);
                             return (
                                 <View style={{ width: barWidth, height: 36, marginTop: 6, justifyContent: 'center' }}>
                                     <View style={[styles.progressTrack, { width: barWidth }]} />
-                                    {/* orange fill (current progress) */}
                                     <View style={{ position: 'absolute', left: 0, top: 16, width: barWidth * 0.2, height: 6, borderRadius: 8, backgroundColor: '#FF9A2A' }} />
                                 </View>
                             );
@@ -130,20 +125,20 @@ export default function UserProfileContentCreator() {
                             style={styles.badgesRow}
                         >
                             {badges.map((badge, index) => (
-                                    <View key={index} style={styles.badgeItem}>
-                                            <View style={styles.badgeIcon}>
-                                                <ThemedText style={styles.badgeEmoji}>🏅</ThemedText>
-                                            </View>
-                                        <ThemedText style={[styles.badgeLabel, { color: '#6B46FF' }]}>{badge.title}</ThemedText>
+                                <View key={index} style={styles.badgeItem}>
+                                    <View style={styles.badgeIcon}>
+                                        <ThemedText style={styles.badgeEmoji}>🏅</ThemedText>
                                     </View>
-                                ))}
+                                    <ThemedText style={[styles.badgeLabel, { color: '#6B46FF' }]}>{badge.title}</ThemedText>
+                                </View>
+                            ))}
                         </ScrollView>
                         <Pressable style={styles.ctaButton}>
                             <ThemedText style={styles.ctaText}>Voir mes certificats</ThemedText>
                         </Pressable>
                     </View>
 
-                    {/* Profile tabs: Vidéos / Historique / Sauvegardés */}
+                    {/* Profile tabs */}
                     <View style={styles.tabsContainer}>
                         <View style={styles.tabRow}>
                             <Pressable onPress={() => handleTabPress('videos')} style={[styles.tabButton, tab === 'videos' && styles.tabButtonActive]}>
@@ -156,8 +151,6 @@ export default function UserProfileContentCreator() {
                                 <ThemedText style={[styles.tabLabel, tab === 'saved' && styles.tabLabelActive]}>Sauvegardés</ThemedText>
                             </Pressable>
                         </View>
-
-                        {/* (Removed subcategory row — actions are shown per-item on the right) */}
 
                         {openedTab === tab && (
                             <FlatList
@@ -210,15 +203,22 @@ export default function UserProfileContentCreator() {
                     <ThemedText style={[styles.navText, { color: '#6B46FF' }]}>Profil</ThemedText>
                 </Pressable>
             </View>
-        </ThemedView>
+        </View>
     );
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
-    screen: { flex: 1 },
-    content: { padding: 16, paddingBottom: Platform.OS === 'ios' ? 100 : 90 },
+    screen: { 
+        flex: 1,
+        backgroundColor: '#FFFFFF'
+    },
+    content: { 
+        padding: 16, 
+        paddingBottom: Platform.OS === 'ios' ? 100 : 90,
+        backgroundColor: '#FFFFFF'
+    },
 
     // Header
     headerRow: { 
@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     progressBar: { height: '100%', backgroundColor: '#FF9A2A' },
     progressSub: { marginTop: 8, color: '#6b6b6b', fontSize: 12 },
 
-    /* New styles for progress card that matches the mock */
+    // Progress Card
     progressCard: {
         backgroundColor: 'rgba(106,78,251,0.06)',
         borderRadius: 16,
@@ -404,8 +404,9 @@ const styles = StyleSheet.create({
         borderColor: '#fff'
     },
     plusText: { fontSize: 28, color: '#fff', fontWeight: 'bold', marginTop: -2 },
-    navText: { fontSize: 10, color: '#999' }
-    ,
+    navText: { fontSize: 10, color: '#999' },
+
+    // Tabs
     tabsContainer: { width: '100%', marginTop: 16, backgroundColor: 'rgba(106,78,251,0.06)', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12 },
     tabRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 },
     tabButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: 'transparent' },
@@ -413,19 +414,9 @@ const styles = StyleSheet.create({
     tabLabel: { fontSize: 14, color: '#6b6b6b' },
     tabLabelActive: { color: '#fff' },
     contentList: { width: '100%', marginTop: 6, maxHeight: 260 },
-    subTabRow: { flexDirection: 'row', justifyContent: 'flex-start', marginBottom: 8, paddingHorizontal: 6 },
-    subTabButton: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10, backgroundColor: 'transparent', marginRight: 8 },
-    subTabButtonActive: { backgroundColor: '#6A4EFB' },
-    subTabLabel: { fontSize: 13, color: '#6b6b6b' },
-    subTabLabelActive: { color: '#fff' },
-    itemCard: { width: '100%', padding: 12, backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 10, marginBottom: 8 },
     itemCardRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 10, marginBottom: 8 },
     itemCardContent: { flex: 1, paddingRight: 8 },
     itemCta: { backgroundColor: '#FD9A34', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, alignSelf: 'center' },
     itemCtaText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-    actionStack: { marginLeft: 8, alignItems: 'center', justifyContent: 'center' },
-    actionButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', marginBottom: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
-    actionButtonGradient: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 3 },
-    actionGradientInner: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#6A4EFB' },
     itemSub: { marginTop: 4, color: '#6b6b6b', fontSize: 12 }
 });
