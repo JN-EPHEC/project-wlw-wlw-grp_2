@@ -221,8 +221,6 @@ const styles = StyleSheet.create({
         paddingBottom: Platform.OS === 'ios' ? 100 : 90,
         backgroundColor: '#FFFFFF'
     },
-
-    // Header
     headerRow: { 
         flexDirection: 'row', 
         alignItems: 'center', 
@@ -243,11 +241,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center'
     },
-
-    // Center Content
     centerColumn: { alignItems: 'center' },
-
-    // Avatar
     avatar: { 
         width: 100, 
         height: 100, 
@@ -257,8 +251,6 @@ const styles = StyleSheet.create({
         marginTop: 8
     },
     avatarEmoji: { fontSize: 48 },
-
-    // User Info
     handle: { marginTop: 8, color: '#2b2b2b' },
     roleBadge: { 
         marginTop: 6, 
@@ -268,8 +260,6 @@ const styles = StyleSheet.create({
         borderRadius: 20 
     },
     roleText: { color: '#fff', fontWeight: '600' },
-
-    // Edit Button
     editButton: { 
         marginTop: 12, 
         backgroundColor: '#6B46FF', 
@@ -278,30 +268,24 @@ const styles = StyleSheet.create({
         borderRadius: 25 
     },
     editButtonText: { color: '#fff', fontWeight: '600' },
-
-    // Stats
     statsRow: { 
         flexDirection: 'row', 
         marginTop: 16, 
         width: '100%', 
-        justifyContent: 'space-between',
-        paddingHorizontal: 8
+        justifyContent: 'center',
+        gap: 8,
     },
     statBox: { 
-        flex: 1,
-        minWidth: 56,
-        height: 60, 
-        borderRadius: 12, 
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 10, 
         alignItems: 'center', 
         justifyContent: 'center',
-        marginHorizontal: 4
     },
     statOrange: { backgroundColor: '#FF9A2A' },
     statPurple: { backgroundColor: '#6B46FF' },
-    statNumber: { color: '#fff', fontSize: 18, fontWeight: '700' },
-    statLabel: { color: '#fff', fontSize: 11, marginTop: 2 },
-
-    // Cards
+    statNumber: { color: '#fff', fontSize: 14, fontWeight: '700' },
+    statLabel: { color: '#fff', fontSize: 9 },
     card: { 
         width: '100%', 
         marginTop: 16, 
@@ -345,8 +329,6 @@ const styles = StyleSheet.create({
         color: '#FF9A2A',
         fontWeight: '600'
     },
-
-    // Progress Card
     progressCard: {
         width: '100%',
         backgroundColor: '#F8F6FF',
@@ -378,8 +360,6 @@ const styles = StyleSheet.create({
         borderRadius: 4,
     },
     progressSub: { color: '#6b6b6b', fontSize: 12 },
-
-    // Badges
     badgesRow: { marginTop: 8 },
     badgeItem: { width: 70, alignItems: 'center', marginRight: 12 },
     badgeIcon: { 
@@ -393,8 +373,6 @@ const styles = StyleSheet.create({
     },
     badgeEmoji: { fontSize: 24 },
     badgeLabel: { fontSize: 10, textAlign: 'center', lineHeight: 13 },
-
-    // CTA Button
     ctaButton: { 
         marginTop: 16, 
         backgroundColor: '#FD9A34', 
@@ -403,8 +381,6 @@ const styles = StyleSheet.create({
         alignItems: 'center' 
     },
     ctaText: { color: '#fff', fontWeight: '600' },
-
-    // Bottom Navigation
     bottomNav: {
         flexDirection: 'row',
         justifyContent: 'space-around',
@@ -448,8 +424,6 @@ const styles = StyleSheet.create({
     },
     navText: { fontSize: 10, color: '#B0B0B0', marginTop: 4, fontWeight: '500' },
     navTextActive: { color: '#6B46FF' },
-
-    // Tabs
     tabsContainer: { 
         width: '100%', 
         marginTop: 16, 
