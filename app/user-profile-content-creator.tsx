@@ -54,7 +54,7 @@ export default function UserProfileContentCreator() {
                             <Ionicons name="chevron-back" size={28} color="#6b6b6b" />
                         </Pressable>
                     </Link>
-                    <ThemedText type="title">Profile - créateur</ThemedText>
+                    <View style={styles.headerSpacer} />
                     <Pressable style={styles.infoButton}>
                         <Ionicons name="settings-outline" size={24} color="#6B46FF" />
                     </Pressable>
@@ -217,7 +217,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF'
     },
     content: { 
-        padding: 16, 
+        paddingHorizontal: 16,
+        paddingTop: Platform.OS === 'ios' ? 50 : 20,
         paddingBottom: Platform.OS === 'ios' ? 100 : 90,
         backgroundColor: '#FFFFFF'
     },
@@ -227,13 +228,16 @@ const styles = StyleSheet.create({
         flexDirection: 'row', 
         alignItems: 'center', 
         justifyContent: 'space-between', 
-        marginBottom: 8 
+        marginBottom: 16
     },
     backButton: {
         width: 40,
         height: 40,
         alignItems: 'center',
         justifyContent: 'center',
+    },
+    headerSpacer: {
+        flex: 1,
     },
     infoButton: {
         width: 40,
@@ -254,35 +258,48 @@ const styles = StyleSheet.create({
         borderRadius: 50, 
         alignItems: 'center', 
         justifyContent: 'center',
-        marginTop: 8
+        marginBottom: 12
     },
-    avatarEmoji: { fontSize: 48 },
+    avatarEmoji: { fontSize: 50 },
 
     // User Info
-    handle: { marginTop: 8, color: '#2b2b2b' },
+    handle: { 
+        marginBottom: 8,
+        color: '#1A1A1A',
+        fontSize: 16,
+        fontWeight: '600'
+    },
     roleBadge: { 
-        marginTop: 6, 
+        marginBottom: 12,
         backgroundColor: '#FF9A2A', 
         paddingHorizontal: 16, 
         paddingVertical: 6, 
         borderRadius: 20 
     },
-    roleText: { color: '#fff', fontWeight: '600' },
+    roleText: { 
+        color: '#FFFFFF', 
+        fontWeight: '600',
+        fontSize: 14
+    },
 
     // Edit Button
     editButton: { 
-        marginTop: 12, 
+        marginBottom: 20,
         backgroundColor: '#6B46FF', 
         paddingHorizontal: 24, 
         paddingVertical: 12, 
         borderRadius: 25 
     },
-    editButtonText: { color: '#fff', fontWeight: '600' },
+    editButtonText: { 
+        color: '#FFFFFF', 
+        fontWeight: '600',
+        fontSize: 14
+    },
 
     // Stats
     statsRow: { 
         flexDirection: 'row', 
-        marginTop: 16, 
+        marginBottom: 20,
         width: '100%', 
         justifyContent: 'space-between',
         paddingHorizontal: 8
@@ -298,22 +315,32 @@ const styles = StyleSheet.create({
     },
     statOrange: { backgroundColor: '#FF9A2A' },
     statPurple: { backgroundColor: '#6B46FF' },
-    statNumber: { color: '#fff', fontSize: 18, fontWeight: '700' },
-    statLabel: { color: '#fff', fontSize: 11, marginTop: 2 },
+    statNumber: { 
+        color: '#FFFFFF', 
+        fontSize: 18, 
+        fontWeight: '700' 
+    },
+    statLabel: { 
+        color: '#FFFFFF', 
+        fontSize: 11, 
+        marginTop: 2 
+    },
 
     // Cards
     card: { 
         width: '100%', 
-        marginTop: 16, 
+        marginBottom: 16,
         padding: 16, 
         borderRadius: 16, 
-        backgroundColor: '#F8F6FF' 
+        backgroundColor: '#FFFFFF',
+        borderWidth: 1,
+        borderColor: '#E8E8E8'
     },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12
+        marginBottom: 16
     },
     cardTitleRow: {
         flexDirection: 'row',
@@ -322,9 +349,11 @@ const styles = StyleSheet.create({
     cardTitleText: {
         marginLeft: 8,
         fontSize: 16,
+        fontWeight: '600',
+        color: '#1A1A1A'
     },
     levelBadgeContainer: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#F8F6FF',
         paddingHorizontal: 12,
         paddingVertical: 4,
         borderRadius: 12,
@@ -335,7 +364,7 @@ const styles = StyleSheet.create({
         fontWeight: '600'
     },
     countBadgeContainer: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#F8F6FF',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 10,
@@ -349,11 +378,13 @@ const styles = StyleSheet.create({
     // Progress Card
     progressCard: {
         width: '100%',
-        backgroundColor: '#F8F6FF',
+        backgroundColor: '#FFFFFF',
         borderRadius: 16,
         paddingVertical: 16,
         paddingHorizontal: 16,
-        marginTop: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#E8E8E8'
     },
     progressTitleRow: { 
         flexDirection: 'row', 
@@ -362,7 +393,12 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     titleLeft: { flexDirection: 'row', alignItems: 'center' },
-    progressTitle: { marginLeft: 8, fontSize: 16 },
+    progressTitle: { 
+        marginLeft: 8, 
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1A1A1A'
+    },
     progressBarContainer: {
         marginBottom: 8,
     },
@@ -377,7 +413,11 @@ const styles = StyleSheet.create({
         backgroundColor: '#FF9A2A', 
         borderRadius: 4,
     },
-    progressSub: { color: '#6b6b6b', fontSize: 12 },
+    progressSub: { 
+        color: '#6b6b6b', 
+        fontSize: 12,
+        textAlign: 'left'
+    },
 
     // Badges
     badgesRow: { marginTop: 8 },
@@ -397,12 +437,16 @@ const styles = StyleSheet.create({
     // CTA Button
     ctaButton: { 
         marginTop: 16, 
-        backgroundColor: '#FD9A34', 
+        backgroundColor: '#FF9A2A', 
         paddingVertical: 12, 
         borderRadius: 25, 
         alignItems: 'center' 
     },
-    ctaText: { color: '#fff', fontWeight: '600' },
+    ctaText: { 
+        color: '#FFFFFF', 
+        fontWeight: '600',
+        fontSize: 14
+    },
 
     // Bottom Navigation
     bottomNav: {
@@ -452,11 +496,13 @@ const styles = StyleSheet.create({
     // Tabs
     tabsContainer: { 
         width: '100%', 
-        marginTop: 16, 
-        backgroundColor: '#F8F6FF', 
+        marginTop: 0,
+        backgroundColor: '#FFFFFF',
         paddingVertical: 12, 
         paddingHorizontal: 12, 
-        borderRadius: 16 
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: '#E8E8E8'
     },
     tabRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 },
     tabButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20, backgroundColor: 'transparent' },
@@ -470,7 +516,7 @@ const styles = StyleSheet.create({
         alignItems: 'center', 
         justifyContent: 'space-between', 
         padding: 14, 
-        backgroundColor: '#FFFFFF', 
+        backgroundColor: '#F8F6FF', 
         borderRadius: 12, 
         marginBottom: 8 
     },
