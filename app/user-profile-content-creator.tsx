@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import { Dimensions, FlatList, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
+import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 
 function Avatar() {
@@ -39,10 +38,10 @@ export default function UserProfileContentCreator() {
     ];
 
     const badges = [
-        { title: 'Expert\nMarketing' },
-        { title: 'Développeur\nPython' },
-        { title: 'Expert\nData' },
-        { title: 'Designer\nUI/UX' }
+        { title: 'Expert\nMarketing', emoji: '🏅' },
+        { title: 'Développeur\nPython', emoji: '🐍' },
+        { title: 'Expert\nData', emoji: '📊' },
+        { title: 'Designer\nUI/UX', emoji: '🎨' }
     ];
 
     return (
@@ -50,14 +49,14 @@ export default function UserProfileContentCreator() {
             <ScrollView contentContainerStyle={styles.content}>
                 {/* Header */}
                 <View style={styles.headerRow}>
-                    <Link href="/">
-                        <Link.Trigger>
-                            <IconSymbol name="chevron.left" size={28} color="#6b6b6b" />
-                        </Link.Trigger>
+                    <Link href="/" asChild>
+                        <Pressable style={styles.backButton}>
+                            <Ionicons name="chevron-back" size={28} color="#6b6b6b" />
+                        </Pressable>
                     </Link>
                     <ThemedText type="title">Profile - créateur</ThemedText>
                     <Pressable style={styles.infoButton}>
-                        <MaterialIcons name="settings" size={20} color="#6B46FF" />
+                        <Ionicons name="settings-outline" size={24} color="#6B46FF" />
                     </Pressable>
                 </View>
 
@@ -93,22 +92,20 @@ export default function UserProfileContentCreator() {
                     <View style={styles.progressCard}>
                         <View style={styles.progressTitleRow}>
                             <View style={styles.titleLeft}>
-                                <MaterialIcons name="trending-up" size={18} color="#FF9A2A" />
+                                <Ionicons name="trending-up" size={20} color="#FF9A2A" />
                                 <ThemedText type="subtitle" style={styles.progressTitle}>Progression globale</ThemedText>
                             </View>
-                            <ThemedText style={styles.levelBadge}>Niveau 2</ThemedText>
+                            <View style={styles.levelBadgeContainer}>
+                                <ThemedText style={styles.levelBadge}>Niveau 2</ThemedText>
+                            </View>
                         </View>
 
-                        {/* Simple progress track */}
-                        {(() => {
-                            const barWidth = Math.min(SCREEN_WIDTH - 48, 360);
-                            return (
-                                <View style={{ width: barWidth, height: 36, marginTop: 6, justifyContent: 'center' }}>
-                                    <View style={[styles.progressTrack, { width: barWidth }]} />
-                                    <View style={{ position: 'absolute', left: 0, top: 16, width: barWidth * 0.2, height: 6, borderRadius: 8, backgroundColor: '#FF9A2A' }} />
-                                </View>
-                            );
-                        })()}
+                        {/* Progress bar */}
+                        <View style={styles.progressBarContainer}>
+                            <View style={styles.progressTrack}>
+                                <View style={[styles.progressFill, { width: '20%' }]} />
+                            </View>
+                        </View>
 
                         <ThemedText style={styles.progressSub}>200 / 3,000 XP pour niveau 8</ThemedText>
                     </View>
@@ -116,8 +113,13 @@ export default function UserProfileContentCreator() {
                     {/* Badges Card */}
                     <View style={styles.card}>
                         <View style={styles.cardHeader}>
-                            <ThemedText type="subtitle">🏅 Badges & Réalisation</ThemedText>
-                            <ThemedText style={styles.countBadge}>4/8</ThemedText>
+                            <View style={styles.cardTitleRow}>
+                                <Ionicons name="ribbon" size={20} color="#FF9A2A" />
+                                <ThemedText type="subtitle" style={styles.cardTitleText}>Badges & Réalisation</ThemedText>
+                            </View>
+                            <View style={styles.countBadgeContainer}>
+                                <ThemedText style={styles.countBadge}>4/8</ThemedText>
+                            </View>
                         </View>
                         <ScrollView 
                             horizontal 
@@ -127,7 +129,7 @@ export default function UserProfileContentCreator() {
                             {badges.map((badge, index) => (
                                 <View key={index} style={styles.badgeItem}>
                                     <View style={styles.badgeIcon}>
-                                        <ThemedText style={styles.badgeEmoji}>🏅</ThemedText>
+                                        <ThemedText style={styles.badgeEmoji}>{badge.emoji}</ThemedText>
                                     </View>
                                     <ThemedText style={[styles.badgeLabel, { color: '#6B46FF' }]}>{badge.title}</ThemedText>
                                 </View>
@@ -178,29 +180,29 @@ export default function UserProfileContentCreator() {
             {/* Bottom Navigation */}
             <View style={styles.bottomNav}>
                 <Pressable style={styles.navItem}>
-                    <IconSymbol name="house" size={24} color="#999" />
+                    <Ionicons name="home-outline" size={26} color="#B0B0B0" />
                     <ThemedText style={styles.navText}>Accueil</ThemedText>
                 </Pressable>
                 
                 <Pressable style={styles.navItem}>
-                    <IconSymbol name="magnifyingglass" size={24} color="#999" />
+                    <Ionicons name="search-outline" size={26} color="#B0B0B0" />
                     <ThemedText style={styles.navText}>Explorer</ThemedText>
                 </Pressable>
                 
-                <Pressable style={styles.navItemActive}>
+                <Pressable style={styles.navItemCenter}>
                     <View style={styles.plusButton}>
-                        <ThemedText style={styles.plusText}>+</ThemedText>
+                        <Ionicons name="add" size={32} color="#FD9A34" />
                     </View>
                 </Pressable>
                 
                 <Pressable style={styles.navItem}>
-                    <IconSymbol name="bell" size={24} color="#999" />
+                    <Ionicons name="notifications-outline" size={26} color="#B0B0B0" />
                     <ThemedText style={styles.navText}>Notifications</ThemedText>
                 </Pressable>
                 
                 <Pressable style={styles.navItem}>
-                    <IconSymbol name="person" size={24} color="#6B46FF" />
-                    <ThemedText style={[styles.navText, { color: '#6B46FF' }]}>Profil</ThemedText>
+                    <Ionicons name="person" size={26} color="#6B46FF" />
+                    <ThemedText style={[styles.navText, styles.navTextActive]}>Profil</ThemedText>
                 </Pressable>
             </View>
         </View>
@@ -227,38 +229,43 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between', 
         marginBottom: 8 
     },
+    backButton: {
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     infoButton: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: 'transparent',
         alignItems: 'center',
         justifyContent: 'center'
     },
-    infoText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 
     // Center Content
     centerColumn: { alignItems: 'center' },
 
     // Avatar
     avatar: { 
-        width: SCREEN_WIDTH > 420 ? 120 : 96, 
-        height: SCREEN_WIDTH > 420 ? 120 : 96, 
-        borderRadius: 120, 
+        width: 100, 
+        height: 100, 
+        borderRadius: 50, 
         alignItems: 'center', 
         justifyContent: 'center',
         marginTop: 8
     },
-    avatarEmoji: { fontSize: SCREEN_WIDTH > 420 ? 60 : 48 },
+    avatarEmoji: { fontSize: 48 },
 
     // User Info
     handle: { marginTop: 8, color: '#2b2b2b' },
     roleBadge: { 
         marginTop: 6, 
         backgroundColor: '#FF9A2A', 
-        paddingHorizontal: 12, 
+        paddingHorizontal: 16, 
         paddingVertical: 6, 
-        borderRadius: 16 
+        borderRadius: 20 
     },
     roleText: { color: '#fff', fontWeight: '600' },
 
@@ -266,9 +273,9 @@ const styles = StyleSheet.create({
     editButton: { 
         marginTop: 12, 
         backgroundColor: '#6B46FF', 
-        paddingHorizontal: 20, 
-        paddingVertical: 10, 
-        borderRadius: 8 
+        paddingHorizontal: 24, 
+        paddingVertical: 12, 
+        borderRadius: 25 
     },
     editButtonText: { color: '#fff', fontWeight: '600' },
 
@@ -283,95 +290,116 @@ const styles = StyleSheet.create({
     statBox: { 
         flex: 1,
         minWidth: 56,
-        height: 52, 
+        height: 60, 
         borderRadius: 12, 
         alignItems: 'center', 
         justifyContent: 'center',
-        marginHorizontal: 2
+        marginHorizontal: 4
     },
     statOrange: { backgroundColor: '#FF9A2A' },
     statPurple: { backgroundColor: '#6B46FF' },
-    statNumber: { color: '#fff', fontSize: 14 },
-    statLabel: { color: '#fff', fontSize: 10 },
+    statNumber: { color: '#fff', fontSize: 18, fontWeight: '700' },
+    statLabel: { color: '#fff', fontSize: 11, marginTop: 2 },
 
     // Cards
     card: { 
         width: '100%', 
         marginTop: 16, 
-        padding: 14, 
-        borderRadius: 12, 
-        backgroundColor: 'rgba(0,0,0,0.03)' 
+        padding: 16, 
+        borderRadius: 16, 
+        backgroundColor: '#F8F6FF' 
     },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8
+        marginBottom: 12
+    },
+    cardTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    cardTitleText: {
+        marginLeft: 8,
+        fontSize: 16,
+    },
+    levelBadgeContainer: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 12,
     },
     levelBadge: {
         fontSize: 12,
         color: '#6B46FF',
-        fontWeight: 'bold'
+        fontWeight: '600'
+    },
+    countBadgeContainer: {
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 10,
     },
     countBadge: {
         fontSize: 12,
         color: '#FF9A2A',
-        fontWeight: 'bold'
+        fontWeight: '600'
     },
-
-    // Progress Bar
-    progressBarBackground: { 
-        height: 8, 
-        backgroundColor: 'rgba(0,0,0,0.06)', 
-        borderRadius: 8, 
-        marginTop: 8, 
-        overflow: 'hidden' 
-    },
-    progressBar: { height: '100%', backgroundColor: '#FF9A2A' },
-    progressSub: { marginTop: 8, color: '#6b6b6b', fontSize: 12 },
 
     // Progress Card
     progressCard: {
-        backgroundColor: 'rgba(106,78,251,0.06)',
+        width: '100%',
+        backgroundColor: '#F8F6FF',
         borderRadius: 16,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        marginTop: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.03,
-        shadowRadius: 3,
-        elevation: 1,
+        paddingVertical: 16,
+        paddingHorizontal: 16,
+        marginTop: 16,
     },
-    progressTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    progressTitleRow: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
     titleLeft: { flexDirection: 'row', alignItems: 'center' },
-    progressTitle: { marginLeft: 8, fontSize: 22, lineHeight: 26 },
-    waveRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 4 },
-    waveDot: { width: 18, height: 6, borderRadius: 6, backgroundColor: '#6B46FF', marginHorizontal: -3, opacity: 1, shadowColor: '#6B46FF', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 2, elevation: 1 },
-    progressTrack: { height: 4, backgroundColor: '#FFD6B8', borderRadius: 8, marginTop: 6, overflow: 'hidden' },
-    progressFill: { height: '100%', backgroundColor: '#FF9A2A', borderRadius: 8, shadowColor: '#FF9A2A', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 2 },
+    progressTitle: { marginLeft: 8, fontSize: 16 },
+    progressBarContainer: {
+        marginBottom: 8,
+    },
+    progressTrack: { 
+        height: 8, 
+        backgroundColor: '#E0D6FF', 
+        borderRadius: 4, 
+        overflow: 'hidden' 
+    },
+    progressFill: { 
+        height: '100%', 
+        backgroundColor: '#FF9A2A', 
+        borderRadius: 4,
+    },
+    progressSub: { color: '#6b6b6b', fontSize: 12 },
 
     // Badges
-    badgesRow: { marginTop: 12 },
-    badgeItem: { width: SCREEN_WIDTH > 420 ? 84 : 72, alignItems: 'center', marginRight: 12 },
+    badgesRow: { marginTop: 8 },
+    badgeItem: { width: 70, alignItems: 'center', marginRight: 12 },
     badgeIcon: { 
-        width: SCREEN_WIDTH > 420 ? 48 : 40, 
-        height: SCREEN_WIDTH > 420 ? 48 : 40, 
-        borderRadius: SCREEN_WIDTH > 420 ? 24 : 20, 
+        width: 50, 
+        height: 50, 
+        borderRadius: 25, 
         backgroundColor: '#6B46FF', 
         alignItems: 'center', 
         justifyContent: 'center', 
-        marginBottom: 8 
+        marginBottom: 6 
     },
-    badgeEmoji: { fontSize: SCREEN_WIDTH > 420 ? 22 : 18 },
-    badgeLabel: { fontSize: 11, textAlign: 'center', lineHeight: 14 },
+    badgeEmoji: { fontSize: 24 },
+    badgeLabel: { fontSize: 10, textAlign: 'center', lineHeight: 13 },
 
     // CTA Button
     ctaButton: { 
-        marginTop: 12, 
+        marginTop: 16, 
         backgroundColor: '#FD9A34', 
-        paddingVertical: 10, 
-        borderRadius: 8, 
+        paddingVertical: 12, 
+        borderRadius: 25, 
         alignItems: 'center' 
     },
     ctaText: { color: '#fff', fontWeight: '600' },
@@ -381,42 +409,73 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-around',
         alignItems: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 8,
+        height: 75,
         borderTopWidth: 1,
-        borderTopColor: '#eee',
-        backgroundColor: '#fff',
+        borderTopColor: '#E8E8E8',
+        backgroundColor: '#FFFFFF',
         position: 'absolute',
         bottom: 0,
         left: 0,
-        right: 0
+        right: 0,
+        paddingBottom: Platform.OS === 'ios' ? 20 : 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 10,
     },
-    navItem: { alignItems: 'center', marginTop: 4, flex: 1 },
-    navItemActive: { alignItems: 'center', flex: 1 },
+    navItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
+    navItemCenter: { 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        flex: 1,
+        marginTop: -10,
+    },
     plusButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 12,
-        backgroundColor: '#FF9A2A',
+        width: 56,
+        height: 56,
+        borderRadius: 14,
+        backgroundColor: '#FFFFFF',
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 3,
-        borderColor: '#fff'
+        borderColor: '#FD9A34',
+        shadowColor: '#FD9A34',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 8,
     },
-    plusText: { fontSize: 28, color: '#fff', fontWeight: 'bold', marginTop: -2 },
-    navText: { fontSize: 10, color: '#999' },
+    navText: { fontSize: 10, color: '#B0B0B0', marginTop: 4, fontWeight: '500' },
+    navTextActive: { color: '#6B46FF' },
 
     // Tabs
-    tabsContainer: { width: '100%', marginTop: 16, backgroundColor: 'rgba(106,78,251,0.06)', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12 },
+    tabsContainer: { 
+        width: '100%', 
+        marginTop: 16, 
+        backgroundColor: '#F8F6FF', 
+        paddingVertical: 12, 
+        paddingHorizontal: 12, 
+        borderRadius: 16 
+    },
     tabRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 },
-    tabButton: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: 'transparent' },
+    tabButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20, backgroundColor: 'transparent' },
     tabButtonActive: { backgroundColor: '#6B46FF' },
     tabLabel: { fontSize: 14, color: '#6b6b6b' },
     tabLabelActive: { color: '#fff' },
-    contentList: { width: '100%', marginTop: 6, maxHeight: 260 },
-    itemCardRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 10, marginBottom: 8 },
+    contentList: { width: '100%', marginTop: 8, maxHeight: 260 },
+    itemCardRow: { 
+        width: '100%', 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        padding: 14, 
+        backgroundColor: '#FFFFFF', 
+        borderRadius: 12, 
+        marginBottom: 8 
+    },
     itemCardContent: { flex: 1, paddingRight: 8 },
-    itemCta: { backgroundColor: '#FD9A34', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, alignSelf: 'center' },
+    itemCta: { backgroundColor: '#FD9A34', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, alignSelf: 'center' },
     itemCtaText: { color: '#fff', fontWeight: '600', fontSize: 13 },
     itemSub: { marginTop: 4, color: '#6b6b6b', fontSize: 12 }
 });
