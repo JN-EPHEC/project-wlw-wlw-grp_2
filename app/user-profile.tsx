@@ -3,13 +3,12 @@ import { Link } from 'expo-router';
 import React from 'react';
 import {
     Dimensions,
-    Image,
     Platform,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
-    View,
+    View
 } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -18,10 +17,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 function Avatar() {
     return (
         <View style={styles.avatarContainer}>
-            <Image
-                source={{ uri: 'https://via.placeholder.com/120' }}
-                style={styles.avatarImage}
-            />
+            <Text style={styles.avatarEmoji}>👩‍🎓</Text>
         </View>
     );
 }
@@ -87,7 +83,7 @@ export default function UserProfileLearner() {
                             <Ionicons name="chevron-back" size={28} color="#6b6b6b" />
                         </Pressable>
                     </Link>
-                    <Text style={styles.headerTitle}>Profil</Text>
+                    <View style={styles.headerSpacer} />
                     <Pressable style={styles.settingsButton}>
                         <Ionicons name="settings-outline" size={24} color="#6B46FF" />
                     </Pressable>
@@ -236,10 +232,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#1A1A1A',
+    headerSpacer: {
+        flex: 1,
     },
     settingsButton: {
         width: 40,
@@ -257,10 +251,11 @@ const styles = StyleSheet.create({
         backgroundColor: '#F0E6FF',
         overflow: 'hidden',
         marginBottom: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
-    avatarImage: {
-        width: '100%',
-        height: '100%',
+    avatarEmoji: {
+        fontSize: 50,
     },
     handle: {
         fontSize: 16,
@@ -325,10 +320,12 @@ const styles = StyleSheet.create({
     },
     progressCard: {
         width: '100%',
-        backgroundColor: '#F8F6FF',
+        backgroundColor: '#FFFFFF',
         borderRadius: 16,
         padding: 16,
         marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
     },
     progressTitleRow: {
         flexDirection: 'row',
@@ -347,7 +344,7 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
     levelBadgeContainer: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#F8F6FF',
         paddingHorizontal: 12,
         paddingVertical: 4,
         borderRadius: 12,
@@ -378,9 +375,11 @@ const styles = StyleSheet.create({
     },
     badgesCard: {
         width: '100%',
-        backgroundColor: '#F8F6FF',
+        backgroundColor: '#FFFFFF',
         borderRadius: 16,
         padding: 16,
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
     },
     cardHeader: {
         flexDirection: 'row',
@@ -399,7 +398,7 @@ const styles = StyleSheet.create({
         marginLeft: 8,
     },
     countBadge: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#F8F6FF',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 10,
