@@ -1,13 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import {
     Dimensions,
+    Modal,
     Platform,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
+    TextInput,
     View
 } from 'react-native';
 
@@ -56,7 +58,12 @@ function StatBox({ value, label, variant }: StatBoxProps) {
 }
 
 // Page principale du profil utilisateur (apprenant)
-export default function UserProfileLearner() {
+export default function UserProfileLearnerComplete() {
+    const [showMessageModal, setShowMessageModal] = useState(false);
+    const [messageText, setMessageText] = useState('');
+    const [activeTab, setActiveTab] = useState<'interactions' | 'downloads' | 'parcours'>('interactions');
+    const [isPremium] = useState(true); // Simuler un compte premium
+
     // Données des badges de l'utilisateur
     const badges = [
         { title: 'Expert\nMarketing', emoji: '🏅' },
@@ -65,10 +72,40 @@ export default function UserProfileLearner() {
         { title: 'Designer\nUI/UX', emoji: '🎨' },
     ];
 
+    // Historique des interactions
+    const interactions = [
+        { id: '1', type: 'like', title: 'Introduction au Marketing Digital', date: 'Il y a 2h' },
+        { id: '2', type: 'comment', title: 'Python pour débutants', date: 'Il y a 5h', comment: 'Super tutoriel !' },
+        { id: '3', type: 'share', title: 'Design Thinking Workshop', date: 'Hier' },
+    ];
+
+    // Vidéos téléchargées
+    const downloads = [
+        { id: '1', title: 'React Native Masterclass', size: '245 MB', duration: '2h 30min' },
+        { id: '2', title: 'UI/UX Fundamentals', size: '180 MB', duration: '1h 45min' },
+    ];
+
+    // Parcours d'apprentissage
+    const parcours = [
+        { id: '1', title: 'Développement Web', progress: 65, total: 20, completed: 13 },
+        { id: '2', title: 'Marketing Digital', progress: 30, total: 15, completed: 5 },
+    ];
+
     // Calcul de la progression (exemple: 200/3000 XP = ~6.67%)
     const currentXP = 200;
     const targetXP = 3000;
     const progressPercentage = (currentXP / targetXP) * 100;
+
+    const handleSendMessage = () => {
+        console.log('Message envoyé:', messageText);
+        setMessageText('');
+        setShowMessageModal(false);
+    };
+
+    const handleDeleteInteraction = (id: string) => {
+        console.log('Suppression interaction:', id);
+        // Logique de suppression
+    };
 
     return (
         <View style={styles.screen}>
@@ -91,21 +128,41 @@ export default function UserProfileLearner() {
 
                 {/* Section centrale du profil */}
                 <View style={styles.centerColumn}>
-                    {/* Avatar utilisateur */}
-                    <Avatar />
+                    {/* Avatar utilisateur avec indicateur premium */}
+                    <View style={styles.avatarWrapper}>
+                        <Avatar />
+                        {isPremium && (
+                            <View style={styles.premiumBadge}>
+                                <Ionicons name="star" size={16} color="#FFD700" />
+                            </View>
+                        )}
+                    </View>
 
                     {/* Nom d'utilisateur */}
                     <Text style={styles.handle}>@sophiedubois</Text>
+
+                    {/* Bio */}
+                    <Text style={styles.bio}>
+                        Passionnée de tech et design 🚀 | Apprenante curieuse | Marketing & Dev
+                    </Text>
 
                     {/* Badge de rôle - Apprenant */}
                     <View style={styles.roleBadge}>
                         <Text style={styles.roleText}>Apprenant</Text>
                     </View>
 
-                    {/* Bouton Modifier le profil */}
-                    <Pressable style={styles.editButton}>
-                        <Text style={styles.editButtonText}>Modifier le profil</Text>
-                    </Pressable>
+                    {/* Boutons d'action */}
+                    <View style={styles.actionButtons}>
+                        <Pressable style={styles.editButton}>
+                            <Text style={styles.editButtonText}>Modifier le profil</Text>
+                        </Pressable>
+                        <Pressable 
+                            style={styles.messageButton}
+                            onPress={() => setShowMessageModal(true)}
+                        >
+                            <Ionicons name="mail-outline" size={20} color="#FFFFFF" />
+                        </Pressable>
+                    </View>
 
                     {/* Statistiques */}
                     <View style={styles.statsRow}>
@@ -139,7 +196,7 @@ export default function UserProfileLearner() {
                         </View>
 
                         <Text style={styles.progressSub}>
-                            {currentXP}/ {targetXP.toLocaleString()} XP pour niveau 8
+                            {currentXP} / {targetXP.toLocaleString()} XP pour niveau 8
                         </Text>
                     </View>
 
@@ -175,8 +232,177 @@ export default function UserProfileLearner() {
                             <Text style={styles.ctaText}>Voir mes certificats</Text>
                         </Pressable>
                     </View>
+
+                    {/* Nouvelle section: Parcours & Activités */}
+                    <View style={styles.activitiesCard}>
+                        <View style={styles.tabsHeader}>
+                            <Pressable 
+                                style={[styles.tab, activeTab === 'interactions' && styles.tabActive]}
+                                onPress={() => setActiveTab('interactions')}
+                            >
+                                <Ionicons 
+                                    name="heart-outline" 
+                                    size={18} 
+                                    color={activeTab === 'interactions' ? '#6B46FF' : '#6b6b6b'} 
+                                />
+                                <Text style={[styles.tabText, activeTab === 'interactions' && styles.tabTextActive]}>
+                                    Interactions
+                                </Text>
+                            </Pressable>
+                            <Pressable 
+                                style={[styles.tab, activeTab === 'downloads' && styles.tabActive]}
+                                onPress={() => setActiveTab('downloads')}
+                            >
+                                <Ionicons 
+                                    name="download-outline" 
+                                    size={18} 
+                                    color={activeTab === 'downloads' ? '#6B46FF' : '#6b6b6b'} 
+                                />
+                                <Text style={[styles.tabText, activeTab === 'downloads' && styles.tabTextActive]}>
+                                    Téléchargements
+                                </Text>
+                            </Pressable>
+                            <Pressable 
+                                style={[styles.tab, activeTab === 'parcours' && styles.tabActive]}
+                                onPress={() => setActiveTab('parcours')}
+                            >
+                                <Ionicons 
+                                    name="map-outline" 
+                                    size={18} 
+                                    color={activeTab === 'parcours' ? '#6B46FF' : '#6b6b6b'} 
+                                />
+                                <Text style={[styles.tabText, activeTab === 'parcours' && styles.tabTextActive]}>
+                                    Parcours
+                                </Text>
+                            </Pressable>
+                        </View>
+
+                        {/* Contenu des onglets */}
+                        <View style={styles.tabContent}>
+                            {activeTab === 'interactions' && (
+                                <View>
+                                    {interactions.map((item) => {
+                                        const getIconName = () => {
+                                            if (item.type === 'like') return 'heart';
+                                            if (item.type === 'comment') return 'chatbubble';
+                                            return 'share-social';
+                                        };
+                                        
+                                        return (
+                                            <View key={item.id} style={styles.interactionItem}>
+                                                <View style={styles.interactionIcon}>
+                                                    <Ionicons 
+                                                        name={getIconName()} 
+                                                        size={20} 
+                                                        color="#6B46FF" 
+                                                    />
+                                                </View>
+                                                <View style={styles.interactionContent}>
+                                                    <Text style={styles.interactionTitle}>{item.title}</Text>
+                                                    <Text style={styles.interactionDate}>{item.date}</Text>
+                                                    {item.type === 'comment' && (
+                                                        <Text style={styles.interactionComment}>{item.comment}</Text>
+                                                    )}
+                                                </View>
+                                                <Pressable 
+                                                    style={styles.deleteButton}
+                                                    onPress={() => handleDeleteInteraction(item.id)}
+                                                >
+                                                    <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
+                                                </Pressable>
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                            )}
+
+                            {activeTab === 'downloads' && (
+                                <View>
+                                    <View style={styles.storageInfo}>
+                                        <Text style={styles.storageText}>Espace utilisé: 425 MB / 20 GB</Text>
+                                        <Pressable style={styles.manageButton}>
+                                            <Text style={styles.manageButtonText}>Gérer</Text>
+                                        </Pressable>
+                                    </View>
+                                    {downloads.map((item) => (
+                                        <View key={item.id} style={styles.downloadItem}>
+                                            <View style={styles.downloadIcon}>
+                                                <Ionicons name="play-circle" size={24} color="#6B46FF" />
+                                            </View>
+                                            <View style={styles.downloadContent}>
+                                                <Text style={styles.downloadTitle}>{item.title}</Text>
+                                                <Text style={styles.downloadInfo}>
+                                                    {item.size} • {item.duration}
+                                                </Text>
+                                            </View>
+                                            <Pressable style={styles.downloadDeleteButton}>
+                                                <Ionicons name="trash-outline" size={20} color="#6b6b6b" />
+                                            </Pressable>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+
+                            {activeTab === 'parcours' && (
+                                <View>
+                                    {parcours.map((item) => (
+                                        <View key={item.id} style={styles.parcoursItem}>
+                                            <View style={styles.parcoursHeader}>
+                                                <Text style={styles.parcoursTitle}>{item.title}</Text>
+                                                <Text style={styles.parcoursProgress}>
+                                                    {item.completed}/{item.total}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.parcoursBar}>
+                                                <View 
+                                                    style={[
+                                                        styles.parcoursFill, 
+                                                        { width: `${item.progress}%` }
+                                                    ]} 
+                                                />
+                                            </View>
+                                            <Text style={styles.parcoursPercentage}>{item.progress}% complété</Text>
+                                        </View>
+                                    ))}
+                                </View>
+                            )}
+                        </View>
+                    </View>
                 </View>
             </ScrollView>
+
+            {/* Modal de message */}
+            <Modal
+                visible={showMessageModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowMessageModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Envoyer un message</Text>
+                            <Pressable onPress={() => setShowMessageModal(false)}>
+                                <Ionicons name="close" size={24} color="#1A1A1A" />
+                            </Pressable>
+                        </View>
+                        <TextInput
+                            style={styles.messageInput}
+                            placeholder="Écrivez votre message..."
+                            multiline
+                            value={messageText}
+                            onChangeText={setMessageText}
+                            maxLength={500}
+                        />
+                        <Pressable 
+                            style={styles.sendButton}
+                            onPress={handleSendMessage}
+                        >
+                            <Text style={styles.sendButtonText}>Envoyer</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Navigation en bas de page */}
             <View style={styles.bottomNav}>
@@ -244,18 +470,34 @@ const styles = StyleSheet.create({
     centerColumn: {
         alignItems: 'center',
     },
+    avatarWrapper: {
+        position: 'relative',
+        marginBottom: 12,
+    },
     avatarContainer: {
         width: 100,
         height: 100,
         borderRadius: 50,
         backgroundColor: '#F0E6FF',
         overflow: 'hidden',
-        marginBottom: 12,
         alignItems: 'center',
         justifyContent: 'center',
     },
     avatarEmoji: {
         fontSize: 50,
+    },
+    premiumBadge: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        backgroundColor: '#1A1A1A',
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: '#FFFFFF',
     },
     handle: {
         fontSize: 16,
@@ -263,29 +505,49 @@ const styles = StyleSheet.create({
         color: '#1A1A1A',
         marginBottom: 8,
     },
+    bio: {
+        fontSize: 14,
+        color: '#6b6b6b',
+        textAlign: 'center',
+        paddingHorizontal: 20,
+        marginBottom: 12,
+        lineHeight: 20,
+    },
     roleBadge: {
         backgroundColor: '#6B46FF',
         paddingHorizontal: 16,
         paddingVertical: 6,
         borderRadius: 20,
-        marginBottom: 12,
+        marginBottom: 16,
     },
     roleText: {
         color: '#FFFFFF',
         fontWeight: '600',
         fontSize: 14,
     },
+    actionButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        marginBottom: 20,
+    },
     editButton: {
         backgroundColor: '#6B46FF',
         paddingHorizontal: 24,
         paddingVertical: 12,
         borderRadius: 25,
-        marginBottom: 20,
     },
     editButtonText: {
         color: '#FFFFFF',
         fontWeight: '600',
         fontSize: 14,
+    },
+    messageButton: {
+        backgroundColor: '#FF9A2A',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     statsRow: {
         flexDirection: 'row',
@@ -380,6 +642,7 @@ const styles = StyleSheet.create({
         padding: 16,
         borderWidth: 1,
         borderColor: '#E8E8E8',
+        marginBottom: 16,
     },
     cardHeader: {
         flexDirection: 'row',
@@ -445,6 +708,217 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontWeight: '600',
         fontSize: 14,
+    },
+    activitiesCard: {
+        width: '100%',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
+        marginBottom: 16,
+    },
+    tabsHeader: {
+        flexDirection: 'row',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E8E8E8',
+        marginBottom: 16,
+    },
+    tab: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        gap: 6,
+    },
+    tabActive: {
+        borderBottomWidth: 2,
+        borderBottomColor: '#6B46FF',
+    },
+    tabText: {
+        fontSize: 12,
+        color: '#6b6b6b',
+        fontWeight: '500',
+    },
+    tabTextActive: {
+        color: '#6B46FF',
+        fontWeight: '600',
+    },
+    tabContent: {
+        minHeight: 200,
+    },
+    interactionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        marginBottom: 8,
+    },
+    interactionIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#FFFFFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+    interactionContent: {
+        flex: 1,
+    },
+    interactionTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 2,
+    },
+    interactionDate: {
+        fontSize: 12,
+        color: '#6b6b6b',
+    },
+    interactionComment: {
+        fontSize: 12,
+        color: '#6B46FF',
+        marginTop: 4,
+        fontStyle: 'italic',
+    },
+    deleteButton: {
+        padding: 8,
+    },
+    storageInfo: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        marginBottom: 12,
+    },
+    storageText: {
+        fontSize: 13,
+        color: '#6b6b6b',
+        fontWeight: '500',
+    },
+    manageButton: {
+        backgroundColor: '#6B46FF',
+        paddingHorizontal: 16,
+        paddingVertical: 6,
+        borderRadius: 12,
+    },
+    manageButtonText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    downloadItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        marginBottom: 8,
+    },
+    downloadIcon: {
+        marginRight: 12,
+    },
+    downloadContent: {
+        flex: 1,
+    },
+    downloadTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 2,
+    },
+    downloadInfo: {
+        fontSize: 12,
+        color: '#6b6b6b',
+    },
+    downloadDeleteButton: {
+        padding: 8,
+    },
+    parcoursItem: {
+        padding: 12,
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        marginBottom: 8,
+    },
+    parcoursHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    parcoursTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1A1A1A',
+    },
+    parcoursProgress: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#6B46FF',
+    },
+    parcoursBar: {
+        height: 6,
+        backgroundColor: '#E0D6FF',
+        borderRadius: 3,
+        overflow: 'hidden',
+        marginBottom: 6,
+    },
+    parcoursFill: {
+        height: '100%',
+        backgroundColor: '#6B46FF',
+        borderRadius: 3,
+    },
+    parcoursPercentage: {
+        fontSize: 12,
+        color: '#6b6b6b',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#FFFFFF',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 20,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#1A1A1A',
+    },
+    messageInput: {
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        padding: 16,
+        minHeight: 120,
+        textAlignVertical: 'top',
+        fontSize: 14,
+        marginBottom: 16,
+    },
+    sendButton: {
+        backgroundColor: '#6B46FF',
+        paddingVertical: 14,
+        borderRadius: 25,
+        alignItems: 'center',
+    },
+    sendButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '600',
     },
     bottomNav: {
         flexDirection: 'row',
