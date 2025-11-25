@@ -1,13 +1,34 @@
-import React, { useState } from 'react';
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import React, { useMemo, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  View
+} from 'react-native';
 
-// Types pour les notifications
-type NotificationType = 'message' | 'alert' | 'info' | 'course_update' | 'progress' | 'certificate' | 'reminder' | 'question' | 'review' | 'milestone';
+// Types
+type NotificationType = 
+  | 'message' 
+  | 'alert' 
+  | 'info' 
+  | 'course_update' 
+  | 'progress' 
+  | 'certificate' 
+  | 'reminder' 
+  | 'question' 
+  | 'review' 
+  | 'milestone';
+
 type Priority = 'high' | 'normal' | 'low';
 type FilterType = 'all' | 'unread' | 'read';
 type SortType = 'date' | 'priority';
 
 interface Notification {
-  id: number;
+  id: string;
   type: NotificationType;
   title: string;
   message: string;
@@ -24,299 +45,604 @@ interface Notification {
   };
 }
 
-const NotificationsPage = () => {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: 1,
-      type: 'message',
-      title: 'Nouveau message',
-      message: 'Jean Dupont vous a envoyé un message',
-      timestamp: '2024-01-20T10:30:00',
-      read: false,
-      priority: 'normal'
-    },
-    {
-      id: 2,
-      type: 'alert',
-      title: 'Alerte système',
-      message: 'Maintenance planifiée ce soir à 22h',
-      timestamp: '2024-01-20T09:15:00',
-      read: false,
-      priority: 'high'
-    },
-    {
-      id: 3,
-      type: 'info',
-      title: 'Mise à jour disponible',
-      message: 'Une nouvelle version est disponible',
-      timestamp: '2024-01-19T14:20:00',
-      read: true,
-      priority: 'low'
-    }
-  ]);
+// Données mockées
+const INITIAL_NOTIFICATIONS: Notification[] = [
+  {
+    id: '1',
+    type: 'course_update',
+    title: 'Nouveau contenu disponible',
+    message: 'Un nouveau module a été ajouté à "React Native Avancé"',
+    timestamp: '2024-01-20T10:30:00',
+    read: false,
+    priority: 'high',
+    courseName: 'React Native Avancé',
+  },
+  {
+    id: '2',
+    type: 'progress',
+    title: 'Félicitations ! 🎉',
+    message: 'Vous avez complété 50% de "TypeScript pour débutants"',
+    timestamp: '2024-01-20T09:15:00',
+    read: false,
+    priority: 'normal',
+    courseName: 'TypeScript pour débutants',
+    metadata: { progress: 50 },
+  },
+  {
+    id: '3',
+    type: 'certificate',
+    title: 'Certificat disponible',
+    message: 'Votre certificat de "JavaScript ES6" est prêt à télécharger',
+    timestamp: '2024-01-19T14:20:00',
+    read: true,
+    priority: 'normal',
+    courseName: 'JavaScript ES6',
+  },
+  {
+    id: '4',
+    type: 'reminder',
+    title: 'Rappel de cours',
+    message: 'Vous n\'avez pas continué "Python Basics" depuis 7 jours',
+    timestamp: '2024-01-18T08:00:00',
+    read: false,
+    priority: 'low',
+    courseName: 'Python Basics',
+  },
+  {
+    id: '5',
+    type: 'question',
+    title: 'Nouvelle question',
+    message: 'Un étudiant a posé une question dans "React Hooks"',
+    timestamp: '2024-01-17T16:45:00',
+    read: true,
+    priority: 'high',
+    courseName: 'React Hooks',
+  },
+];
 
+export default function NotificationsPage() {
+  const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
   const [filter, setFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortType>('date');
+  const [refreshing, setRefreshing] = useState(false);
 
   // Fonctions de gestion
-  const markAsRead = (id: number) => {
-    setNotifications(notifications.map(notif =>
-      notif.id === id ? { ...notif, read: true } : notif
-    ));
+  const markAsRead = (id: string) => {
+    setNotifications((prev) =>
+      prev.map((notif) => (notif.id === id ? { ...notif, read: true } : notif))
+    );
   };
 
   const markAllAsRead = () => {
-    setNotifications(notifications.map(notif => ({ ...notif, read: true })));
+    setNotifications((prev) => prev.map((notif) => ({ ...notif, read: true })));
   };
 
-  const deleteNotification = (id: number) => {
-    setNotifications(notifications.filter(notif => notif.id !== id));
+  const deleteNotification = (id: string) => {
+    Alert.alert(
+      'Supprimer la notification',
+      'Êtes-vous sûr de vouloir supprimer cette notification ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            setNotifications((prev) => prev.filter((notif) => notif.id !== id));
+          },
+        },
+      ]
+    );
   };
 
   const clearAll = () => {
-    setNotifications([]);
+    Alert.alert(
+      'Tout supprimer',
+      'Êtes-vous sûr de vouloir supprimer toutes les notifications ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Tout supprimer',
+          style: 'destructive',
+          onPress: () => setNotifications([]),
+        },
+      ]
+    );
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    // Simuler un chargement
+    setTimeout(() => {
+      setRefreshing(false);
+      // Ici tu pourrais charger de nouvelles notifications depuis l'API
+    }, 1500);
   };
 
   // Filtrage et tri
-  const filteredNotifications = notifications.filter(notif => {
-    if (filter === 'unread') return !notif.read;
-    if (filter === 'read') return notif.read;
-    return true;
-  });
-
-  const sortedNotifications = [...filteredNotifications].sort((a, b) => {
-    if (sortBy === 'date') {
-      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+  const filteredAndSortedNotifications = useMemo(() => {
+    // Filtrage
+    let filtered = notifications;
+    if (filter === 'unread') {
+      filtered = notifications.filter((n) => !n.read);
+    } else if (filter === 'read') {
+      filtered = notifications.filter((n) => n.read);
     }
-    const priorityOrder: Record<Priority, number> = { high: 3, normal: 2, low: 1 };
-    return priorityOrder[b.priority] - priorityOrder[a.priority];
-  });
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+    // Tri
+    return [...filtered].sort((a, b) => {
+      if (sortBy === 'date') {
+        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+      }
+      const priorityOrder: Record<Priority, number> = { high: 3, normal: 2, low: 1 };
+      return priorityOrder[b.priority] - priorityOrder[a.priority];
+    });
+  }, [notifications, filter, sortBy]);
 
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // Fonctions utilitaires
   const formatTimestamp = (timestamp: string): string => {
     const date = new Date(timestamp);
     const now = new Date();
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
-    
-    if (diffInHours < 1) return 'À l\'instant';
-    if (diffInHours < 24) return `Il y a ${diffInHours}h`;
-    return date.toLocaleDateString('fr-FR');
-  };
 
-  const getPriorityColor = (priority: Priority): string => {
-    switch(priority) {
-      case 'high': return 'bg-red-100 text-red-800 border-red-300';
-      case 'normal': return 'bg-blue-100 text-blue-800 border-blue-300';
-      case 'low': return 'bg-gray-100 text-gray-800 border-gray-300';
-      default: return 'bg-gray-100 text-gray-800 border-gray-300';
-    }
+    if (diffInHours < 1) return "À l'instant";
+    if (diffInHours < 24) return `Il y a ${diffInHours}h`;
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays === 1) return 'Hier';
+    if (diffInDays < 7) return `Il y a ${diffInDays}j`;
+    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   };
 
   const getTypeIcon = (type: NotificationType): string => {
-    switch(type) {
-      case 'message': return '💬';
-      case 'alert': return '⚠️';
-      case 'info': return 'ℹ️';
-      default: return '📢';
+    const icons: Record<NotificationType, string> = {
+      message: '💬',
+      alert: '⚠️',
+      info: 'ℹ️',
+      course_update: '📚',
+      progress: '🎯',
+      certificate: '🏆',
+      reminder: '⏰',
+      question: '❓',
+      review: '⭐',
+      milestone: '🎉',
+    };
+    return icons[type] || '📢';
+  };
+
+  const getPriorityColor = (priority: Priority): string => {
+    switch (priority) {
+      case 'high':
+        return '#ef4444';
+      case 'normal':
+        return '#3b82f6';
+      case 'low':
+        return '#6b7280';
+      default:
+        return '#6b7280';
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-4xl mx-auto">
-        
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 text-blue-600">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
-                <p className="text-sm text-gray-600">
-                  {unreadCount > 0 ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Tout est lu'}
-                </p>
-              </div>
-            </div>
-            
-            {/* Badge de compteur */}
-            {unreadCount > 0 && (
-              <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-500 text-white font-bold">
-                {unreadCount}
-              </span>
-            )}
-          </div>
+  const getPriorityLabel = (priority: Priority): string => {
+    switch (priority) {
+      case 'high':
+        return 'Urgent';
+      case 'normal':
+        return 'Normal';
+      case 'low':
+        return 'Faible';
+    }
+  };
 
-          {/* Actions principales */}
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={markAllAsRead}
-              disabled={unreadCount === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-              </svg>
-              Tout marquer comme lu
-            </button>
-            
-            <button
-              onClick={clearAll}
-              disabled={notifications.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-              Tout supprimer
-            </button>
-          </div>
-        </div>
+  // Render functions
+  const renderHeader = () => (
+    <View style={styles.header}>
+      <View style={styles.headerTop}>
+        <View style={styles.headerLeft}>
+          <ThemedText type="title">🔔 Notifications</ThemedText>
+          <ThemedText style={styles.subtitle}>
+            {unreadCount > 0 ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Tout est lu'}
+          </ThemedText>
+        </View>
+        {unreadCount > 0 && (
+          <View style={styles.badge}>
+            <ThemedText style={styles.badgeText}>{unreadCount}</ThemedText>
+          </View>
+        )}
+      </View>
 
-        {/* Filtres et Tri */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
-            </svg>
-            <span className="font-semibold text-gray-700">Filtres</span>
-          </div>
-          
-          <div className="flex flex-wrap gap-4">
-            {/* Filtre par statut */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setFilter('all')}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  filter === 'all' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Toutes ({notifications.length})
-              </button>
-              <button
-                onClick={() => setFilter('unread')}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  filter === 'unread' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Non lues ({unreadCount})
-              </button>
-              <button
-                onClick={() => setFilter('read')}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  filter === 'read' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                Lues ({notifications.length - unreadCount})
-              </button>
-            </div>
+      {/* Actions principales */}
+      <View style={styles.actions}>
+        <Pressable
+          style={[styles.button, styles.buttonPrimary, unreadCount === 0 && styles.buttonDisabled]}
+          onPress={markAllAsRead}
+          disabled={unreadCount === 0}
+        >
+          <ThemedText style={styles.buttonText}>✓ Tout marquer lu</ThemedText>
+        </Pressable>
 
-            {/* Tri */}
-            <div className="flex gap-2 ml-auto">
-              <span className="text-sm text-gray-600 self-center">Trier par:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as SortType)}
-                className="px-3 py-1 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="date">Date</option>
-                <option value="priority">Priorité</option>
-              </select>
-            </div>
-          </div>
-        </div>
+        <Pressable
+          style={[styles.button, styles.buttonDanger, notifications.length === 0 && styles.buttonDisabled]}
+          onPress={clearAll}
+          disabled={notifications.length === 0}
+        >
+          <ThemedText style={styles.buttonText}>🗑️ Tout supprimer</ThemedText>
+        </Pressable>
+      </View>
 
-        {/* Liste des notifications */}
-        <div className="space-y-3">
-          {sortedNotifications.length === 0 ? (
-            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-              </svg>
-              <p className="text-gray-500 text-lg">Aucune notification</p>
-            </div>
-          ) : (
-            sortedNotifications.map(notif => (
-              <div
-                key={notif.id}
-                className={`bg-white rounded-lg shadow-sm p-4 transition-all hover:shadow-md ${
-                  !notif.read ? 'border-l-4 border-blue-600' : 'border-l-4 border-transparent'
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  {/* Icône */}
-                  <div className="text-2xl flex-shrink-0">
-                    {getTypeIcon(notif.type)}
-                  </div>
+      {/* Filtres */}
+      <View style={styles.filters}>
+        <ThemedText type="defaultSemiBold" style={styles.filterLabel}>
+          Filtres:
+        </ThemedText>
+        <View style={styles.filterButtons}>
+          <Pressable
+            style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
+            onPress={() => setFilter('all')}
+          >
+            <ThemedText style={[styles.filterButtonText, filter === 'all' && styles.filterButtonTextActive]}>
+              Toutes ({notifications.length})
+            </ThemedText>
+          </Pressable>
 
-                  {/* Contenu */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className={`font-semibold ${!notif.read ? 'text-gray-900' : 'text-gray-600'}`}>
-                        {notif.title}
-                      </h3>
-                      
-                      {/* Badge de priorité */}
-                      <span className={`px-2 py-1 text-xs rounded-full border ${getPriorityColor(notif.priority)}`}>
-                        {notif.priority === 'high' ? 'Urgent' : notif.priority === 'normal' ? 'Normal' : 'Faible'}
-                      </span>
-                    </div>
+          <Pressable
+            style={[styles.filterButton, filter === 'unread' && styles.filterButtonActive]}
+            onPress={() => setFilter('unread')}
+          >
+            <ThemedText style={[styles.filterButtonText, filter === 'unread' && styles.filterButtonTextActive]}>
+              Non lues ({unreadCount})
+            </ThemedText>
+          </Pressable>
 
-                    <p className={`text-sm mb-2 ${!notif.read ? 'text-gray-700' : 'text-gray-500'}`}>
-                      {notif.message}
-                    </p>
+          <Pressable
+            style={[styles.filterButton, filter === 'read' && styles.filterButtonActive]}
+            onPress={() => setFilter('read')}
+          >
+            <ThemedText style={[styles.filterButtonText, filter === 'read' && styles.filterButtonTextActive]}>
+              Lues ({notifications.length - unreadCount})
+            </ThemedText>
+          </Pressable>
+        </View>
+      </View>
 
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">
-                        {formatTimestamp(notif.timestamp)}
-                      </span>
+      {/* Tri */}
+      <View style={styles.sortContainer}>
+        <ThemedText style={styles.sortLabel}>Trier par:</ThemedText>
+        <View style={styles.sortButtons}>
+          <Pressable
+            style={[styles.sortButton, sortBy === 'date' && styles.sortButtonActive]}
+            onPress={() => setSortBy('date')}
+          >
+            <ThemedText style={[styles.sortButtonText, sortBy === 'date' && styles.sortButtonTextActive]}>
+              Date
+            </ThemedText>
+          </Pressable>
 
-                      {/* Actions */}
-                      <div className="flex gap-2">
-                        {!notif.read && (
-                          <button
-                            onClick={() => markAsRead(notif.id)}
-                            className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                            title="Marquer comme lu"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                            </svg>
-                            Marquer lu
-                          </button>
-                        )}
-                        
-                        <button
-                          onClick={() => deleteNotification(notif.id)}
-                          className="flex items-center gap-1 px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                          title="Supprimer"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                          </svg>
-                          Supprimer
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
+          <Pressable
+            style={[styles.sortButton, sortBy === 'priority' && styles.sortButtonActive]}
+            onPress={() => setSortBy('priority')}
+          >
+            <ThemedText style={[styles.sortButtonText, sortBy === 'priority' && styles.sortButtonTextActive]}>
+              Priorité
+            </ThemedText>
+          </Pressable>
+        </View>
+      </View>
+    </View>
   );
-};
 
-export default NotificationsPage;
+  const renderNotification = ({ item }: { item: Notification }) => (
+    <Pressable style={[styles.notifCard, !item.read && styles.notifCardUnread]}>
+      <View style={styles.notifHeader}>
+        <View style={styles.notifIconContainer}>
+          <ThemedText style={styles.notifIcon}>{getTypeIcon(item.type)}</ThemedText>
+        </View>
+        <View style={styles.notifContent}>
+          <View style={styles.notifTitleRow}>
+            <ThemedText type="defaultSemiBold" style={[styles.notifTitle, !item.read && styles.notifTitleUnread]}>
+              {item.title}
+            </ThemedText>
+            <View style={[styles.priorityBadge, { borderColor: getPriorityColor(item.priority) }]}>
+              <ThemedText style={[styles.priorityText, { color: getPriorityColor(item.priority) }]}>
+                {getPriorityLabel(item.priority)}
+              </ThemedText>
+            </View>
+          </View>
+
+          <ThemedText style={styles.notifMessage}>{item.message}</ThemedText>
+
+          {item.metadata?.progress !== undefined && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${item.metadata.progress}%` }]} />
+              </View>
+              <ThemedText style={styles.progressText}>{item.metadata.progress}%</ThemedText>
+            </View>
+          )}
+
+          <View style={styles.notifFooter}>
+            <ThemedText style={styles.timestamp}>{formatTimestamp(item.timestamp)}</ThemedText>
+
+            <View style={styles.notifActions}>
+              {!item.read && (
+                <Pressable style={styles.actionButton} onPress={() => markAsRead(item.id)}>
+                  <ThemedText style={styles.actionButtonText}>✓ Marquer lu</ThemedText>
+                </Pressable>
+              )}
+
+              <Pressable style={styles.actionButton} onPress={() => deleteNotification(item.id)}>
+                <ThemedText style={[styles.actionButtonText, styles.actionButtonTextDanger]}>🗑️ Supprimer</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </View>
+    </Pressable>
+  );
+
+  const renderEmpty = () => (
+    <View style={styles.emptyContainer}>
+      <ThemedText style={styles.emptyIcon}>🔔</ThemedText>
+      <ThemedText type="subtitle" style={styles.emptyText}>
+        Aucune notification
+      </ThemedText>
+    </View>
+  );
+
+  return (
+    <ThemedView style={styles.container}>
+      <FlatList
+        data={filteredAndSortedNotifications}
+        keyExtractor={(item) => item.id}
+        renderItem={renderNotification}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        contentContainerStyle={styles.listContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      />
+    </ThemedView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  listContent: {
+    padding: 16,
+    paddingBottom: 32,
+  },
+  header: {
+    gap: 16,
+    marginBottom: 16,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  headerLeft: {
+    flex: 1,
+    gap: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  badge: {
+    backgroundColor: '#ef4444',
+    borderRadius: 20,
+    minWidth: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  buttonPrimary: {
+    backgroundColor: '#3b82f6',
+  },
+  buttonDanger: {
+    backgroundColor: '#ef4444',
+  },
+  buttonDisabled: {
+    backgroundColor: '#d1d5db',
+    opacity: 0.5,
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  filters: {
+    gap: 8,
+  },
+  filterLabel: {
+    fontSize: 14,
+  },
+  filterButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    alignItems: 'center',
+  },
+  filterButtonActive: {
+    backgroundColor: '#3b82f6',
+  },
+  filterButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    color: '#fff',
+  },
+  sortContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  sortLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  sortButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sortButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+  },
+  sortButtonActive: {
+    backgroundColor: '#3b82f6',
+  },
+  sortButtonText: {
+    fontSize: 13,
+  },
+  sortButtonTextActive: {
+    color: '#fff',
+  },
+  separator: {
+    height: 12,
+  },
+  notifCard: {
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    borderRadius: 12,
+    padding: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: 'transparent',
+  },
+  notifCardUnread: {
+    backgroundColor: 'rgba(59, 130, 246, 0.05)',
+    borderLeftColor: '#3b82f6',
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  notifIconContainer: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  notifIcon: {
+    fontSize: 24,
+  },
+  notifContent: {
+    flex: 1,
+    gap: 8,
+  },
+  notifTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  notifTitle: {
+    flex: 1,
+    fontSize: 15,
+  },
+  notifTitleUnread: {
+    fontWeight: '700',
+  },
+  priorityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  priorityText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  notifMessage: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#4b5563',
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  progressBar: {
+    flex: 1,
+    height: 6,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#10b981',
+    borderRadius: 3,
+  },
+  progressText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#10b981',
+  },
+  notifFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  timestamp: {
+    fontSize: 12,
+    color: '#9ca3af',
+  },
+  notifActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  actionButtonText: {
+    fontSize: 12,
+    color: '#3b82f6',
+    fontWeight: '500',
+  },
+  actionButtonTextDanger: {
+    color: '#ef4444',
+  },
+  emptyContainer: {
+    paddingVertical: 48,
+    alignItems: 'center',
+    gap: 12,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    opacity: 0.3,
+  },
+  emptyText: {
+    color: '#9ca3af',
+  },
+});
