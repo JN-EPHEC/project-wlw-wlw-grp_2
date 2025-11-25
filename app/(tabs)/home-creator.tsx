@@ -1,38 +1,40 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Dimensions, FlatList, Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, FlatList, Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
-// Interface pour typer les données du feed
 interface FeedItem {
   id: string;
   username: string;
   time: string;
   title: string;
   description: string;
-  likes: string;
-  comments: string;
+  likes: number;
+  comments: number;
   image: string;
   avatar: string;
   hashtag: string;
   progress: number;
+  isLiked: boolean;
+  isFollowing: boolean;
 }
 
-// Données exemple du feed
-const FEED_DATA: FeedItem[] = [
+const INITIAL_FEED_DATA: FeedItem[] = [
   {
     id: '1',
     username: '@SophieMartin',
     time: '1:28',
     title: '5 STRATEGIE DE MARKETING DIGITAL POUR 2025',
     description: 'Découvrez les meilleures stratégies de marketing digitales...',
-    likes: '4445',
-    comments: '34',
+    likes: 4445,
+    comments: 34,
     image: 'https://via.placeholder.com/350x600',
     avatar: 'https://via.placeholder.com/60',
     hashtag: '#MarketingDigital',
     progress: 40,
+    isLiked: false,
+    isFollowing: false,
   },
   {
     id: '2',
@@ -40,12 +42,14 @@ const FEED_DATA: FeedItem[] = [
     time: '2:15',
     title: 'TENDANCES WEB DESIGN 2025',
     description: 'Les meilleures tendances du web design...',
-    likes: '3200',
-    comments: '28',
+    likes: 3200,
+    comments: 28,
     image: 'https://via.placeholder.com/350x600',
     avatar: 'https://via.placeholder.com/60',
     hashtag: '#WebDesign',
     progress: 60,
+    isLiked: false,
+    isFollowing: false,
   },
   {
     id: '3',
@@ -53,23 +57,101 @@ const FEED_DATA: FeedItem[] = [
     time: '3:42',
     title: 'GUIDE COMPLET SEO 2025',
     description: 'Optimisez votre référencement naturel...',
-    likes: '5100',
-    comments: '42',
+    likes: 5100,
+    comments: 42,
     image: 'https://via.placeholder.com/350x600',
     avatar: 'https://via.placeholder.com/60',
     hashtag: '#SEO',
     progress: 80,
+    isLiked: false,
+    isFollowing: false,
   },
 ];
 
 export default function CreatorHomePage() {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [feedData, setFeedData] = useState(INITIAL_FEED_DATA);
+  const [activeTab, setActiveTab] = useState('home');
+
+  // Toggle like
+  const handleLike = (itemId: string) => {
+    setFeedData(prevData =>
+      prevData.map(item =>
+        item.id === itemId
+          ? {
+              ...item,
+              isLiked: !item.isLiked,
+              likes: item.isLiked ? item.likes - 1 : item.likes + 1,
+            }
+          : item
+      )
+    );
+  };
+
+  // Gérer les commentaires
+  const handleComment = (username: string) => {
+    Alert.alert('Commentaires', `Ouvrir les commentaires de ${username}`);
+  };
+
+  // Gérer le partage
+  const handleShare = (title: string) => {
+    Alert.alert('Partager', `Partager: ${title}`);
+  };
+
+  // Gérer le profil
+  const handleProfile = (username: string) => {
+    Alert.alert('Profil', `Voir le profil de ${username}`);
+  };
+
+  // Toggle follow
+  const handleFollow = (itemId: string) => {
+    setFeedData(prevData =>
+      prevData.map(item =>
+        item.id === itemId
+          ? { ...item, isFollowing: !item.isFollowing }
+          : item
+      )
+    );
+  };
+
+  // Gérer le hashtag
+  const handleHashtag = (hashtag: string) => {
+    Alert.alert('Recherche', `Rechercher ${hashtag}`);
+  };
+
+  // Gérer la vidéo
+  const handleVideoPress = (title: string) => {
+    Alert.alert('Vidéo', `Lecture: ${title}`);
+  };
+
+  // Navigation
+  const handleNavigation = (tab: string) => {
+    setActiveTab(tab);
+    
+    switch(tab) {
+      case 'home':
+        Alert.alert('Navigation', 'Page Accueil');
+        break;
+      case 'explore':
+        Alert.alert('Navigation', 'Page Explorer');
+        break;
+      case 'add':
+        Alert.alert('Créer', 'Créer un nouveau post');
+        break;
+      case 'notifications':
+        Alert.alert('Navigation', 'Page Notifications');
+        break;
+      case 'profile':
+        Alert.alert('Navigation', 'Page Profil');
+        break;
+    }
+  };
 
   const renderPost = ({ item }: { item: FeedItem }) => (
     <View style={styles.postContainer}>
       <StatusBar barStyle="light-content" />
       
-      {/* En-tête avec heure et icônes */}
+      {/* En-tête */}
       <View style={styles.header}>
         <Text style={styles.headerTime}>9:41</Text>
         <View style={styles.headerIcons}>
@@ -79,12 +161,14 @@ export default function CreatorHomePage() {
         </View>
       </View>
 
-      {/* Section principale avec image et fond orange */}
-      <View style={styles.heroSection}>
-        {/* Fond orange à droite */}
+      {/* Section principale */}
+      <TouchableOpacity 
+        style={styles.heroSection}
+        activeOpacity={0.9}
+        onPress={() => handleVideoPress(item.title)}
+      >
         <View style={styles.orangeBackground} />
         
-        {/* Photo du créateur */}
         <View style={styles.creatorImageWrapper}>
           <Image
             source={{ uri: item.image }}
@@ -95,56 +179,87 @@ export default function CreatorHomePage() {
 
         {/* Actions à droite */}
         <View style={styles.rightActions}>
-          {/* Mini photo de profil */}
-          <View style={styles.miniProfileContainer}>
+          {/* Mini photo de profil - cliquable */}
+          <TouchableOpacity 
+            style={styles.miniProfileContainer}
+            onPress={() => handleProfile(item.username)}
+          >
             <Image
               source={{ uri: item.avatar }}
               style={styles.miniProfile}
             />
-          </View>
+            {!item.isFollowing && (
+              <TouchableOpacity 
+                style={styles.followButton}
+                onPress={() => handleFollow(item.id)}
+              >
+                <Ionicons name="add" size={20} color="#fff" />
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
 
-          {/* Likes */}
-          <TouchableOpacity style={styles.actionItem}>
+          {/* Likes - cliquable */}
+          <TouchableOpacity 
+            style={styles.actionItem}
+            onPress={() => handleLike(item.id)}
+          >
             <View style={styles.actionIconCircle}>
-              <Ionicons name="heart" size={30} color="#fff" />
+              <Ionicons 
+                name={item.isLiked ? "heart" : "heart-outline"} 
+                size={30} 
+                color={item.isLiked ? "#FF3B5C" : "#fff"} 
+              />
             </View>
             <Text style={styles.actionText}>{item.likes}</Text>
           </TouchableOpacity>
 
-          {/* Commentaires */}
-          <TouchableOpacity style={styles.actionItem}>
+          {/* Commentaires - cliquable */}
+          <TouchableOpacity 
+            style={styles.actionItem}
+            onPress={() => handleComment(item.username)}
+          >
             <View style={styles.actionIconCircle}>
               <Ionicons name="chatbubble-ellipses" size={26} color="#fff" />
             </View>
             <Text style={styles.actionText}>{item.comments}</Text>
           </TouchableOpacity>
 
-          {/* Partager */}
-          <TouchableOpacity style={styles.actionItem}>
+          {/* Partager - cliquable */}
+          <TouchableOpacity 
+            style={styles.actionItem}
+            onPress={() => handleShare(item.title)}
+          >
             <View style={styles.actionIconCircle}>
               <Ionicons name="arrow-redo" size={26} color="#fff" />
             </View>
             <Text style={styles.actionText}>Partager</Text>
           </TouchableOpacity>
 
-          {/* Badge diplôme orange */}
-          <View style={styles.diplomaBadge}>
+          {/* Badge diplôme */}
+          <TouchableOpacity style={styles.diplomaBadge}>
             <Ionicons name="ribbon" size={28} color="#fff" />
-          </View>
+          </TouchableOpacity>
         </View>
-      </View>
+      </TouchableOpacity>
 
-      {/* Section info avec fond noir */}
+      {/* Section info */}
       <View style={styles.infoSection}>
-        <Text style={styles.username}>{item.username} · {item.time}</Text>
+        <TouchableOpacity onPress={() => handleProfile(item.username)}>
+          <Text style={styles.username}>{item.username} · {item.time}</Text>
+        </TouchableOpacity>
+        
         <Text style={styles.title}>{item.title}</Text>
+        
         <Text style={styles.description}>
           {item.description} <Text style={styles.seeMore}>voir plus</Text>
         </Text>
-        <Text style={styles.hashtag}>{item.hashtag}</Text>
+        
+        <TouchableOpacity onPress={() => handleHashtag(item.hashtag)}>
+          <Text style={styles.hashtag}>{item.hashtag}</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Barre de progression vidéo */}
+      {/* Barre de progression */}
       <View style={styles.progressBarContainer}>
         <View style={styles.progressBar}>
           <View style={[styles.progressFilled, { width: `${item.progress}%` }]} />
@@ -156,7 +271,7 @@ export default function CreatorHomePage() {
   return (
     <View style={styles.container}>
       <FlatList
-        data={FEED_DATA}
+        data={feedData}
         renderItem={renderPost}
         keyExtractor={(item) => item.id}
         pagingEnabled
@@ -171,30 +286,69 @@ export default function CreatorHomePage() {
 
       {/* Navigation en bas */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="home" size={28} color="#6A4EFB" />
-          <Text style={[styles.navText, { color: '#6A4EFB' }]}>Accueil</Text>
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('home')}
+        >
+          <Ionicons 
+            name={activeTab === 'home' ? "home" : "home-outline"} 
+            size={28} 
+            color={activeTab === 'home' ? '#6A4EFB' : '#B0B0B0'} 
+          />
+          <Text style={[styles.navText, activeTab === 'home' && { color: '#6A4EFB' }]}>
+            Accueil
+          </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="search" size={28} color="#B0B0B0" />
-          <Text style={styles.navText}>Explorer</Text>
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('explore')}
+        >
+          <Ionicons 
+            name={activeTab === 'explore' ? "search" : "search-outline"} 
+            size={28} 
+            color={activeTab === 'explore' ? '#6A4EFB' : '#B0B0B0'} 
+          />
+          <Text style={[styles.navText, activeTab === 'explore' && { color: '#6A4EFB' }]}>
+            Explorer
+          </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItemCenter}>
+        <TouchableOpacity 
+          style={styles.navItemCenter}
+          onPress={() => handleNavigation('add')}
+        >
           <View style={styles.addButton}>
             <Ionicons name="add" size={32} color="#FD9A34" />
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="chatbox-outline" size={26} color="#B0B0B0" />
-          <Text style={styles.navText}>Notifications</Text>
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('notifications')}
+        >
+          <Ionicons 
+            name={activeTab === 'notifications' ? "chatbox" : "chatbox-outline"} 
+            size={26} 
+            color={activeTab === 'notifications' ? '#6A4EFB' : '#B0B0B0'} 
+          />
+          <Text style={[styles.navText, activeTab === 'notifications' && { color: '#6A4EFB' }]}>
+            Notifications
+          </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="person-outline" size={28} color="#B0B0B0" />
-          <Text style={styles.navText}>Profil</Text>
+        <TouchableOpacity 
+          style={styles.navItem}
+          onPress={() => handleNavigation('profile')}
+        >
+          <Ionicons 
+            name={activeTab === 'profile' ? "person" : "person-outline"} 
+            size={28} 
+            color={activeTab === 'profile' ? '#6A4EFB' : '#B0B0B0'} 
+          />
+          <Text style={[styles.navText, activeTab === 'profile' && { color: '#6A4EFB' }]}>
+            Profil
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -264,12 +418,27 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     borderWidth: 3,
     borderColor: '#fff',
-    overflow: 'hidden',
+    overflow: 'visible',
     marginBottom: 20,
+    position: 'relative',
   },
   miniProfile: {
     width: '100%',
     height: '100%',
+    borderRadius: 30,
+  },
+  followButton: {
+    position: 'absolute',
+    bottom: -8,
+    right: -8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#6A4EFB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
   },
   actionItem: {
     alignItems: 'center',
