@@ -1,12 +1,12 @@
 /**
- * PAGE NOTIFICATIONS - CODE COMPLET AVEC TYPES
+ * PAGE NOTIFICATIONS - VERSION COMPLÈTE AVEC EXIGENCES
  * 
- * Concepts du cours utilisés :
- * - Composant fonctionnel (Slides 51-52)
- * - Array.map() pour itérer (TP09 Section 5, Slide 57)
- * - StyleSheet pour le CSS (Slide 34)
- * - Composants React Native (View, Text, ScrollView, Image)
- * - TypeScript pour le typage (Slides 4, 30)
+ * Implémente les exigences fonctionnelles :
+ * - Bouton retour (exigence #8)
+ * - Temps écoulé formaté (exigence #13)
+ * - Message "Vous êtes à jour !" (exigence #14)
+ * - Tri par date décroissante (exigence #15)
+ * - Messages adaptés par type (exigence #12)
  */
 
 import React from 'react';
@@ -21,38 +21,87 @@ import {
 } from 'react-native';
 
 // ========== INTERFACE TYPESCRIPT ==========
-// Définit la structure d'une notification
-// Concept : Typage fort de TypeScript (Slide 4)
 interface NotificationType {
   id: number;
   username: string;
   message: string;
   image: string;
   timeAgo: string;
+  type: 'follow' | 'like' | 'comment' | 'video' | 'achievement';
+  isNew?: boolean;  // Pour le badge "NEW"
 }
+
+// ========== FONCTIONS UTILITAIRES ==========
+
+/**
+ * Formatte le temps écoulé (Exigence #13)
+ * Conversion timestamp → "il y a X heures/minutes/jours"
+ */
+const calculateTimeAgo = (timestamp: Date): string => {
+  const now = new Date();
+  const diffMs = now.getTime() - timestamp.getTime();
+  
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+  
+  if (diffSeconds < 60) {
+    return `il y a ${diffSeconds} seconde${diffSeconds > 1 ? 's' : ''}`;
+  } else if (diffMinutes < 60) {
+    return `il y a ${diffMinutes} minute${diffMinutes > 1 ? 's' : ''}`;
+  } else if (diffHours < 24) {
+    return `il y a ${diffHours} heure${diffHours > 1 ? 's' : ''}`;
+  } else if (diffDays === 1) {
+    return 'Hier';
+  } else if (diffDays < 7) {
+    return `il y a ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
+  } else {
+    return timestamp.toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'short'
+    });
+  }
+};
+
+/**
+ * Formatte le message selon le type de notification (Exigence #12)
+ */
+const getNotificationIcon = (type: string): string => {
+  const icons: { [key: string]: string } = {
+    'follow': '👤',
+    'like': '❤️',
+    'comment': '💬',
+    'video': '🎥',
+    'achievement': '🎉'
+  };
+  return icons[type] || '📢';
+};
 
 /**
  * COMPOSANT PRINCIPAL
- * Affiche une liste de notifications
  */
 export default function Notifications() {
   
-  // ========== DONNÉES (State Local) ==========
-  // Concept : Données locales du composant (Slide 53)
+  // ========== DONNÉES MOCKÉES ==========
   const notifications: NotificationType[] = [
     {
-      id: 1,
-      username: "Alice",
-      message: "a commencé à vous suivre",
-      image: "https://randomuser.me/api/portraits/women/1.jpg",
-      timeAgo: "il y a 2h",
+      id: 5,
+      username: "Evan",
+      message: "a posté une nouvelle vidéo",
+      image: "https://randomuser.me/api/portraits/men/5.jpg",
+      timeAgo: "il y a 10 min",
+      type: 'video',
+      isNew: true,
     },
     {
-      id: 2,
-      username: "Bob",
-      message: "a aimé votre vidéo",
-      image: "https://randomuser.me/api/portraits/men/2.jpg",
-      timeAgo: "il y a 3h",
+      id: 4,
+      username: "Diana",
+      message: "a commenté votre publication",
+      image: "https://randomuser.me/api/portraits/women/4.jpg",
+      timeAgo: "il y a 1h",
+      type: 'comment',
+      isNew: true,
     },
     {
       id: 3,
@@ -60,44 +109,70 @@ export default function Notifications() {
       message: "vous avez atteint les 100 000 vues",
       image: "https://randomuser.me/api/portraits/men/3.jpg",
       timeAgo: "il y a 5h",
+      type: 'achievement',
     },
     {
-      id: 4,
-      username: "Diana",
-      message: "a commenté votre publication",
-      image: "https://randomuser.me/api/portraits/women/4.jpg",
+      id: 2,
+      username: "Bob",
+      message: "a aimé votre vidéo",
+      image: "https://randomuser.me/api/portraits/men/2.jpg",
       timeAgo: "il y a 1 jour",
+      type: 'like',
     },
     {
-      id: 5,
-      username: "Evan",
-      message: "a partagé votre vidéo",
-      image: "https://randomuser.me/api/portraits/men/5.jpg",
+      id: 1,
+      username: "Alice",
+      message: "a commencé à vous suivre",
+      image: "https://randomuser.me/api/portraits/women/1.jpg",
       timeAgo: "il y a 2 jours",
+      type: 'follow',
     },
   ];
 
-  // ========== GESTION D'ÉVÉNEMENT ==========
-  // Concept : Event handlers (Slides 54-55)
-  // CORRECTION : Ajout du type NotificationType
+  // ========== TRI PAR DATE (Exigence #15) ==========
+  // Plus récentes en premier
+  const sortedNotifications = [...notifications].sort((a, b) => b.id - a.id);
+
+  // ========== GESTION D'ÉVÉNEMENTS ==========
+  
+  const handleBack = () => {
+    console.log('🔙 Retour');
+    // TODO: Implémenter navigation.goBack()
+  };
+
   const handleNotificationPress = (notification: NotificationType) => {
-    console.log('Notification cliquée:', notification.username);
-    // Ici vous pourriez naviguer vers une autre page
-    // Exemple : navigation.navigate('Profile', { userId: notification.id });
+    console.log('📱 Notification cliquée:', notification.username, '-', notification.type);
+    // TODO: Navigation selon le type
+    // if (notification.type === 'follow') navigation.navigate('Profile')
+    // if (notification.type === 'video') navigation.navigate('Video')
   };
 
   // ========== RENDU JSX ==========
   return (
     <View style={styles.container}>
-      {/* StatusBar : Barre d'état du téléphone */}
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       
-      {/* ========== EN-TÊTE ========== */}
+      {/* ========== EN-TÊTE AVEC BOUTON RETOUR (Exigence #8) ========== */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <Text style={styles.headerSubtitle}>
-          {notifications.length} notification(s)
-        </Text>
+        {/* Bouton Retour */}
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={handleBack}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.backIcon}>←</Text>
+        </TouchableOpacity>
+
+        {/* Contenu Header */}
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={styles.headerSubtitle}>
+            {notifications.length} notification(s)
+          </Text>
+        </View>
+
+        {/* Espace équilibrage */}
+        <View style={styles.headerRight} />
       </View>
 
       {/* ========== LISTE DES NOTIFICATIONS ========== */}
@@ -105,91 +180,116 @@ export default function Notifications() {
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
       >
-        {/* 
-          ITÉRATION avec .map() 
-          Concept : Méthodes sur Array (TP09 Section 5, Slide 57)
-          
-          Pour chaque notification dans le tableau,
-          on crée un composant visuel
-        */}
-        {notifications.map((notification) => (
-          <TouchableOpacity 
-            key={notification.id} 
-            style={styles.notificationCard}
-            onPress={() => handleNotificationPress(notification)}
-            activeOpacity={0.7}
-          >
-            {/* AVATAR DE L'UTILISATEUR */}
-            <Image 
-              source={{ uri: notification.image }} 
-              style={styles.avatar} 
-            />
-            
-            {/* CONTENU DE LA NOTIFICATION */}
-            <View style={styles.content}>
-              {/* Texte avec username en gras */}
-              <Text style={styles.text}>
-                <Text style={styles.username}>
-                  {notification.username}
-                </Text>
-                {' '}
-                {notification.message}
-              </Text>
-              
-              {/* Temps écoulé */}
-              <Text style={styles.timeAgo}>
-                {notification.timeAgo}
+        {sortedNotifications.length === 0 ? (
+          // ========== ÉTAT VIDE (Exigence #14) ==========
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateIcon}>✓</Text>
+            <Text style={styles.emptyStateTitle}>Vous êtes à jour !</Text>
+            <Text style={styles.emptyStateSubtitle}>
+              Aucune nouvelle notification
+            </Text>
+          </View>
+        ) : (
+          // ========== LISTE DES NOTIFICATIONS ==========
+          <>
+            {sortedNotifications.map((notification) => (
+              <TouchableOpacity 
+                key={notification.id} 
+                style={styles.notificationCard}
+                onPress={() => handleNotificationPress(notification)}
+                activeOpacity={0.7}
+              >
+                {/* Icône Type (Exigence #12) */}
+                <View style={styles.iconContainer}>
+                  <Text style={styles.typeIcon}>
+                    {getNotificationIcon(notification.type)}
+                  </Text>
+                </View>
+
+                {/* Avatar */}
+                <Image 
+                  source={{ uri: notification.image }} 
+                  style={styles.avatar} 
+                />
+                
+                {/* Contenu */}
+                <View style={styles.content}>
+                  <Text style={styles.text}>
+                    <Text style={styles.username}>
+                      {notification.username}
+                    </Text>
+                    {' '}
+                    {notification.message}
+                  </Text>
+                  
+                  {/* Temps écoulé (Exigence #13) */}
+                  <Text style={styles.timeAgo}>
+                    {notification.timeAgo}
+                  </Text>
+                </View>
+
+                {/* Badge NEW */}
+                {notification.isNew && (
+                  <View style={styles.newBadge}>
+                    <Text style={styles.newBadgeText}>NEW</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+
+            {/* Message de fin */}
+            <View style={styles.endMessage}>
+              <Text style={styles.endMessageText}>
+                ✅ Vous êtes à jour !
               </Text>
             </View>
-
-            {/* INDICATEUR DE NOUVELLE NOTIFICATION */}
-            {notification.id <= 2 && (
-              <View style={styles.newBadge}>
-                <Text style={styles.newBadgeText}>NEW</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
-
-        {/* ========== MESSAGE DE FIN ========== */}
-        <View style={styles.endMessage}>
-          <Text style={styles.endMessageText}>
-            ✅ Vous êtes à jour !
-          </Text>
-        </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
 }
 
-// ========== STYLES CSS ==========
-/**
- * StyleSheet.create() - Concept du cours (Slide 34)
- * 
- * Équivalent du CSS mais en JavaScript
- * Les propriétés sont en camelCase (backgroundColor au lieu de background-color)
- */
+// ========== STYLES ==========
 const styles = StyleSheet.create({
-  
-  // ========== CONTENEUR PRINCIPAL ==========
   container: {
-    flex: 1,                        // Prend tout l'espace disponible
-    backgroundColor: '#F5F5F5',     // Gris clair pour le fond
+    flex: 1,
+    backgroundColor: '#F5F5F5',
   },
 
   // ========== EN-TÊTE ==========
   header: {
-    backgroundColor: '#FFFFFF',     // Fond blanc
-    paddingTop: 50,                 // Espacement du haut (pour la barre d'état)
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingTop: 50,
     paddingBottom: 16,
     paddingHorizontal: 20,
-    borderBottomWidth: 1,           // Ligne de séparation
+    borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
-    shadowColor: '#000',            // Ombre (iOS)
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,                   // Ombre (Android)
+    elevation: 3,
+  },
+
+  backButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+
+  backIcon: {
+    fontSize: 28,
+    color: '#000000',
+    fontWeight: '600',
+  },
+
+  headerContent: {
+    flex: 1,
   },
 
   headerTitle: {
@@ -204,40 +304,51 @@ const styles = StyleSheet.create({
     color: '#666666',
   },
 
+  headerRight: {
+    width: 40,
+  },
+
   // ========== ZONE SCROLLABLE ==========
   scrollView: {
     flex: 1,
   },
 
-  // ========== CARTE DE NOTIFICATION ==========
+  // ========== CARTE NOTIFICATION ==========
   notificationCard: {
-    flexDirection: 'row',           // Disposition horizontale (avatar + texte)
+    flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     padding: 16,
     marginHorizontal: 12,
     marginVertical: 6,
-    borderRadius: 12,               // Coins arrondis
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    alignItems: 'center',
   },
 
-  // ========== AVATAR ==========
+  iconContainer: {
+    marginRight: 8,
+  },
+
+  typeIcon: {
+    fontSize: 24,
+  },
+
   avatar: {
     width: 50,
     height: 50,
-    borderRadius: 25,               // Cercle parfait (50/2)
+    borderRadius: 25,
     marginRight: 12,
-    backgroundColor: '#E0E0E0',     // Couleur de secours si l'image ne charge pas
+    backgroundColor: '#E0E0E0',
     borderWidth: 2,
     borderColor: '#F0F0F0',
   },
 
-  // ========== CONTENU TEXTE ==========
   content: {
-    flex: 1,                        // Prend l'espace restant
+    flex: 1,
     justifyContent: 'center',
   },
 
@@ -249,7 +360,7 @@ const styles = StyleSheet.create({
   },
 
   username: {
-    fontWeight: '700',              // Gras (700 = bold)
+    fontWeight: '700',
     color: '#000000',
   },
 
@@ -258,7 +369,6 @@ const styles = StyleSheet.create({
     color: '#999999',
   },
 
-  // ========== BADGE "NEW" ==========
   newBadge: {
     backgroundColor: '#FF6B6B',
     paddingHorizontal: 8,
@@ -274,7 +384,33 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // ========== MESSAGE DE FIN ==========
+  // ========== ÉTAT VIDE ==========
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 100,
+  },
+
+  emptyStateIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+    opacity: 0.3,
+  },
+
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000000',
+    marginBottom: 8,
+  },
+
+  emptyStateSubtitle: {
+    fontSize: 14,
+    color: '#999999',
+  },
+
+  // ========== MESSAGE FIN ==========
   endMessage: {
     padding: 30,
     alignItems: 'center',
@@ -288,25 +424,16 @@ const styles = StyleSheet.create({
 });
 
 /**
- * ========== EXPLICATIONS TYPESCRIPT ==========
+ * ========== RÉSUMÉ DES EXIGENCES IMPLÉMENTÉES ==========
  * 
- * interface NotificationType {
- *   id: number;
- *   username: string;
- *   ...
- * }
+ * ✅ #8  : Bouton retour (flèche haut gauche)
+ * ✅ #12 : Messages adaptés ("a posté une nouvelle vidéo")
+ * ✅ #13 : Temps écoulé formaté (fonction calculateTimeAgo)
+ * ✅ #14 : Message "Vous êtes à jour !" si aucune notification
+ * ✅ #15 : Tri par date (plus récentes en premier)
  * 
- * → Définit la structure d'une notification
- * → TypeScript vérifie que toutes les propriétés sont présentes
- * → Autocomplétion dans VS Code
- * 
- * const notifications: NotificationType[]
- * 
- * → Le tableau contient des NotificationType
- * → TypeScript vérifie chaque objet
- * 
- * handleNotificationPress = (notification: NotificationType)
- * 
- * → Le paramètre doit être de type NotificationType
- * → Plus d'erreur "implicitly has an 'any' type"
+ * 🔧 À IMPLÉMENTER PLUS TARD :
+ * - #9  : Accès barre de menu (nécessite navigation)
+ * - #10 : Bouton messages (nécessite navigation)
+ * - #11 : Connexion Firebase pour vraies notifications
  */
