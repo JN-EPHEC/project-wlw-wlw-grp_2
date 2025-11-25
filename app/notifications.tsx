@@ -1,439 +1,322 @@
-/**
- * PAGE NOTIFICATIONS - VERSION COMPLÈTE AVEC EXIGENCES
- * 
- * Implémente les exigences fonctionnelles :
- * - Bouton retour (exigence #8)
- * - Temps écoulé formaté (exigence #13)
- * - Message "Vous êtes à jour !" (exigence #14)
- * - Tri par date décroissante (exigence #15)
- * - Messages adaptés par type (exigence #12)
- */
+import React, { useState } from 'react';
 
-import React from 'react';
-import {
-  Image,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from 'react-native';
+// Types pour les notifications
+type NotificationType = 'message' | 'alert' | 'info' | 'course_update' | 'progress' | 'certificate' | 'reminder' | 'question' | 'review' | 'milestone';
+type Priority = 'high' | 'normal' | 'low';
+type FilterType = 'all' | 'unread' | 'read';
+type SortType = 'date' | 'priority';
 
-// ========== INTERFACE TYPESCRIPT ==========
-interface NotificationType {
+interface Notification {
   id: number;
-  username: string;
+  type: NotificationType;
+  title: string;
   message: string;
-  image: string;
-  timeAgo: string;
-  type: 'follow' | 'like' | 'comment' | 'video' | 'achievement';
-  isNew?: boolean;  // Pour le badge "NEW"
+  timestamp: string;
+  read: boolean;
+  priority: Priority;
+  courseId?: string;
+  courseName?: string;
+  actionUrl?: string;
+  metadata?: {
+    progress?: number;
+    studentCount?: number;
+    rating?: number;
+  };
 }
 
-// ========== FONCTIONS UTILITAIRES ==========
-
-/**
- * Formatte le temps écoulé (Exigence #13)
- * Conversion timestamp → "il y a X heures/minutes/jours"
- */
-const calculateTimeAgo = (timestamp: Date): string => {
-  const now = new Date();
-  const diffMs = now.getTime() - timestamp.getTime();
-  
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  
-  if (diffSeconds < 60) {
-    return `il y a ${diffSeconds} seconde${diffSeconds > 1 ? 's' : ''}`;
-  } else if (diffMinutes < 60) {
-    return `il y a ${diffMinutes} minute${diffMinutes > 1 ? 's' : ''}`;
-  } else if (diffHours < 24) {
-    return `il y a ${diffHours} heure${diffHours > 1 ? 's' : ''}`;
-  } else if (diffDays === 1) {
-    return 'Hier';
-  } else if (diffDays < 7) {
-    return `il y a ${diffDays} jour${diffDays > 1 ? 's' : ''}`;
-  } else {
-    return timestamp.toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'short'
-    });
-  }
-};
-
-/**
- * Formatte le message selon le type de notification (Exigence #12)
- */
-const getNotificationIcon = (type: string): string => {
-  const icons: { [key: string]: string } = {
-    'follow': '👤',
-    'like': '❤️',
-    'comment': '💬',
-    'video': '🎥',
-    'achievement': '🎉'
-  };
-  return icons[type] || '📢';
-};
-
-/**
- * COMPOSANT PRINCIPAL
- */
-export default function Notifications() {
-  
-  // ========== DONNÉES MOCKÉES ==========
-  const notifications: NotificationType[] = [
+const NotificationsPage = () => {
+  const [notifications, setNotifications] = useState<Notification[]>([
     {
-      id: 5,
-      username: "Evan",
-      message: "a posté une nouvelle vidéo",
-      image: "https://randomuser.me/api/portraits/men/5.jpg",
-      timeAgo: "il y a 10 min",
-      type: 'video',
-      isNew: true,
-    },
-    {
-      id: 4,
-      username: "Diana",
-      message: "a commenté votre publication",
-      image: "https://randomuser.me/api/portraits/women/4.jpg",
-      timeAgo: "il y a 1h",
-      type: 'comment',
-      isNew: true,
-    },
-    {
-      id: 3,
-      username: "Charlie",
-      message: "vous avez atteint les 100 000 vues",
-      image: "https://randomuser.me/api/portraits/men/3.jpg",
-      timeAgo: "il y a 5h",
-      type: 'achievement',
+      id: 1,
+      type: 'message',
+      title: 'Nouveau message',
+      message: 'Jean Dupont vous a envoyé un message',
+      timestamp: '2024-01-20T10:30:00',
+      read: false,
+      priority: 'normal'
     },
     {
       id: 2,
-      username: "Bob",
-      message: "a aimé votre vidéo",
-      image: "https://randomuser.me/api/portraits/men/2.jpg",
-      timeAgo: "il y a 1 jour",
-      type: 'like',
+      type: 'alert',
+      title: 'Alerte système',
+      message: 'Maintenance planifiée ce soir à 22h',
+      timestamp: '2024-01-20T09:15:00',
+      read: false,
+      priority: 'high'
     },
     {
-      id: 1,
-      username: "Alice",
-      message: "a commencé à vous suivre",
-      image: "https://randomuser.me/api/portraits/women/1.jpg",
-      timeAgo: "il y a 2 jours",
-      type: 'follow',
-    },
-  ];
+      id: 3,
+      type: 'info',
+      title: 'Mise à jour disponible',
+      message: 'Une nouvelle version est disponible',
+      timestamp: '2024-01-19T14:20:00',
+      read: true,
+      priority: 'low'
+    }
+  ]);
 
-  // ========== TRI PAR DATE (Exigence #15) ==========
-  // Plus récentes en premier
-  const sortedNotifications = [...notifications].sort((a, b) => b.id - a.id);
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [sortBy, setSortBy] = useState<SortType>('date');
 
-  // ========== GESTION D'ÉVÉNEMENTS ==========
-  
-  const handleBack = () => {
-    console.log('🔙 Retour');
-    // TODO: Implémenter navigation.goBack()
+  // Fonctions de gestion
+  const markAsRead = (id: number) => {
+    setNotifications(notifications.map(notif =>
+      notif.id === id ? { ...notif, read: true } : notif
+    ));
   };
 
-  const handleNotificationPress = (notification: NotificationType) => {
-    console.log('📱 Notification cliquée:', notification.username, '-', notification.type);
-    // TODO: Navigation selon le type
-    // if (notification.type === 'follow') navigation.navigate('Profile')
-    // if (notification.type === 'video') navigation.navigate('Video')
+  const markAllAsRead = () => {
+    setNotifications(notifications.map(notif => ({ ...notif, read: true })));
   };
 
-  // ========== RENDU JSX ==========
+  const deleteNotification = (id: number) => {
+    setNotifications(notifications.filter(notif => notif.id !== id));
+  };
+
+  const clearAll = () => {
+    setNotifications([]);
+  };
+
+  // Filtrage et tri
+  const filteredNotifications = notifications.filter(notif => {
+    if (filter === 'unread') return !notif.read;
+    if (filter === 'read') return notif.read;
+    return true;
+  });
+
+  const sortedNotifications = [...filteredNotifications].sort((a, b) => {
+    if (sortBy === 'date') {
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    }
+    const priorityOrder: Record<Priority, number> = { high: 3, normal: 2, low: 1 };
+    return priorityOrder[b.priority] - priorityOrder[a.priority];
+  });
+
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  const formatTimestamp = (timestamp: string): string => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+    
+    if (diffInHours < 1) return 'À l\'instant';
+    if (diffInHours < 24) return `Il y a ${diffInHours}h`;
+    return date.toLocaleDateString('fr-FR');
+  };
+
+  const getPriorityColor = (priority: Priority): string => {
+    switch(priority) {
+      case 'high': return 'bg-red-100 text-red-800 border-red-300';
+      case 'normal': return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'low': return 'bg-gray-100 text-gray-800 border-gray-300';
+      default: return 'bg-gray-100 text-gray-800 border-gray-300';
+    }
+  };
+
+  const getTypeIcon = (type: NotificationType): string => {
+    switch(type) {
+      case 'message': return '💬';
+      case 'alert': return '⚠️';
+      case 'info': return 'ℹ️';
+      default: return '📢';
+    }
+  };
+
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      {/* ========== EN-TÊTE AVEC BOUTON RETOUR (Exigence #8) ========== */}
-      <View style={styles.header}>
-        {/* Bouton Retour */}
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={handleBack}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.backIcon}>←</Text>
-        </TouchableOpacity>
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+      <div className="max-w-4xl mx-auto">
+        
+        {/* Header */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 text-blue-600">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+                <p className="text-sm text-gray-600">
+                  {unreadCount > 0 ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Tout est lu'}
+                </p>
+              </div>
+            </div>
+            
+            {/* Badge de compteur */}
+            {unreadCount > 0 && (
+              <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-500 text-white font-bold">
+                {unreadCount}
+              </span>
+            )}
+          </div>
 
-        {/* Contenu Header */}
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Notifications</Text>
-          <Text style={styles.headerSubtitle}>
-            {notifications.length} notification(s)
-          </Text>
-        </View>
+          {/* Actions principales */}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={markAllAsRead}
+              disabled={unreadCount === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              Tout marquer comme lu
+            </button>
+            
+            <button
+              onClick={clearAll}
+              disabled={notifications.length === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+              Tout supprimer
+            </button>
+          </div>
+        </div>
 
-        {/* Espace équilibrage */}
-        <View style={styles.headerRight} />
-      </View>
-
-      {/* ========== LISTE DES NOTIFICATIONS ========== */}
-      <ScrollView 
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-      >
-        {sortedNotifications.length === 0 ? (
-          // ========== ÉTAT VIDE (Exigence #14) ==========
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateIcon}>✓</Text>
-            <Text style={styles.emptyStateTitle}>Vous êtes à jour !</Text>
-            <Text style={styles.emptyStateSubtitle}>
-              Aucune nouvelle notification
-            </Text>
-          </View>
-        ) : (
-          // ========== LISTE DES NOTIFICATIONS ==========
-          <>
-            {sortedNotifications.map((notification) => (
-              <TouchableOpacity 
-                key={notification.id} 
-                style={styles.notificationCard}
-                onPress={() => handleNotificationPress(notification)}
-                activeOpacity={0.7}
+        {/* Filtres et Tri */}
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+            </svg>
+            <span className="font-semibold text-gray-700">Filtres</span>
+          </div>
+          
+          <div className="flex flex-wrap gap-4">
+            {/* Filtre par statut */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setFilter('all')}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  filter === 'all' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
               >
-                {/* Icône Type (Exigence #12) */}
-                <View style={styles.iconContainer}>
-                  <Text style={styles.typeIcon}>
-                    {getNotificationIcon(notification.type)}
-                  </Text>
-                </View>
+                Toutes ({notifications.length})
+              </button>
+              <button
+                onClick={() => setFilter('unread')}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  filter === 'unread' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Non lues ({unreadCount})
+              </button>
+              <button
+                onClick={() => setFilter('read')}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  filter === 'read' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                Lues ({notifications.length - unreadCount})
+              </button>
+            </div>
 
-                {/* Avatar */}
-                <Image 
-                  source={{ uri: notification.image }} 
-                  style={styles.avatar} 
-                />
-                
-                {/* Contenu */}
-                <View style={styles.content}>
-                  <Text style={styles.text}>
-                    <Text style={styles.username}>
-                      {notification.username}
-                    </Text>
-                    {' '}
-                    {notification.message}
-                  </Text>
-                  
-                  {/* Temps écoulé (Exigence #13) */}
-                  <Text style={styles.timeAgo}>
-                    {notification.timeAgo}
-                  </Text>
-                </View>
+            {/* Tri */}
+            <div className="flex gap-2 ml-auto">
+              <span className="text-sm text-gray-600 self-center">Trier par:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortType)}
+                className="px-3 py-1 border border-gray-300 rounded-md bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="date">Date</option>
+                <option value="priority">Priorité</option>
+              </select>
+            </div>
+          </div>
+        </div>
 
-                {/* Badge NEW */}
-                {notification.isNew && (
-                  <View style={styles.newBadge}>
-                    <Text style={styles.newBadgeText}>NEW</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ))}
+        {/* Liste des notifications */}
+        <div className="space-y-3">
+          {sortedNotifications.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+              </svg>
+              <p className="text-gray-500 text-lg">Aucune notification</p>
+            </div>
+          ) : (
+            sortedNotifications.map(notif => (
+              <div
+                key={notif.id}
+                className={`bg-white rounded-lg shadow-sm p-4 transition-all hover:shadow-md ${
+                  !notif.read ? 'border-l-4 border-blue-600' : 'border-l-4 border-transparent'
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  {/* Icône */}
+                  <div className="text-2xl flex-shrink-0">
+                    {getTypeIcon(notif.type)}
+                  </div>
 
-            {/* Message de fin */}
-            <View style={styles.endMessage}>
-              <Text style={styles.endMessageText}>
-                ✅ Vous êtes à jour !
-              </Text>
-            </View>
-          </>
-        )}
-      </ScrollView>
-    </View>
+                  {/* Contenu */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h3 className={`font-semibold ${!notif.read ? 'text-gray-900' : 'text-gray-600'}`}>
+                        {notif.title}
+                      </h3>
+                      
+                      {/* Badge de priorité */}
+                      <span className={`px-2 py-1 text-xs rounded-full border ${getPriorityColor(notif.priority)}`}>
+                        {notif.priority === 'high' ? 'Urgent' : notif.priority === 'normal' ? 'Normal' : 'Faible'}
+                      </span>
+                    </div>
+
+                    <p className={`text-sm mb-2 ${!notif.read ? 'text-gray-700' : 'text-gray-500'}`}>
+                      {notif.message}
+                    </p>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">
+                        {formatTimestamp(notif.timestamp)}
+                      </span>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        {!notif.read && (
+                          <button
+                            onClick={() => markAsRead(notif.id)}
+                            className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            title="Marquer comme lu"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                            Marquer lu
+                          </button>
+                        )}
+                        
+                        <button
+                          onClick={() => deleteNotification(notif.id)}
+                          className="flex items-center gap-1 px-3 py-1 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          title="Supprimer"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                          </svg>
+                          Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
   );
-}
+};
 
-// ========== STYLES ==========
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-
-  // ========== EN-TÊTE ==========
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingTop: 50,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-
-  backButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-
-  backIcon: {
-    fontSize: 28,
-    color: '#000000',
-    fontWeight: '600',
-  },
-
-  headerContent: {
-    flex: 1,
-  },
-
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 4,
-  },
-
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#666666',
-  },
-
-  headerRight: {
-    width: 40,
-  },
-
-  // ========== ZONE SCROLLABLE ==========
-  scrollView: {
-    flex: 1,
-  },
-
-  // ========== CARTE NOTIFICATION ==========
-  notificationCard: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    marginHorizontal: 12,
-    marginVertical: 6,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    alignItems: 'center',
-  },
-
-  iconContainer: {
-    marginRight: 8,
-  },
-
-  typeIcon: {
-    fontSize: 24,
-  },
-
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 12,
-    backgroundColor: '#E0E0E0',
-    borderWidth: 2,
-    borderColor: '#F0F0F0',
-  },
-
-  content: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-
-  text: {
-    fontSize: 15,
-    color: '#000000',
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-
-  username: {
-    fontWeight: '700',
-    color: '#000000',
-  },
-
-  timeAgo: {
-    fontSize: 13,
-    color: '#999999',
-  },
-
-  newBadge: {
-    backgroundColor: '#FF6B6B',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    alignSelf: 'flex-start',
-    marginLeft: 8,
-  },
-
-  newBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-
-  // ========== ÉTAT VIDE ==========
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 100,
-  },
-
-  emptyStateIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-    opacity: 0.3,
-  },
-
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000000',
-    marginBottom: 8,
-  },
-
-  emptyStateSubtitle: {
-    fontSize: 14,
-    color: '#999999',
-  },
-
-  // ========== MESSAGE FIN ==========
-  endMessage: {
-    padding: 30,
-    alignItems: 'center',
-  },
-
-  endMessageText: {
-    fontSize: 15,
-    color: '#999999',
-    fontWeight: '500',
-  },
-});
-
-/**
- * ========== RÉSUMÉ DES EXIGENCES IMPLÉMENTÉES ==========
- * 
- * ✅ #8  : Bouton retour (flèche haut gauche)
- * ✅ #12 : Messages adaptés ("a posté une nouvelle vidéo")
- * ✅ #13 : Temps écoulé formaté (fonction calculateTimeAgo)
- * ✅ #14 : Message "Vous êtes à jour !" si aucune notification
- * ✅ #15 : Tri par date (plus récentes en premier)
- * 
- * 🔧 À IMPLÉMENTER PLUS TARD :
- * - #9  : Accès barre de menu (nécessite navigation)
- * - #10 : Bouton messages (nécessite navigation)
- * - #11 : Connexion Firebase pour vraies notifications
- */
+export default NotificationsPage;
