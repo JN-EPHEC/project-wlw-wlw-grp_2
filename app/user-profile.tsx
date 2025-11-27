@@ -61,8 +61,14 @@ function StatBox({ value, label, variant }: StatBoxProps) {
 export default function UserProfileLearnerComplete() {
     const [showMessageModal, setShowMessageModal] = useState(false);
     const [messageText, setMessageText] = useState('');
-    const [activeTab, setActiveTab] = useState<'interactions' | 'downloads' | 'parcours'>('interactions');
+    const [activeTab, setActiveTab] = useState<'interactions' | 'downloads' | 'parcours' | 'playlists'>('interactions');
     const [isPremium] = useState(true); // Simuler un compte premium
+    const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
+    const [showAddVideosModal, setShowAddVideosModal] = useState(false);
+    const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null);
+    const [newPlaylistName, setNewPlaylistName] = useState('');
+    const [newPlaylistDescription, setNewPlaylistDescription] = useState('');
+    const [selectedVideosForPlaylist, setSelectedVideosForPlaylist] = useState<string[]>([]);
 
     // Données des badges de l'utilisateur
     const badges = [
@@ -158,6 +164,82 @@ export default function UserProfileLearnerComplete() {
         console.log('Suppression interaction:', id);
         // Logique de suppression
     };
+
+    const handleCreatePlaylist = () => {
+        console.log('Créer playlist:', newPlaylistName, newPlaylistDescription);
+        setNewPlaylistName('');
+        setNewPlaylistDescription('');
+        setShowCreatePlaylistModal(false);
+    };
+
+    const handleSharePlaylist = (playlistId: string) => {
+        console.log('Partager playlist:', playlistId);
+    };
+
+    const handleDeletePlaylist = (playlistId: string) => {
+        console.log('Supprimer playlist:', playlistId);
+    };
+
+    const handleAddVideosToPlaylist = (playlistId: string) => {
+        setSelectedPlaylist(playlistId);
+        setShowAddVideosModal(true);
+    };
+
+    const handleToggleVideoSelection = (videoId: string) => {
+        setSelectedVideosForPlaylist(prev => 
+            prev.includes(videoId) 
+                ? prev.filter(id => id !== videoId)
+                : [...prev, videoId]
+        );
+    };
+
+    const handleSaveVideosToPlaylist = () => {
+        console.log('Ajouter vidéos à la playlist:', selectedPlaylist, selectedVideosForPlaylist);
+        setSelectedVideosForPlaylist([]);
+        setShowAddVideosModal(false);
+        setSelectedPlaylist(null);
+    };
+
+    // Playlists personnalisées de l'utilisateur
+    const userPlaylists = [
+        {
+            id: 'up1',
+            name: 'Apprendre le Marketing',
+            description: 'Ma sélection de vidéos marketing',
+            videoCount: 8,
+            thumbnail: '🎯',
+            isPublic: false,
+            createdDate: 'Il y a 2 jours',
+        },
+        {
+            id: 'up2',
+            name: 'Développement Personnel',
+            description: 'Vidéos inspirantes pour progresser',
+            videoCount: 12,
+            thumbnail: '🌟',
+            isPublic: true,
+            createdDate: 'Il y a 1 semaine',
+        },
+        {
+            id: 'up3',
+            name: 'Coding Tutorials',
+            description: 'Tutoriels Python et JavaScript',
+            videoCount: 15,
+            thumbnail: '💻',
+            isPublic: false,
+            createdDate: 'Il y a 2 semaines',
+        },
+    ];
+
+    // Vidéos disponibles pour ajouter aux playlists
+    const availableVideos = [
+        { id: 'av1', title: 'Introduction au Marketing Digital', creator: '@marketingpro', duration: '15:30', thumbnail: '🎯' },
+        { id: 'av2', title: 'Python pour débutants', creator: '@codewithpython', duration: '22:15', thumbnail: '🐍' },
+        { id: 'av3', title: 'Design Thinking Workshop', creator: '@designmaster', duration: '45:00', thumbnail: '🎨' },
+        { id: 'av4', title: 'Excel Avancé', creator: '@excelpro', duration: '18:45', thumbnail: '📊' },
+        { id: 'av5', title: 'SEO en 2024', creator: '@seospecialist', duration: '12:20', thumbnail: '🔍' },
+        { id: 'av6', title: 'Leadership Moderne', creator: '@leadercoach', duration: '25:30', thumbnail: '👔' },
+    ];
 
     return (
         <View style={styles.screen}>
@@ -302,6 +384,19 @@ export default function UserProfileLearnerComplete() {
                                 </Text>
                             </Pressable>
                             <Pressable 
+                                style={[styles.tab, activeTab === 'playlists' && styles.tabActive]}
+                                onPress={() => setActiveTab('playlists')}
+                            >
+                                <Ionicons 
+                                    name="list-outline" 
+                                    size={18} 
+                                    color={activeTab === 'playlists' ? '#6B46FF' : '#6b6b6b'} 
+                                />
+                                <Text style={[styles.tabText, activeTab === 'playlists' && styles.tabTextActive]}>
+                                    Playlists
+                                </Text>
+                            </Pressable>
+                            <Pressable 
                                 style={[styles.tab, activeTab === 'downloads' && styles.tabActive]}
                                 onPress={() => setActiveTab('downloads')}
                             >
@@ -311,7 +406,7 @@ export default function UserProfileLearnerComplete() {
                                     color={activeTab === 'downloads' ? '#6B46FF' : '#6b6b6b'} 
                                 />
                                 <Text style={[styles.tabText, activeTab === 'downloads' && styles.tabTextActive]}>
-                                    Téléchargements
+                                    Téléchargés
                                 </Text>
                             </Pressable>
                             <Pressable 
@@ -420,6 +515,109 @@ export default function UserProfileLearnerComplete() {
                                 </View>
                             )}
 
+                            {activeTab === 'playlists' && (
+                                <View>
+                                    {/* Header avec bouton créer */}
+                                    <View style={styles.playlistsHeader}>
+                                        <View>
+                                            <Text style={styles.playlistsTitle}>Mes Playlists</Text>
+                                            <Text style={styles.playlistsSubtitle}>
+                                                Organisez vos vidéos favorites
+                                            </Text>
+                                        </View>
+                                        <Pressable 
+                                            style={styles.createPlaylistBtn}
+                                            onPress={() => setShowCreatePlaylistModal(true)}
+                                        >
+                                            <Ionicons name="add" size={24} color="#FFFFFF" />
+                                        </Pressable>
+                                    </View>
+
+                                    {/* Liste des playlists */}
+                                    {userPlaylists.map((playlist) => (
+                                        <View key={playlist.id} style={styles.userPlaylistCard}>
+                                            {/* Header avec statut */}
+                                            <View style={styles.userPlaylistHeader}>
+                                                <View style={styles.userPlaylistThumbnail}>
+                                                    <Text style={styles.userPlaylistEmoji}>{playlist.thumbnail}</Text>
+                                                    <View style={styles.userPlaylistCount}>
+                                                        <Text style={styles.userPlaylistCountText}>
+                                                            {playlist.videoCount}
+                                                        </Text>
+                                                    </View>
+                                                </View>
+                                                
+                                                <View style={styles.userPlaylistInfo}>
+                                                    <View style={styles.userPlaylistTitleRow}>
+                                                        <Text style={styles.userPlaylistName}>{playlist.name}</Text>
+                                                        <View style={[
+                                                            styles.playlistStatusBadge,
+                                                            { backgroundColor: playlist.isPublic ? '#E8FFE8' : '#FFE8E8' }
+                                                        ]}>
+                                                            <Ionicons 
+                                                                name={playlist.isPublic ? 'globe-outline' : 'lock-closed-outline'} 
+                                                                size={10} 
+                                                                color={playlist.isPublic ? '#4CAF50' : '#FF6B6B'} 
+                                                            />
+                                                        </View>
+                                                    </View>
+                                                    <Text style={styles.userPlaylistDescription}>
+                                                        {playlist.description}
+                                                    </Text>
+                                                    <Text style={styles.userPlaylistDate}>
+                                                        Créée {playlist.createdDate}
+                                                    </Text>
+                                                </View>
+                                            </View>
+
+                                            {/* Actions */}
+                                            <View style={styles.userPlaylistActions}>
+                                                <Pressable 
+                                                    style={styles.userPlaylistActionBtn}
+                                                    onPress={() => handleAddVideosToPlaylist(playlist.id)}
+                                                >
+                                                    <Ionicons name="add-circle-outline" size={18} color="#6B46FF" />
+                                                    <Text style={styles.userPlaylistActionText}>Ajouter vidéos</Text>
+                                                </Pressable>
+
+                                                <Pressable 
+                                                    style={styles.userPlaylistActionBtn}
+                                                    onPress={() => handleSharePlaylist(playlist.id)}
+                                                >
+                                                    <Ionicons name="share-social-outline" size={18} color="#FF9A2A" />
+                                                    <Text style={styles.userPlaylistActionText}>Partager</Text>
+                                                </Pressable>
+
+                                                <Pressable 
+                                                    style={styles.userPlaylistActionBtn}
+                                                    onPress={() => handleDeletePlaylist(playlist.id)}
+                                                >
+                                                    <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
+                                                </Pressable>
+                                            </View>
+                                        </View>
+                                    ))}
+
+                                    {/* Message si aucune playlist */}
+                                    {userPlaylists.length === 0 && (
+                                        <View style={styles.emptyPlaylistState}>
+                                            <Ionicons name="musical-notes-outline" size={60} color="#E8E8E8" />
+                                            <Text style={styles.emptyPlaylistText}>
+                                                Vous n'avez pas encore de playlist
+                                            </Text>
+                                            <Pressable 
+                                                style={styles.createFirstPlaylistBtn}
+                                                onPress={() => setShowCreatePlaylistModal(true)}
+                                            >
+                                                <Text style={styles.createFirstPlaylistText}>
+                                                    Créer ma première playlist
+                                                </Text>
+                                            </Pressable>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
+
                             {activeTab === 'downloads' && (
                                 <View>
                                     <View style={styles.storageInfo}>
@@ -504,6 +702,147 @@ export default function UserProfileLearnerComplete() {
                         >
                             <Text style={styles.sendButtonText}>Envoyer</Text>
                         </Pressable>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Modal de création de playlist */}
+            <Modal
+                visible={showCreatePlaylistModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowCreatePlaylistModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Créer une playlist</Text>
+                            <Pressable onPress={() => setShowCreatePlaylistModal(false)}>
+                                <Ionicons name="close" size={24} color="#1A1A1A" />
+                            </Pressable>
+                        </View>
+                        
+                        <View style={styles.formGroup}>
+                            <Text style={styles.formLabel}>Nom de la playlist *</Text>
+                            <TextInput
+                                style={styles.formInput}
+                                placeholder="Ex: Mes vidéos préférées"
+                                value={newPlaylistName}
+                                onChangeText={setNewPlaylistName}
+                                maxLength={50}
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.formLabel}>Description</Text>
+                            <TextInput
+                                style={[styles.formInput, styles.formInputMultiline]}
+                                placeholder="Décrivez votre playlist..."
+                                value={newPlaylistDescription}
+                                onChangeText={setNewPlaylistDescription}
+                                multiline
+                                maxLength={200}
+                            />
+                        </View>
+
+                        <View style={styles.formGroup}>
+                            <Text style={styles.formLabel}>Visibilité</Text>
+                            <View style={styles.visibilitySelector}>
+                                <Pressable style={[styles.visibilityOption, styles.visibilityOptionActive]}>
+                                    <Ionicons name="lock-closed-outline" size={18} color="#FF6B6B" />
+                                    <Text style={[styles.visibilityOptionText, { color: '#FF6B6B' }]}>
+                                        Privée
+                                    </Text>
+                                </Pressable>
+                                <Pressable style={styles.visibilityOption}>
+                                    <Ionicons name="globe-outline" size={18} color="#6b6b6b" />
+                                    <Text style={styles.visibilityOptionText}>Publique</Text>
+                                </Pressable>
+                            </View>
+                        </View>
+
+                        <Pressable 
+                            style={[styles.sendButton, !newPlaylistName && styles.sendButtonDisabled]}
+                            onPress={handleCreatePlaylist}
+                            disabled={!newPlaylistName}
+                        >
+                            <Text style={styles.sendButtonText}>Créer la playlist</Text>
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Modal d'ajout de vidéos à une playlist */}
+            <Modal
+                visible={showAddVideosModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowAddVideosModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Ajouter des vidéos</Text>
+                            <Pressable onPress={() => {
+                                setShowAddVideosModal(false);
+                                setSelectedVideosForPlaylist([]);
+                            }}>
+                                <Ionicons name="close" size={24} color="#1A1A1A" />
+                            </Pressable>
+                        </View>
+                        
+                        <Text style={styles.modalSubtitle}>
+                            Sélectionnez les vidéos à ajouter à votre playlist
+                        </Text>
+
+                        <ScrollView style={styles.videoSelectionList}>
+                            {availableVideos.map((video) => {
+                                const isSelected = selectedVideosForPlaylist.includes(video.id);
+                                return (
+                                    <Pressable 
+                                        key={video.id}
+                                        style={[
+                                            styles.videoSelectionItem,
+                                            isSelected && styles.videoSelectionItemSelected
+                                        ]}
+                                        onPress={() => handleToggleVideoSelection(video.id)}
+                                    >
+                                        <View style={styles.videoSelectionThumbnail}>
+                                            <Text style={styles.videoSelectionEmoji}>{video.thumbnail}</Text>
+                                        </View>
+                                        <View style={styles.videoSelectionInfo}>
+                                            <Text style={styles.videoSelectionTitle}>{video.title}</Text>
+                                            <Text style={styles.videoSelectionCreator}>{video.creator}</Text>
+                                            <Text style={styles.videoSelectionDuration}>{video.duration}</Text>
+                                        </View>
+                                        <View style={[
+                                            styles.videoSelectionCheckbox,
+                                            isSelected && styles.videoSelectionCheckboxSelected
+                                        ]}>
+                                            {isSelected && (
+                                                <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                                            )}
+                                        </View>
+                                    </Pressable>
+                                );
+                            })}
+                        </ScrollView>
+
+                        <View style={styles.modalFooter}>
+                            <Text style={styles.selectedCount}>
+                                {selectedVideosForPlaylist.length} vidéo(s) sélectionnée(s)
+                            </Text>
+                            <Pressable 
+                                style={[
+                                    styles.sendButton,
+                                    selectedVideosForPlaylist.length === 0 && styles.sendButtonDisabled
+                                ]}
+                                onPress={handleSaveVideosToPlaylist}
+                                disabled={selectedVideosForPlaylist.length === 0}
+                            >
+                                <Text style={styles.sendButtonText}>Ajouter à la playlist</Text>
+                            </Pressable>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -989,6 +1328,276 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: '#FF6B6B',
+    },
+
+    // User Playlists
+    playlistsHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    playlistsTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1A1A1A',
+    },
+    playlistsSubtitle: {
+        fontSize: 13,
+        color: '#6b6b6b',
+        marginTop: 2,
+    },
+    createPlaylistBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#6B46FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    userPlaylistCard: {
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
+    },
+    userPlaylistHeader: {
+        flexDirection: 'row',
+        marginBottom: 12,
+    },
+    userPlaylistThumbnail: {
+        width: 70,
+        height: 70,
+        borderRadius: 12,
+        backgroundColor: '#6B46FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+        position: 'relative',
+    },
+    userPlaylistEmoji: {
+        fontSize: 32,
+    },
+    userPlaylistCount: {
+        position: 'absolute',
+        bottom: 4,
+        right: 4,
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+    },
+    userPlaylistCountText: {
+        color: '#FFFFFF',
+        fontSize: 11,
+        fontWeight: '600',
+    },
+    userPlaylistInfo: {
+        flex: 1,
+    },
+    userPlaylistTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4,
+        gap: 8,
+    },
+    userPlaylistName: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        flex: 1,
+    },
+    playlistStatusBadge: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    userPlaylistDescription: {
+        fontSize: 13,
+        color: '#6b6b6b',
+        marginBottom: 4,
+    },
+    userPlaylistDate: {
+        fontSize: 11,
+        color: '#9b9b9b',
+    },
+    userPlaylistActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        borderTopWidth: 1,
+        borderTopColor: '#E8E8E8',
+        paddingTop: 10,
+    },
+    userPlaylistActionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+    },
+    userPlaylistActionText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#6B46FF',
+    },
+    emptyPlaylistState: {
+        alignItems: 'center',
+        paddingVertical: 40,
+    },
+    emptyPlaylistText: {
+        fontSize: 15,
+        color: '#6b6b6b',
+        marginTop: 16,
+        marginBottom: 20,
+    },
+    createFirstPlaylistBtn: {
+        backgroundColor: '#6B46FF',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 25,
+    },
+    createFirstPlaylistText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+
+    // Form styles
+    formGroup: {
+        marginBottom: 20,
+    },
+    formLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 8,
+    },
+    formInput: {
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        padding: 14,
+        fontSize: 14,
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
+    },
+    formInputMultiline: {
+        minHeight: 100,
+        textAlignVertical: 'top',
+    },
+    visibilitySelector: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    visibilityOption: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        backgroundColor: '#F8F6FF',
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
+        gap: 8,
+    },
+    visibilityOptionActive: {
+        backgroundColor: '#FFE8E8',
+        borderColor: '#FF6B6B',
+    },
+    visibilityOptionText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#6b6b6b',
+    },
+    sendButtonDisabled: {
+        backgroundColor: '#B0B0B0',
+        opacity: 0.5,
+    },
+
+    // Video Selection Modal
+    modalSubtitle: {
+        fontSize: 13,
+        color: '#6b6b6b',
+        marginBottom: 16,
+    },
+    videoSelectionList: {
+        maxHeight: 400,
+        marginBottom: 16,
+    },
+    videoSelectionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        marginBottom: 8,
+        borderWidth: 2,
+        borderColor: 'transparent',
+    },
+    videoSelectionItemSelected: {
+        borderColor: '#6B46FF',
+        backgroundColor: '#F0E6FF',
+    },
+    videoSelectionThumbnail: {
+        width: 50,
+        height: 50,
+        borderRadius: 8,
+        backgroundColor: '#6B46FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+    },
+    videoSelectionEmoji: {
+        fontSize: 24,
+    },
+    videoSelectionInfo: {
+        flex: 1,
+    },
+    videoSelectionTitle: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 2,
+    },
+    videoSelectionCreator: {
+        fontSize: 11,
+        color: '#6B46FF',
+        marginBottom: 2,
+    },
+    videoSelectionDuration: {
+        fontSize: 11,
+        color: '#6b6b6b',
+    },
+    videoSelectionCheckbox: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        borderWidth: 2,
+        borderColor: '#E8E8E8',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#FFFFFF',
+    },
+    videoSelectionCheckboxSelected: {
+        backgroundColor: '#6B46FF',
+        borderColor: '#6B46FF',
+    },
+    modalFooter: {
+        borderTopWidth: 1,
+        borderTopColor: '#E8E8E8',
+        paddingTop: 16,
+    },
+    selectedCount: {
+        fontSize: 13,
+        color: '#6b6b6b',
+        marginBottom: 12,
+        textAlign: 'center',
+        fontWeight: '500',
     },
     storageInfo: {
         flexDirection: 'row',
