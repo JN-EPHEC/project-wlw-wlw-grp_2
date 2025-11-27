@@ -1,6 +1,6 @@
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -55,7 +55,9 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     timestamp: '2024-01-20T10:30:00',
     read: false,
     priority: 'high',
+    courseId: 'course-123',
     courseName: 'React Native Avancé',
+    actionUrl: '/courses/course-123',
   },
   {
     id: '2',
@@ -65,7 +67,9 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     timestamp: '2024-01-20T09:15:00',
     read: false,
     priority: 'normal',
+    courseId: 'course-456',
     courseName: 'TypeScript pour débutants',
+    actionUrl: '/courses/course-456',
     metadata: { progress: 50 },
   },
   {
@@ -76,7 +80,9 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     timestamp: '2024-01-19T14:20:00',
     read: true,
     priority: 'normal',
+    courseId: 'course-789',
     courseName: 'JavaScript ES6',
+    actionUrl: '/certificates/cert-789',
   },
   {
     id: '4',
@@ -86,7 +92,9 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     timestamp: '2024-01-18T08:00:00',
     read: false,
     priority: 'low',
+    courseId: 'course-101',
     courseName: 'Python Basics',
+    actionUrl: '/courses/course-101',
   },
   {
     id: '5',
@@ -96,7 +104,9 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     timestamp: '2024-01-17T16:45:00',
     read: true,
     priority: 'high',
+    courseId: 'course-202',
     courseName: 'React Hooks',
+    actionUrl: '/courses/course-202/discussions',
   },
 ];
 
@@ -105,6 +115,124 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<FilterType>('all');
   const [sortBy, setSortBy] = useState<SortType>('date');
   const [refreshing, setRefreshing] = useState(false);
+
+  // ✨ FONCTIONNALITÉ 1 : Génération automatique de notifications d'avancement
+  // Simule la vérification des progrès de l'utilisateur
+  const checkUserProgress = () => {
+    // Dans une vraie app, tu récupérerais les données depuis Firebase
+    // Ici on simule avec des données mockées
+    
+    const mockCourses = [
+      { id: 'course-123', name: 'React Native Avancé', progress: 75 },
+      { id: 'course-456', name: 'TypeScript pour débutants', progress: 50 },
+      { id: 'course-789', name: 'JavaScript ES6', progress: 100 },
+    ];
+
+    mockCourses.forEach((course) => {
+      // Génère une notification pour les milestones (25%, 50%, 75%, 100%)
+      if (course.progress === 25 || course.progress === 50 || course.progress === 75) {
+        generateProgressNotification(course.id, course.name, course.progress);
+      }
+      
+      // Génère une notification de certificat à 100%
+      if (course.progress === 100) {
+        generateCertificateNotification(course.id, course.name);
+      }
+    });
+  };
+
+  // Génère une notification de progression
+  const generateProgressNotification = (courseId: string, courseName: string, progress: number) => {
+    const newNotification: Notification = {
+      id: `progress-${courseId}-${progress}-${Date.now()}`,
+      type: 'progress',
+      title: `Bravo ! Milestone atteint 🎯`,
+      message: `Vous avez complété ${progress}% de "${courseName}"`,
+      timestamp: new Date().toISOString(),
+      read: false,
+      priority: progress >= 75 ? 'high' : 'normal',
+      courseId,
+      courseName,
+      actionUrl: `/courses/${courseId}`,
+      metadata: { progress },
+    };
+
+    // Vérifie si cette notification n'existe pas déjà
+    const exists = notifications.some(
+      (n) => n.courseId === courseId && n.type === 'progress' && n.metadata?.progress === progress
+    );
+
+    if (!exists) {
+      setNotifications((prev) => [newNotification, ...prev]);
+    }
+  };
+
+  // Génère une notification de certificat
+  const generateCertificateNotification = (courseId: string, courseName: string) => {
+    const newNotification: Notification = {
+      id: `certificate-${courseId}-${Date.now()}`,
+      type: 'certificate',
+      title: '🏆 Certificat disponible !',
+      message: `Félicitations ! Votre certificat de "${courseName}" est prêt`,
+      timestamp: new Date().toISOString(),
+      read: false,
+      priority: 'high',
+      courseId,
+      courseName,
+      actionUrl: `/certificates/${courseId}`,
+    };
+
+    // Vérifie si cette notification n'existe pas déjà
+    const exists = notifications.some(
+      (n) => n.courseId === courseId && n.type === 'certificate'
+    );
+
+    if (!exists) {
+      setNotifications((prev) => [newNotification, ...prev]);
+    }
+  };
+
+  // Génère une notification de nouveau contenu
+  const generateNewContentNotification = (courseId: string, courseName: string, contentTitle: string) => {
+    const newNotification: Notification = {
+      id: `content-${courseId}-${Date.now()}`,
+      type: 'course_update',
+      title: '📚 Nouveau contenu disponible',
+      message: `"${contentTitle}" a été ajouté à "${courseName}"`,
+      timestamp: new Date().toISOString(),
+      read: false,
+      priority: 'high',
+      courseId,
+      courseName,
+      actionUrl: `/courses/${courseId}`,
+    };
+
+    setNotifications((prev) => [newNotification, ...prev]);
+  };
+
+  // Génère une notification de rappel si inactif
+  const generateReminderNotification = (courseId: string, courseName: string, daysSinceLastActivity: number) => {
+    const newNotification: Notification = {
+      id: `reminder-${courseId}-${Date.now()}`,
+      type: 'reminder',
+      title: '⏰ Rappel de cours',
+      message: `Vous n'avez pas continué "${courseName}" depuis ${daysSinceLastActivity} jours`,
+      timestamp: new Date().toISOString(),
+      read: false,
+      priority: 'low',
+      courseId,
+      courseName,
+      actionUrl: `/courses/${courseId}`,
+    };
+
+    setNotifications((prev) => [newNotification, ...prev]);
+  };
+
+  // Simule la vérification au chargement
+  useEffect(() => {
+    // Dans une vraie app, tu écouterais Firebase ici
+    // checkUserProgress();
+  }, []);
 
   // Fonctions de gestion
   const markAsRead = (id: string) => {
@@ -151,11 +279,39 @@ export default function NotificationsPage() {
 
   const onRefresh = () => {
     setRefreshing(true);
-    // Simuler un chargement
+    // Simule un chargement
     setTimeout(() => {
       setRefreshing(false);
-      // Ici tu pourrais charger de nouvelles notifications depuis l'API
+      // checkUserProgress(); // Vérifie les nouveaux progrès
     }, 1500);
+  };
+
+  // ✨ FONCTIONNALITÉ 2 : Navigation vers les cours
+  const handleNotificationPress = (notification: Notification) => {
+    // Marque comme lu automatiquement
+    markAsRead(notification.id);
+
+    // Navigation vers le cours ou la page concernée
+    if (notification.actionUrl) {
+      // Dans une vraie app avec expo-router :
+      // router.push(notification.actionUrl);
+      
+      // Pour le moment, on affiche juste une alerte
+      Alert.alert(
+        'Navigation',
+        `Redirection vers : ${notification.actionUrl}\n\nCours : ${notification.courseName}`,
+        [
+          { text: 'OK' },
+          {
+            text: 'Voir le cours',
+            onPress: () => {
+              // router.push(notification.actionUrl);
+              console.log('Navigation vers:', notification.actionUrl);
+            },
+          },
+        ]
+      );
+    }
   };
 
   // Filtrage et tri
@@ -332,7 +488,10 @@ export default function NotificationsPage() {
   );
 
   const renderNotification = ({ item }: { item: Notification }) => (
-    <Pressable style={[styles.notifCard, !item.read && styles.notifCardUnread]}>
+    <Pressable 
+      style={[styles.notifCard, !item.read && styles.notifCardUnread]}
+      onPress={() => handleNotificationPress(item)}
+    >
       <View style={styles.notifHeader}>
         <View style={styles.notifIconContainer}>
           <ThemedText style={styles.notifIcon}>{getTypeIcon(item.type)}</ThemedText>
@@ -360,17 +519,41 @@ export default function NotificationsPage() {
             </View>
           )}
 
+          {/* ✨ NOUVEAU : Bouton d'action rapide */}
+          {item.actionUrl && (
+            <Pressable 
+              style={styles.actionUrlButton}
+              onPress={() => handleNotificationPress(item)}
+            >
+              <ThemedText style={styles.actionUrlButtonText}>
+                {item.type === 'certificate' ? '📥 Télécharger' : '👉 Voir le cours'}
+              </ThemedText>
+            </Pressable>
+          )}
+
           <View style={styles.notifFooter}>
             <ThemedText style={styles.timestamp}>{formatTimestamp(item.timestamp)}</ThemedText>
 
             <View style={styles.notifActions}>
               {!item.read && (
-                <Pressable style={styles.actionButton} onPress={() => markAsRead(item.id)}>
+                <Pressable 
+                  style={styles.actionButton} 
+                  onPress={(e) => {
+                    e.stopPropagation(); // Empêche la navigation
+                    markAsRead(item.id);
+                  }}
+                >
                   <ThemedText style={styles.actionButtonText}>✓ Marquer lu</ThemedText>
                 </Pressable>
               )}
 
-              <Pressable style={styles.actionButton} onPress={() => deleteNotification(item.id)}>
+              <Pressable 
+                style={styles.actionButton} 
+                onPress={(e) => {
+                  e.stopPropagation(); // Empêche la navigation
+                  deleteNotification(item.id);
+                }}
+              >
                 <ThemedText style={[styles.actionButtonText, styles.actionButtonTextDanger]}>🗑️ Supprimer</ThemedText>
               </Pressable>
             </View>
@@ -606,6 +789,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#10b981',
+  },
+  // ✨ NOUVEAU : Styles pour le bouton d'action
+  actionUrlButton: {
+    backgroundColor: '#3b82f6',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  actionUrlButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   notifFooter: {
     flexDirection: 'row',
