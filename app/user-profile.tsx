@@ -285,54 +285,6 @@ export default function UserProfileLearnerComplete() {
                         </Pressable>
                     </View>
 
-                    {/* Section accès rapide - Historique */}
-                    <View style={styles.quickAccessCard}>
-                        <View style={styles.quickAccessHeader}>
-                            <Text style={styles.quickAccessTitle}>Accès rapide</Text>
-                        </View>
-                        <View style={styles.quickAccessGrid}>
-                            <Pressable 
-                                style={styles.quickAccessItem}
-                                onPress={() => setActiveTab('interactions')}
-                            >
-                                <View style={[styles.quickAccessIcon, { backgroundColor: '#E8F5FF' }]}>
-                                    <Ionicons name="time" size={28} color="#2196F3" />
-                                </View>
-                                <Text style={styles.quickAccessLabel}>Historique</Text>
-                            </Pressable>
-
-                            <Pressable 
-                                style={styles.quickAccessItem}
-                                onPress={() => setActiveTab('downloads')}
-                            >
-                                <View style={[styles.quickAccessIcon, { backgroundColor: '#FFF3E0' }]}>
-                                    <Ionicons name="download" size={28} color="#FF9800" />
-                                </View>
-                                <Text style={styles.quickAccessLabel}>Téléchargés</Text>
-                            </Pressable>
-
-                            <Pressable 
-                                style={styles.quickAccessItem}
-                                onPress={() => setActiveTab('parcours')}
-                            >
-                                <View style={[styles.quickAccessIcon, { backgroundColor: '#F3E5F5' }]}>
-                                    <Ionicons name="map" size={28} color="#9C27B0" />
-                                </View>
-                                <Text style={styles.quickAccessLabel}>Parcours</Text>
-                            </Pressable>
-
-                            <Pressable 
-                                style={styles.quickAccessItem}
-                                onPress={() => console.log('Favoris')}
-                            >
-                                <View style={[styles.quickAccessIcon, { backgroundColor: '#FCE4EC' }]}>
-                                    <Ionicons name="heart" size={28} color="#E91E63" />
-                                </View>
-                                <Text style={styles.quickAccessLabel}>Favoris</Text>
-                            </Pressable>
-                        </View>
-                    </View>
-
                     {/* Nouvelle section: Parcours & Activités */}
                     <View style={styles.activitiesCard}>
                         <View style={styles.tabsHeader}>
@@ -341,12 +293,12 @@ export default function UserProfileLearnerComplete() {
                                 onPress={() => setActiveTab('interactions')}
                             >
                                 <Ionicons 
-                                    name="heart-outline" 
+                                    name="time-outline" 
                                     size={18} 
                                     color={activeTab === 'interactions' ? '#6B46FF' : '#6b6b6b'} 
                                 />
                                 <Text style={[styles.tabText, activeTab === 'interactions' && styles.tabTextActive]}>
-                                    Interactions
+                                    Historique
                                 </Text>
                             </Pressable>
                             <Pressable 
@@ -862,8 +814,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
 
-    // Quick Access Section
-    quickAccessCard: {
+    activitiesCard: {
         width: '100%',
         backgroundColor: '#FFFFFF',
         borderRadius: 16,
@@ -872,39 +823,35 @@ const styles = StyleSheet.create({
         borderColor: '#E8E8E8',
         marginBottom: 16,
     },
-    quickAccessHeader: {
+    tabsHeader: {
+        flexDirection: 'row',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E8E8E8',
         marginBottom: 16,
     },
-    quickAccessTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1A1A1A',
-    },
-    quickAccessGrid: {
+    tab: {
+        flex: 1,
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
-    },
-    quickAccessItem: {
-        width: '47%',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: '#F8F6FF',
-        borderRadius: 12,
-    },
-    quickAccessIcon: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 10,
+        paddingVertical: 12,
+        gap: 6,
     },
-    quickAccessLabel: {
-        fontSize: 13,
+    tabActive: {
+        borderBottomWidth: 2,
+        borderBottomColor: '#6B46FF',
+    },
+    tabText: {
+        fontSize: 12,
+        color: '#6b6b6b',
+        fontWeight: '500',
+    },
+    tabTextActive: {
+        color: '#6B46FF',
         fontWeight: '600',
-        color: '#1A1A1A',
-        textAlign: 'center',
+    },
+    tabContent: {
+        minHeight: 200,
     },
 
     // History Section
@@ -1042,45 +989,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: '#FF6B6B',
-    },
-    activitiesCard: {
-        width: '100%',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#E8E8E8',
-        marginBottom: 16,
-    },
-    tabsHeader: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E8E8E8',
-        marginBottom: 16,
-    },
-    tab: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        gap: 6,
-    },
-    tabActive: {
-        borderBottomWidth: 2,
-        borderBottomColor: '#6B46FF',
-    },
-    tabText: {
-        fontSize: 12,
-        color: '#6b6b6b',
-        fontWeight: '500',
-    },
-    tabTextActive: {
-        color: '#6B46FF',
-        fontWeight: '600',
-    },
-    tabContent: {
-        minHeight: 200,
     },
     storageInfo: {
         flexDirection: 'row',
