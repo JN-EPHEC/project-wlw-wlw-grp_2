@@ -74,9 +74,61 @@ export default function UserProfileLearnerComplete() {
 
     // Historique des interactions
     const interactions = [
-        { id: '1', type: 'like', title: 'Introduction au Marketing Digital', date: 'Il y a 2h' },
-        { id: '2', type: 'comment', title: 'Python pour débutants', date: 'Il y a 5h', comment: 'Super tutoriel !' },
-        { id: '3', type: 'share', title: 'Design Thinking Workshop', date: 'Hier' },
+        { 
+            id: '1', 
+            type: 'like', 
+            title: 'Introduction au Marketing Digital', 
+            date: 'Il y a 2h',
+            thumbnail: '🎯',
+            duration: '15:30',
+            creator: '@marketingpro'
+        },
+        { 
+            id: '2', 
+            type: 'comment', 
+            title: 'Python pour débutants', 
+            date: 'Il y a 5h', 
+            comment: 'Super tutoriel !',
+            thumbnail: '🐍',
+            duration: '22:15',
+            creator: '@codewithpython'
+        },
+        { 
+            id: '3', 
+            type: 'share', 
+            title: 'Design Thinking Workshop', 
+            date: 'Hier',
+            thumbnail: '🎨',
+            duration: '45:00',
+            creator: '@designmaster'
+        },
+        { 
+            id: '4', 
+            type: 'view', 
+            title: 'Excel Avancé - Tableaux Croisés', 
+            date: 'Il y a 2 jours',
+            thumbnail: '📊',
+            duration: '18:45',
+            creator: '@excelpro'
+        },
+        { 
+            id: '5', 
+            type: 'view', 
+            title: 'Comptabilité de Base', 
+            date: 'Il y a 3 jours',
+            thumbnail: '💰',
+            duration: '25:30',
+            creator: '@comptaexpert'
+        },
+        { 
+            id: '6', 
+            type: 'like', 
+            title: 'SEO en 2024', 
+            date: 'Il y a 4 jours',
+            thumbnail: '🔍',
+            duration: '12:20',
+            creator: '@seospecialist'
+        },
     ];
 
     // Vidéos téléchargées
@@ -233,6 +285,54 @@ export default function UserProfileLearnerComplete() {
                         </Pressable>
                     </View>
 
+                    {/* Section accès rapide - Historique */}
+                    <View style={styles.quickAccessCard}>
+                        <View style={styles.quickAccessHeader}>
+                            <Text style={styles.quickAccessTitle}>Accès rapide</Text>
+                        </View>
+                        <View style={styles.quickAccessGrid}>
+                            <Pressable 
+                                style={styles.quickAccessItem}
+                                onPress={() => setActiveTab('interactions')}
+                            >
+                                <View style={[styles.quickAccessIcon, { backgroundColor: '#E8F5FF' }]}>
+                                    <Ionicons name="time" size={28} color="#2196F3" />
+                                </View>
+                                <Text style={styles.quickAccessLabel}>Historique</Text>
+                            </Pressable>
+
+                            <Pressable 
+                                style={styles.quickAccessItem}
+                                onPress={() => setActiveTab('downloads')}
+                            >
+                                <View style={[styles.quickAccessIcon, { backgroundColor: '#FFF3E0' }]}>
+                                    <Ionicons name="download" size={28} color="#FF9800" />
+                                </View>
+                                <Text style={styles.quickAccessLabel}>Téléchargés</Text>
+                            </Pressable>
+
+                            <Pressable 
+                                style={styles.quickAccessItem}
+                                onPress={() => setActiveTab('parcours')}
+                            >
+                                <View style={[styles.quickAccessIcon, { backgroundColor: '#F3E5F5' }]}>
+                                    <Ionicons name="map" size={28} color="#9C27B0" />
+                                </View>
+                                <Text style={styles.quickAccessLabel}>Parcours</Text>
+                            </Pressable>
+
+                            <Pressable 
+                                style={styles.quickAccessItem}
+                                onPress={() => console.log('Favoris')}
+                            >
+                                <View style={[styles.quickAccessIcon, { backgroundColor: '#FCE4EC' }]}>
+                                    <Ionicons name="heart" size={28} color="#E91E63" />
+                                </View>
+                                <Text style={styles.quickAccessLabel}>Favoris</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+
                     {/* Nouvelle section: Parcours & Activités */}
                     <View style={styles.activitiesCard}>
                         <View style={styles.tabsHeader}>
@@ -281,38 +381,90 @@ export default function UserProfileLearnerComplete() {
                         <View style={styles.tabContent}>
                             {activeTab === 'interactions' && (
                                 <View>
+                                    <View style={styles.historyHeader}>
+                                        <Ionicons name="time" size={24} color="#6B46FF" />
+                                        <Text style={styles.historyTitle}>Historique de visionnage</Text>
+                                    </View>
+                                    <Text style={styles.historySubtitle}>
+                                        Retrouvez toutes les vidéos que vous avez visionnées
+                                    </Text>
+                                    
                                     {interactions.map((item) => {
                                         const getIconName = () => {
                                             if (item.type === 'like') return 'heart';
                                             if (item.type === 'comment') return 'chatbubble';
-                                            return 'share-social';
+                                            if (item.type === 'share') return 'share-social';
+                                            return 'play-circle';
+                                        };
+                                        
+                                        const getActionLabel = () => {
+                                            if (item.type === 'like') return 'Aimé';
+                                            if (item.type === 'comment') return 'Commenté';
+                                            if (item.type === 'share') return 'Partagé';
+                                            return 'Visionné';
                                         };
                                         
                                         return (
-                                            <View key={item.id} style={styles.interactionItem}>
-                                                <View style={styles.interactionIcon}>
-                                                    <Ionicons 
-                                                        name={getIconName()} 
-                                                        size={20} 
-                                                        color="#6B46FF" 
-                                                    />
+                                            <View key={item.id} style={styles.historyItem}>
+                                                {/* Miniature */}
+                                                <View style={styles.historyThumbnail}>
+                                                    <Text style={styles.historyEmoji}>{item.thumbnail}</Text>
+                                                    <View style={styles.historyDuration}>
+                                                        <Text style={styles.historyDurationText}>{item.duration}</Text>
+                                                    </View>
                                                 </View>
-                                                <View style={styles.interactionContent}>
-                                                    <Text style={styles.interactionTitle}>{item.title}</Text>
-                                                    <Text style={styles.interactionDate}>{item.date}</Text>
-                                                    {item.type === 'comment' && (
-                                                        <Text style={styles.interactionComment}>{item.comment}</Text>
+
+                                                {/* Informations */}
+                                                <View style={styles.historyContent}>
+                                                    <Text style={styles.historyVideoTitle}>{item.title}</Text>
+                                                    <Text style={styles.historyCreator}>{item.creator}</Text>
+                                                    
+                                                    {/* Type d'action et date */}
+                                                    <View style={styles.historyMeta}>
+                                                        <View style={styles.historyAction}>
+                                                            <Ionicons 
+                                                                name={getIconName()} 
+                                                                size={14} 
+                                                                color="#6B46FF" 
+                                                            />
+                                                            <Text style={styles.historyActionText}>
+                                                                {getActionLabel()}
+                                                            </Text>
+                                                        </View>
+                                                        <Text style={styles.historyDate}>{item.date}</Text>
+                                                    </View>
+                                                    
+                                                    {item.type === 'comment' && item.comment && (
+                                                        <View style={styles.commentBubble}>
+                                                            <Text style={styles.commentText}>"{item.comment}"</Text>
+                                                        </View>
                                                     )}
                                                 </View>
-                                                <Pressable 
-                                                    style={styles.deleteButton}
-                                                    onPress={() => handleDeleteInteraction(item.id)}
-                                                >
-                                                    <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
-                                                </Pressable>
+
+                                                {/* Actions */}
+                                                <View style={styles.historyActions}>
+                                                    <Pressable 
+                                                        style={styles.historyPlayButton}
+                                                        onPress={() => console.log('Lire', item.id)}
+                                                    >
+                                                        <Ionicons name="play" size={20} color="#FFFFFF" />
+                                                    </Pressable>
+                                                    <Pressable 
+                                                        style={styles.historyDeleteButton}
+                                                        onPress={() => handleDeleteInteraction(item.id)}
+                                                    >
+                                                        <Ionicons name="close" size={18} color="#6b6b6b" />
+                                                    </Pressable>
+                                                </View>
                                             </View>
                                         );
                                     })}
+
+                                    {/* Bouton tout effacer */}
+                                    <Pressable style={styles.clearHistoryButton}>
+                                        <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
+                                        <Text style={styles.clearHistoryText}>Effacer tout l'historique</Text>
+                                    </Pressable>
                                 </View>
                             )}
 
@@ -709,6 +861,188 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         fontSize: 14,
     },
+
+    // Quick Access Section
+    quickAccessCard: {
+        width: '100%',
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
+        marginBottom: 16,
+    },
+    quickAccessHeader: {
+        marginBottom: 16,
+    },
+    quickAccessTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1A1A1A',
+    },
+    quickAccessGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+    },
+    quickAccessItem: {
+        width: '47%',
+        alignItems: 'center',
+        padding: 16,
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+    },
+    quickAccessIcon: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 10,
+    },
+    quickAccessLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        textAlign: 'center',
+    },
+
+    // History Section
+    historyHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 8,
+    },
+    historyTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1A1A1A',
+    },
+    historySubtitle: {
+        fontSize: 13,
+        color: '#6b6b6b',
+        marginBottom: 16,
+        lineHeight: 18,
+    },
+    historyItem: {
+        flexDirection: 'row',
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
+    },
+    historyThumbnail: {
+        width: 80,
+        height: 80,
+        borderRadius: 10,
+        backgroundColor: '#6B46FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+        position: 'relative',
+    },
+    historyEmoji: {
+        fontSize: 32,
+    },
+    historyDuration: {
+        position: 'absolute',
+        bottom: 4,
+        right: 4,
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    historyDurationText: {
+        color: '#FFFFFF',
+        fontSize: 9,
+        fontWeight: '600',
+    },
+    historyContent: {
+        flex: 1,
+        justifyContent: 'space-between',
+    },
+    historyVideoTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 4,
+    },
+    historyCreator: {
+        fontSize: 12,
+        color: '#6B46FF',
+        marginBottom: 6,
+    },
+    historyMeta: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    historyAction: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    historyActionText: {
+        fontSize: 11,
+        color: '#6B46FF',
+        fontWeight: '600',
+    },
+    historyDate: {
+        fontSize: 11,
+        color: '#6b6b6b',
+    },
+    commentBubble: {
+        backgroundColor: '#E8E8FF',
+        padding: 8,
+        borderRadius: 8,
+        marginTop: 6,
+    },
+    commentText: {
+        fontSize: 12,
+        color: '#6B46FF',
+        fontStyle: 'italic',
+    },
+    historyActions: {
+        flexDirection: 'column',
+        gap: 8,
+        justifyContent: 'center',
+        marginLeft: 8,
+    },
+    historyPlayButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#6B46FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    historyDeleteButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F0F0F0',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    clearHistoryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: '#FFE8E8',
+        paddingVertical: 12,
+        borderRadius: 12,
+        marginTop: 12,
+    },
+    clearHistoryText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#FF6B6B',
+    },
     activitiesCard: {
         width: '100%',
         backgroundColor: '#FFFFFF',
@@ -747,45 +1081,6 @@ const styles = StyleSheet.create({
     },
     tabContent: {
         minHeight: 200,
-    },
-    interactionItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        backgroundColor: '#F8F6FF',
-        borderRadius: 12,
-        marginBottom: 8,
-    },
-    interactionIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#FFFFFF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    interactionContent: {
-        flex: 1,
-    },
-    interactionTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#1A1A1A',
-        marginBottom: 2,
-    },
-    interactionDate: {
-        fontSize: 12,
-        color: '#6b6b6b',
-    },
-    interactionComment: {
-        fontSize: 12,
-        color: '#6B46FF',
-        marginTop: 4,
-        fontStyle: 'italic',
-    },
-    deleteButton: {
-        padding: 8,
     },
     storageInfo: {
         flexDirection: 'row',
