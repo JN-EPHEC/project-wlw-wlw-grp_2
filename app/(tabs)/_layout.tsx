@@ -1,48 +1,5 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Link } from "expo-router";
-import React from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 
-export default function BottomNavigation() {
-  return (
-    <View style={styles.bottomNav}>
-      {/* Accueil */}
-      <Link href="/home" style={styles.navItem} asChild>
-  <TouchableOpacity>
-    <Ionicons name="home" size={32} color="#6A4EFB" />
-    <Text style={[styles.navText, { color: '#6A4EFB' }]}>Accueil</Text>
-  </TouchableOpacity>
-</Link>
-
-      {/* Explorer */}
-      <Link href="/explore" style={styles.navItem} asChild>
-  <TouchableOpacity>
-    <Ionicons name="search" size={32} color="#B0B0B0" />
-    <Text style={styles.navText}>Explorer</Text>
-  </TouchableOpacity>
-</Link>
-
-      {/* Bouton + au centre */}
-      <TouchableOpacity style={styles.navItemCenter}>
-        <View style={styles.addButton}>
-          <Ionicons name="add" size={36} color="#FD9A34" />
-        </View>
-      </TouchableOpacity>
-
-      {/* Notifications */}
-      <TouchableOpacity style={styles.navItem}>
-        <Ionicons name="chatbox-outline" size={30} color="#B0B0B0" />
-        <Text style={styles.navText}>Notifications</Text>
-      </TouchableOpacity>
-
-      {/* Profil */}
-      <TouchableOpacity style={styles.navItem}>
-        <Ionicons name="person-outline" size={32} color="#B0B0B0" />
-        <Text style={styles.navText}>Profil</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   bottomNav: {

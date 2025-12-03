@@ -28,7 +28,7 @@ const router = useRouter();
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
-        router.replace ("/home")
+        router.replace ("/(tabs)/home")
         // L'utilisateur est connecté
         setUser(currentUser);
       } else {
