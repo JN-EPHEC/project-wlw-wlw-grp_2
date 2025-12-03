@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { Dimensions, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Dimensions, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 
-function Avatar() {
+function Avatar({ emoji }: { emoji: string }) {
     return (
         <View style={styles.avatar}> 
-            <Text style={styles.avatarEmoji}>👩‍🎓</Text>
+            <Text style={styles.avatarEmoji}>{emoji}</Text>
         </View>
     );
 }
@@ -15,11 +15,47 @@ function Avatar() {
 export default function UserProfileLearner() {
     const [tab, setTab] = useState<'favorites' | 'history' | 'saved'>('favorites');
     const [openedTab, setOpenedTab] = useState<'favorites' | 'history' | 'saved' | null>(null);
+    
+    // États pour le profil
+    const [username, setUsername] = useState('@sophiedubois');
+    const [bio, setBio] = useState('');
+    const [profileEmoji, setProfileEmoji] = useState('👩‍🎓');
+    
+    // État pour le modal
+    const [isModalVisible, setIsModalVisible] = useState(false);
+    
+    // États temporaires pour l'édition
+    const [tempUsername, setTempUsername] = useState(username);
+    const [tempBio, setTempBio] = useState(bio);
+    const [tempEmoji, setTempEmoji] = useState(profileEmoji);
 
     function handleTabPress(newTab: 'favorites' | 'history' | 'saved') {
         setTab(newTab);
         setOpenedTab(prev => (prev === newTab ? null : newTab));
     }
+
+    // Fonction pour ouvrir le modal
+    const openEditModal = () => {
+        setTempUsername(username);
+        setTempBio(bio);
+        setTempEmoji(profileEmoji);
+        setIsModalVisible(true);
+    };
+
+    // Fonction pour sauvegarder les modifications
+    const saveProfile = () => {
+        setUsername(tempUsername);
+        setBio(tempBio);
+        setProfileEmoji(tempEmoji);
+        setIsModalVisible(false);
+    };
+
+    // Fonction pour annuler les modifications
+    const cancelEdit = () => {
+        setIsModalVisible(false);
+    };
+
+    const emojis = ['👩‍🎓', '👨‍🎓', '🧑‍💻', '👩‍💼', '👨‍💼', '🧑‍🔬', '👩‍🏫', '👨‍🏫', '🧑‍🎨', '👩‍🚀'];
 
     const favorites = [
         { id: 'f1', title: "Marketing digital pour débutants", subtitle: '5 min • favori' },
@@ -59,13 +95,19 @@ export default function UserProfileLearner() {
 
                 {/* Center Content */}
                 <View style={styles.centerColumn}>
-                    <Avatar />
-                    <Text style={styles.handle}>@sophiedubois</Text>
+                    <Avatar emoji={profileEmoji} />
+                    <Text style={styles.handle}>{username}</Text>
+                    
+                    {/* Bio */}
+                    {bio ? (
+                        <Text style={styles.bioText}>{bio}</Text>
+                    ) : null}
+
                     <View style={styles.roleBadge}>
                         <Text style={styles.roleText}>Apprenant</Text>
                     </View>
 
-                    <Pressable style={styles.editButton}>
+                    <Pressable style={styles.editButton} onPress={openEditModal}>
                         <Text style={styles.editButtonText}>Modifier le profil</Text>
                     </Pressable>
 
@@ -97,7 +139,6 @@ export default function UserProfileLearner() {
                             </View>
                         </View>
 
-                        {/* Progress bar */}
                         <View style={styles.progressBarContainer}>
                             <View style={styles.progressTrack}>
                                 <View style={[styles.progressFill, { width: '20%' }]} />
@@ -202,6 +243,82 @@ export default function UserProfileLearner() {
                     <Text style={[styles.navText, styles.navTextActive]}>Profil</Text>
                 </Pressable>
             </View>
+
+            {/* Modal de modification */}
+            <Modal
+                visible={isModalVisible}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={cancelEdit}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Modifier le profil</Text>
+                            <Pressable onPress={cancelEdit} style={styles.closeButton}>
+                                <Ionicons name="close" size={28} color="#6b6b6b" />
+                            </Pressable>
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false}>
+                            {/* Sélection de l'emoji */}
+                            <Text style={styles.sectionLabel}>Photo de profil</Text>
+                            <ScrollView 
+                                horizontal 
+                                showsHorizontalScrollIndicator={false}
+                                style={styles.emojiScrollView}
+                            >
+                                {emojis.map((emoji, index) => (
+                                    <Pressable 
+                                        key={index}
+                                        onPress={() => setTempEmoji(emoji)}
+                                        style={[
+                                            styles.emojiOption,
+                                            tempEmoji === emoji && styles.emojiOptionSelected
+                                        ]}
+                                    >
+                                        <Text style={styles.emojiOptionText}>{emoji}</Text>
+                                    </Pressable>
+                                ))}
+                            </ScrollView>
+
+                            {/* Nom d'utilisateur */}
+                            <Text style={styles.sectionLabel}>Nom d'utilisateur</Text>
+                            <TextInput
+                                style={styles.input}
+                                value={tempUsername}
+                                onChangeText={setTempUsername}
+                                placeholder="@nom d'utilisateur"
+                                placeholderTextColor="#B0B0B0"
+                            />
+
+                            {/* Bio */}
+                            <Text style={styles.sectionLabel}>Biographie</Text>
+                            <TextInput
+                                style={[styles.input, styles.textArea]}
+                                value={tempBio}
+                                onChangeText={setTempBio}
+                                placeholder="Parlez-nous de vous..."
+                                placeholderTextColor="#B0B0B0"
+                                multiline
+                                numberOfLines={4}
+                                maxLength={200}
+                            />
+                            <Text style={styles.charCount}>{tempBio.length}/200 caractères</Text>
+
+                            {/* Boutons */}
+                            <View style={styles.modalButtons}>
+                                <Pressable style={styles.cancelButton} onPress={cancelEdit}>
+                                    <Text style={styles.cancelButtonText}>Annuler</Text>
+                                </Pressable>
+                                <Pressable style={styles.saveButton} onPress={saveProfile}>
+                                    <Text style={styles.saveButtonText}>Enregistrer</Text>
+                                </Pressable>
+                            </View>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -258,6 +375,13 @@ const styles = StyleSheet.create({
 
     // User Info
     handle: { marginTop: 8, color: '#2b2b2b', fontWeight: '600' },
+    bioText: {
+        marginTop: 8,
+        color: '#6b6b6b',
+        fontSize: 14,
+        textAlign: 'center',
+        paddingHorizontal: 20,
+    },
     roleBadge: { 
         marginTop: 6, 
         backgroundColor: '#6B46FF', 
@@ -477,5 +601,114 @@ const styles = StyleSheet.create({
     itemTitle: { fontWeight: '600', fontSize: 14 },
     itemCta: { backgroundColor: '#FD9A34', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, alignSelf: 'center' },
     itemCtaText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-    itemSub: { marginTop: 4, color: '#6b6b6b', fontSize: 12 }
+    itemSub: { marginTop: 4, color: '#6b6b6b', fontSize: 12 },
+
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: '#FFFFFF',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 20,
+        maxHeight: '85%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: '700',
+        color: '#1A1A1A',
+    },
+    closeButton: {
+        width: 40,
+        height: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    sectionLabel: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1A1A1A',
+        marginBottom: 12,
+        marginTop: 16,
+    },
+    input: {
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        padding: 14,
+        fontSize: 16,
+        color: '#1A1A1A',
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
+    },
+    textArea: {
+        height: 100,
+        textAlignVertical: 'top',
+    },
+    charCount: {
+        fontSize: 12,
+        color: '#B0B0B0',
+        textAlign: 'right',
+        marginTop: 4,
+    },
+    emojiScrollView: {
+        marginBottom: 8,
+    },
+    emojiOption: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#F8F6FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
+        borderWidth: 2,
+        borderColor: 'transparent',
+    },
+    emojiOptionSelected: {
+        borderColor: '#6B46FF',
+        backgroundColor: '#EEE5FF',
+    },
+    emojiOptionText: {
+        fontSize: 32,
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginTop: 32,
+        marginBottom: 20,
+        gap: 12,
+    },
+    cancelButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 25,
+        backgroundColor: '#F8F6FF',
+        alignItems: 'center',
+    },
+    cancelButtonText: {
+        color: '#6B46FF',
+        fontWeight: '600',
+        fontSize: 16,
+    },
+    saveButton: {
+        flex: 1,
+        paddingVertical: 14,
+        borderRadius: 25,
+        backgroundColor: '#6B46FF',
+        alignItems: 'center',
+    },
+    saveButtonText: {
+        color: '#FFFFFF',
+        fontWeight: '600',
+        fontSize: 16,
+    },
 });
