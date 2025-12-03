@@ -1,18 +1,24 @@
+import { auth, db } from '@/firebaseConfig';
+import { makeRedirectUri } from 'expo-auth-session';
+import * as Google from 'expo-auth-session/providers/google';
 import { useRouter } from "expo-router";
+import * as WebBrowser from 'expo-web-browser';
 import {
-  createUserWithEmailAndPassword,
+  // FacebookAuthProvider, // Décommenté quand Facebook Login sera prêt
+  GoogleAuthProvider,
   onAuthStateChanged,
+  signInWithCredential,
   signInWithEmailAndPassword,
-  signOut,
+  signInWithPopup,
   User,
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { Alert, Button, StyleSheet, Text, TextInput, View } from "react-native";
-import { auth, db } from "../firebaseConfig"; // Import de notre config
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 
-export default function AuthComponent(){
-const router = useRouter();
+
+export default function AuthComponent() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
    const [passwordControle, setPasswordControle] = useState("");
@@ -24,38 +30,28 @@ const router = useRouter();
   const [passwordError, setPasswordError] = useState(false);
   const [passwordControleError, setPasswordControleError] = useState(false);
 
-  // Écoute les changements d'état de l'authentification
+WebBrowser.maybeCompleteAuthSession();
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: '30195503547-tq811qi0j6sa8bd3p1214ah2tf3p48u7.apps.googleusercontent.com',
+    scopes: ['profile', 'email'],
+    redirectUri: makeRedirectUri({
+      scheme: "SwipeSkills",
+    }),
+  });
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsLoggedIn(!!currentUser);
       if (currentUser) {
-        router.replace ("/(tabs)/home")
-        // L'utilisateur est connecté
-        setUser(currentUser);
-      } else {
-        // L'utilisateur est déconnecté
-        setUser(null);
+        router.replace("/(tabs)/home");
       }
     });
-
-    // Cleanup à la désinscription
+    
     return () => unsubscribe();
   }, []);
 
-  // Fonction d'inscription
-  const handleSignUp = async () => {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-      console.log("Utilisateur créé !", userCredential.user);
-    } catch (error: any) {
-      Alert.alert("Erreur Inscription", error.message);
-    }
-  };
-
-  // Fonction de connexion
   const handleSignIn = async () => {
   setErrorMessage("");
   setEmailError(false);
@@ -91,73 +87,146 @@ const router = useRouter();
   }
 };
 
-  // Fonction de déconnexion
-  const handleSignOut = async () => {
+  useEffect(() => {
+  if (response?.type === 'success') {
+    const { authentication } = response;
+    const idToken = authentication?.idToken;
+
+    if (idToken) {
+      const credential = GoogleAuthProvider.credential(idToken);
+      (async () => {
+
+        const result = await signInWithCredential(auth, credential);
+        const user = result.user; 
+        const uid = user.uid;
+
+        const displayName = user.displayName || '';
+        const nameParts = displayName.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
+        await setDoc(doc(db, "users", uid), {
+          email: user.email,
+          firstName: firstName,
+          lastName: lastName,
+          birthDate: '', 
+          createdAt: new Date(),
+          familyId: null,
+        }, { merge: true });
+
+        console.log("Connexion Google réussie");
+      })();
+    }
+  } else if (response?.type === 'error') {
+    Alert.alert('Erreur', 'Échec de la connexion Google. Veuillez réessayer.');
+  }
+}, [response]);
+
+  const handleGoogleSignIn = async () => {
     try {
-      await signOut(auth);
-      console.log("Utilisateur déconnecté !");
-    } catch (error: any) {
-      Alert.alert("Erreur Déconnexion", error.message);
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+      const uid = user.uid;
+
+      // Extraire le prénom et nom du displayName
+      const displayName = user.displayName || '';
+      const nameParts = displayName.split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      await setDoc(doc(db, "users", uid), {
+        email: user.email,
+        firstName: firstName,
+        lastName: lastName,
+        birthDate: '', // À compléter par l'utilisateur dans son profil
+        createdAt: new Date(),
+      }, { merge: true });
+
+      console.log("Connexion Google réussie");
+    } catch (err: any) {
+      console.warn('Google sign-in error', err);
+      Alert.alert('Erreur', err.message || String(err));
     }
   };
 
-  if (user) {
-    // Si l'utilisateur est connecté
-    return (
-      <View style={styles.container}>
-        <Text>Bienvenue, {user.email}</Text>
-        <Button title="Se déconnecter" onPress={handleSignOut} />
-      </View>
-    );
-  }
-
-  // Si l'utilisateur n'est pas connecté
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Authentification</Text>
+      <Text style={styles.title}>Bienvenue sur SwipeSkills !</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, emailError && { borderColor: "red" }]}
         placeholder="Email"
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(text) => {
+          setEmail(text); 
+          setEmailError(false);
+        }}
         autoCapitalize="none"
       />
+      {emailError && (
+        <Text style={styles.fieldError}>Cette case doit être remplie</Text>
+      )}
       <TextInput
-        style={styles.input}
+        style={[styles.input, passwordError && { borderColor: "red" }]}
         placeholder="Mot de passe"
         value={password}
-        onChangeText={setPassword}
+        onChangeText={(text) => {
+          setPassword(text); 
+          setPasswordError(false);
+        }}
         secureTextEntry
       />
+      {passwordError && (
+        <Text style={styles.fieldError}>Le mot de passe doit contenir au moins 6 caractères</Text>
+      )}
+
+      {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+
       <View style={styles.buttonContainer}>
-        <Button title="Se connecter" onPress={handleSignIn} />
-        <Button title="S'inscrire" onPress={handleSignUp} color="#841584" />
+        <TouchableOpacity onPress={handleSignIn} style={styles.signUpButton}>
+          <Text style={styles.signUpText}>Se connecter</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/inscription")} style={styles.signUpButton}>
+          <Text style={styles.signUpText}>S'inscrire</Text>
+          </TouchableOpacity> 
+        <TouchableOpacity onPress={handleGoogleSignIn} style={[styles.signUpButton, { backgroundColor: "#DB4437" }]}>
+          <Text style={styles.signUpText}>Google</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
-};
+}
 
-
-// Styles (simplifiés)
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 20 },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
+  container: { flex: 1, justifyContent: "center", padding: 20, borderRadius: 20},
+  title: { fontSize: 24, fontWeight: "bold", textAlign: "center", marginBottom: 20 },
+ 
+   input: {
+  height: 40,
+  borderColor: "gray",
+  borderWidth: 1,
+  marginBottom: 10,
+  paddingHorizontal: 10,
+  fontStyle: "italic", 
+  color: "rgba(100, 100, 100, 0.7)",
+  borderRadius: 15
+
+},
+
+  buttonContainer: { flexDirection: "row", justifyContent: "space-around", marginTop: 20, alignItems: "center"},
+  signUpText: { color: "white", fontWeight: "bold" },
+  signUpButton: { backgroundColor: "#00b7ff9a", padding: 10, borderRadius: 5 },
+  error: {
+    color: "red",
     textAlign: "center",
-    marginBottom: 20,
-  },
-  input: {
-    height: 40,
-    borderColor: "gray",
-    borderWidth: 1,
     marginBottom: 10,
-    paddingHorizontal: 10,
+    
   },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 10,
+  fieldError: {
+    color: "red",
+    marginTop: -5,
+    marginBottom: 8,
+    textAlign: "left",
+    fontSize: 13,
   },
 });
-
