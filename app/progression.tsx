@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Goal, useProgress } from './ProgressContext';
 
 export default function ProgressionPage() {
+    const router = useRouter();
     const [activeTab, setActiveTab] = useState<'progression' | 'objectifs'>('progression');
     
     // Utiliser le contexte de progression
@@ -112,11 +113,12 @@ export default function ProgressionPage() {
         <View style={styles.screen}>
             {/* Header */}
             <View style={styles.header}>
-                <Link href="/" asChild>
-                    <Pressable style={styles.backButton}>
-                        <Ionicons name="chevron-back" size={28} color="#6b6b6b" />
-                    </Pressable>
-                </Link>
+                <Pressable 
+                    style={styles.backButton}
+                    onPress={() => router.back()}
+                >
+                    <Ionicons name="chevron-back" size={28} color="#6b6b6b" />
+                </Pressable>
                 <Text style={styles.headerTitle}>Progression</Text>
                 <View style={styles.placeholder} />
             </View>
