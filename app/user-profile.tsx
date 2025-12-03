@@ -17,6 +17,12 @@ function Avatar({ emoji, imageUri }: { emoji: string; imageUri: string | null })
     );
 }
 
+interface VideoItem {
+    id: string;
+    title: string;
+    subtitle: string;
+}
+
 export default function UserProfileLearner() {
     const [tab, setTab] = useState<'favorites' | 'history' | 'saved'>('favorites');
     const [openedTab, setOpenedTab] = useState<'favorites' | 'history' | 'saved' | null>(null);
@@ -36,10 +42,47 @@ export default function UserProfileLearner() {
     const [tempEmoji, setTempEmoji] = useState(profileEmoji);
     const [tempImage, setTempImage] = useState<string | null>(profileImage);
 
+    // États pour les vidéos
+    const [favorites, setFavorites] = useState<VideoItem[]>([
+        { id: 'f1', title: "Marketing digital pour débutants", subtitle: '5 min • favori' },
+        { id: 'f2', title: "Introduction au Python", subtitle: '8 min • favori' },
+    ]);
+
+    const history: VideoItem[] = [
+        { id: 'h1', title: 'Vidéo regardée: Growth Hacking', subtitle: 'vu il y a 2 jours' },
+        { id: 'h2', title: 'Podcast: Design moderne', subtitle: 'vu il y a 5 jours' },
+    ];
+
+    const saved: VideoItem[] = [
+        { id: 's1', title: 'Article: SEO avancé', subtitle: 'sauvegardé' },
+        { id: 's2', title: 'Checklist: Lancement produit', subtitle: 'sauvegardé' },
+    ];
+
     function handleTabPress(newTab: 'favorites' | 'history' | 'saved') {
         setTab(newTab);
         setOpenedTab(prev => (prev === newTab ? null : newTab));
     }
+
+    // Fonction pour supprimer un favori
+    const removeFavorite = (id: string) => {
+        Alert.alert(
+            'Retirer des favoris',
+            'Voulez-vous retirer cette vidéo de vos favoris ?',
+            [
+                {
+                    text: 'Annuler',
+                    style: 'cancel',
+                },
+                {
+                    text: 'Retirer',
+                    style: 'destructive',
+                    onPress: () => {
+                        setFavorites(prevFavorites => prevFavorites.filter(item => item.id !== id));
+                    },
+                },
+            ]
+        );
+    };
 
     // Fonction pour ouvrir le modal
     const openEditModal = () => {
@@ -66,7 +109,6 @@ export default function UserProfileLearner() {
 
     // Fonction pour choisir une image depuis la galerie
     const pickImage = async () => {
-        // Demander la permission
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         
         if (status !== 'granted') {
@@ -77,7 +119,6 @@ export default function UserProfileLearner() {
             return;
         }
 
-        // Ouvrir la galerie
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: true,
@@ -92,7 +133,6 @@ export default function UserProfileLearner() {
 
     // Fonction pour prendre une photo avec la caméra
     const takePhoto = async () => {
-        // Demander la permission
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         
         if (status !== 'granted') {
@@ -103,7 +143,6 @@ export default function UserProfileLearner() {
             return;
         }
 
-        // Ouvrir la caméra
         const result = await ImagePicker.launchCameraAsync({
             allowsEditing: true,
             aspect: [1, 1],
@@ -121,19 +160,6 @@ export default function UserProfileLearner() {
     };
 
     const emojis = ['👩‍🎓', '👨‍🎓', '🧑‍💻', '👩‍💼', '👨‍💼', '🧑‍🔬', '👩‍🏫', '👨‍🏫', '🧑‍🎨', '👩‍🚀'];
-
-    const favorites = [
-        { id: 'f1', title: "Marketing digital pour débutants", subtitle: '5 min • favori' },
-        { id: 'f2', title: "Introduction au Python", subtitle: '8 min • favori' },
-    ];
-    const history = [
-        { id: 'h1', title: 'Vidéo regardée: Growth Hacking', subtitle: 'vu il y a 2 jours' },
-        { id: 'h2', title: 'Podcast: Design moderne', subtitle: 'vu il y a 5 jours' },
-    ];
-    const saved = [
-        { id: 's1', title: 'Article: SEO avancé', subtitle: 'sauvegardé' },
-        { id: 's2', title: 'Checklist: Lancement produit', subtitle: 'sauvegardé' },
-    ];
 
     const badges = [
         { title: 'Expert\nMarketing', emoji: '🏅' },
@@ -187,7 +213,7 @@ export default function UserProfileLearner() {
                             <Text style={styles.statLabel}>Abonnées</Text>
                         </View>
                         <View style={[styles.statBox, styles.statOrange]}>
-                            <Text style={styles.statNumber}>124</Text>
+                            <Text style={styles.statNumber}>{favorites.length}</Text>
                             <Text style={styles.statLabel}>Sauvegardes</Text>
                         </View>
                     </View>
@@ -268,9 +294,19 @@ export default function UserProfileLearner() {
                                             <Text style={styles.itemTitle}>{item.title}</Text>
                                             <Text style={styles.itemSub}>{item.subtitle}</Text>
                                         </View>
-                                        <Pressable style={styles.itemCta} android_ripple={{ color: 'rgba(0,0,0,0.08)' }}>
-                                            <Text style={styles.itemCtaText}>Voir</Text>
-                                        </Pressable>
+                                        <View style={styles.itemActions}>
+                                            {tab === 'favorites' && (
+                                                <Pressable 
+                                                    style={styles.favoriteButton} 
+                                                    onPress={() => removeFavorite(item.id)}
+                                                >
+                                                    <Ionicons name="heart" size={24} color="#FF3B30" />
+                                                </Pressable>
+                                            )}
+                                            <Pressable style={styles.itemCta} android_ripple={{ color: 'rgba(0,0,0,0.08)' }}>
+                                                <Text style={styles.itemCtaText}>Voir</Text>
+                                            </Pressable>
+                                        </View>
                                     </View>
                                 )}
                                 showsVerticalScrollIndicator={false}
@@ -702,6 +738,19 @@ const styles = StyleSheet.create({
     },
     itemCardContent: { flex: 1, paddingRight: 8 },
     itemTitle: { fontWeight: '600', fontSize: 14 },
+    itemActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    favoriteButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#FFE5E5',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     itemCta: { backgroundColor: '#FD9A34', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, alignSelf: 'center' },
     itemCtaText: { color: '#fff', fontWeight: '600', fontSize: 13 },
     itemSub: { marginTop: 4, color: '#6b6b6b', fontSize: 12 },
