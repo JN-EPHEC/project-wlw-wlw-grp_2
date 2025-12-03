@@ -1,13 +1,18 @@
+import * as ImagePicker from 'expo-image-picker';
 import React, { useState } from 'react';
-import { Dimensions, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Dimensions, FlatList, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 
-function Avatar({ emoji }: { emoji: string }) {
+function Avatar({ emoji, imageUri }: { emoji: string; imageUri: string | null }) {
     return (
         <View style={styles.avatar}> 
-            <Text style={styles.avatarEmoji}>{emoji}</Text>
+            {imageUri ? (
+                <Image source={{ uri: imageUri }} style={styles.avatarImage} />
+            ) : (
+                <Text style={styles.avatarEmoji}>{emoji}</Text>
+            )}
         </View>
     );
 }
@@ -20,6 +25,7 @@ export default function UserProfileLearner() {
     const [username, setUsername] = useState('@sophiedubois');
     const [bio, setBio] = useState('');
     const [profileEmoji, setProfileEmoji] = useState('👩‍🎓');
+    const [profileImage, setProfileImage] = useState<string | null>(null);
     
     // État pour le modal
     const [isModalVisible, setIsModalVisible] = useState(false);
@@ -28,6 +34,7 @@ export default function UserProfileLearner() {
     const [tempUsername, setTempUsername] = useState(username);
     const [tempBio, setTempBio] = useState(bio);
     const [tempEmoji, setTempEmoji] = useState(profileEmoji);
+    const [tempImage, setTempImage] = useState<string | null>(profileImage);
 
     function handleTabPress(newTab: 'favorites' | 'history' | 'saved') {
         setTab(newTab);
@@ -39,6 +46,7 @@ export default function UserProfileLearner() {
         setTempUsername(username);
         setTempBio(bio);
         setTempEmoji(profileEmoji);
+        setTempImage(profileImage);
         setIsModalVisible(true);
     };
 
@@ -47,12 +55,69 @@ export default function UserProfileLearner() {
         setUsername(tempUsername);
         setBio(tempBio);
         setProfileEmoji(tempEmoji);
+        setProfileImage(tempImage);
         setIsModalVisible(false);
     };
 
     // Fonction pour annuler les modifications
     const cancelEdit = () => {
         setIsModalVisible(false);
+    };
+
+    // Fonction pour choisir une image depuis la galerie
+    const pickImage = async () => {
+        // Demander la permission
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        
+        if (status !== 'granted') {
+            Alert.alert(
+                'Permission refusée',
+                'Nous avons besoin de votre permission pour accéder à vos photos.'
+            );
+            return;
+        }
+
+        // Ouvrir la galerie
+        const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
+
+        if (!result.canceled) {
+            setTempImage(result.assets[0].uri);
+        }
+    };
+
+    // Fonction pour prendre une photo avec la caméra
+    const takePhoto = async () => {
+        // Demander la permission
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        
+        if (status !== 'granted') {
+            Alert.alert(
+                'Permission refusée',
+                'Nous avons besoin de votre permission pour accéder à votre caméra.'
+            );
+            return;
+        }
+
+        // Ouvrir la caméra
+        const result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
+
+        if (!result.canceled) {
+            setTempImage(result.assets[0].uri);
+        }
+    };
+
+    // Fonction pour supprimer la photo
+    const removeImage = () => {
+        setTempImage(null);
     };
 
     const emojis = ['👩‍🎓', '👨‍🎓', '🧑‍💻', '👩‍💼', '👨‍💼', '🧑‍🔬', '👩‍🏫', '👨‍🏫', '🧑‍🎨', '👩‍🚀'];
@@ -95,7 +160,7 @@ export default function UserProfileLearner() {
 
                 {/* Center Content */}
                 <View style={styles.centerColumn}>
-                    <Avatar emoji={profileEmoji} />
+                    <Avatar emoji={profileEmoji} imageUri={profileImage} />
                     <Text style={styles.handle}>{username}</Text>
                     
                     {/* Bio */}
@@ -261,8 +326,38 @@ export default function UserProfileLearner() {
                         </View>
 
                         <ScrollView showsVerticalScrollIndicator={false}>
-                            {/* Sélection de l'emoji */}
+                            {/* Photo de profil actuelle */}
                             <Text style={styles.sectionLabel}>Photo de profil</Text>
+                            <View style={styles.currentPhotoContainer}>
+                                {tempImage ? (
+                                    <Image source={{ uri: tempImage }} style={styles.currentPhoto} />
+                                ) : (
+                                    <View style={styles.currentPhotoEmoji}>
+                                        <Text style={styles.currentPhotoEmojiText}>{tempEmoji}</Text>
+                                    </View>
+                                )}
+                            </View>
+
+                            {/* Boutons pour ajouter/modifier la photo */}
+                            <View style={styles.photoButtons}>
+                                <Pressable style={styles.photoButton} onPress={pickImage}>
+                                    <Ionicons name="images-outline" size={24} color="#6B46FF" />
+                                    <Text style={styles.photoButtonText}>Galerie</Text>
+                                </Pressable>
+                                <Pressable style={styles.photoButton} onPress={takePhoto}>
+                                    <Ionicons name="camera-outline" size={24} color="#6B46FF" />
+                                    <Text style={styles.photoButtonText}>Caméra</Text>
+                                </Pressable>
+                                {tempImage && (
+                                    <Pressable style={styles.photoButton} onPress={removeImage}>
+                                        <Ionicons name="trash-outline" size={24} color="#FF3B30" />
+                                        <Text style={[styles.photoButtonText, { color: '#FF3B30' }]}>Supprimer</Text>
+                                    </Pressable>
+                                )}
+                            </View>
+
+                            {/* Sélection de l'emoji */}
+                            <Text style={styles.sectionLabel}>Ou choisir un emoji</Text>
                             <ScrollView 
                                 horizontal 
                                 showsHorizontalScrollIndicator={false}
@@ -271,10 +366,13 @@ export default function UserProfileLearner() {
                                 {emojis.map((emoji, index) => (
                                     <Pressable 
                                         key={index}
-                                        onPress={() => setTempEmoji(emoji)}
+                                        onPress={() => {
+                                            setTempEmoji(emoji);
+                                            setTempImage(null);
+                                        }}
                                         style={[
                                             styles.emojiOption,
-                                            tempEmoji === emoji && styles.emojiOptionSelected
+                                            tempEmoji === emoji && !tempImage && styles.emojiOptionSelected
                                         ]}
                                     >
                                         <Text style={styles.emojiOptionText}>{emoji}</Text>
@@ -369,9 +467,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#EEE5FF',
         alignItems: 'center', 
         justifyContent: 'center',
-        marginTop: 8
+        marginTop: 8,
+        overflow: 'hidden',
     },
     avatarEmoji: { fontSize: 48 },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
+    },
 
     // User Info
     handle: { marginTop: 8, color: '#2b2b2b', fontWeight: '600' },
@@ -639,6 +742,47 @@ const styles = StyleSheet.create({
         color: '#1A1A1A',
         marginBottom: 12,
         marginTop: 16,
+    },
+    currentPhotoContainer: {
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    currentPhoto: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+    },
+    currentPhotoEmoji: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: '#EEE5FF',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    currentPhotoEmojiText: {
+        fontSize: 60,
+    },
+    photoButtons: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 12,
+        marginBottom: 8,
+    },
+    photoButton: {
+        flex: 1,
+        alignItems: 'center',
+        paddingVertical: 12,
+        backgroundColor: '#F8F6FF',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#E8E8E8',
+    },
+    photoButtonText: {
+        fontSize: 12,
+        color: '#6B46FF',
+        fontWeight: '600',
+        marginTop: 4,
     },
     input: {
         backgroundColor: '#F8F6FF',
