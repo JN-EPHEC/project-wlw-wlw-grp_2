@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dimensions, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Dimensions, FlatList, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -15,144 +15,14 @@ function Avatar() {
     );
 }
 
-export default function UserProfileContentCreatorComplete() {
-    const [tab, setTab] = useState<'videos' | 'history' | 'saved' | 'myvideos' | 'playlists'>('myvideos');
-    const [openedTab, setOpenedTab] = useState<'videos' | 'history' | 'saved' | 'myvideos' | 'playlists' | null>(null);
-    const [showMessageModal, setShowMessageModal] = useState(false);
-    const [messageText, setMessageText] = useState('');
-    const [showDiplomaModal, setShowDiplomaModal] = useState(false);
-    const [showCreatePlaylistModal, setShowCreatePlaylistModal] = useState(false);
-    const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
-    const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null);
-    const [newPlaylistName, setNewPlaylistName] = useState('');
-    const [newPlaylistDescription, setNewPlaylistDescription] = useState('');
-    const [isPremium] = useState(false); // Simuler un compte non-premium
-    const [creatorLevel] = useState<'amateur' | 'diplome' | 'expert'>('expert'); // Niveau du créateur
+export default function UserProfileContentCreator() {
+    const [tab, setTab] = useState<'videos' | 'history' | 'saved'>('videos');
+    const [openedTab, setOpenedTab] = useState<'videos' | 'history' | 'saved' | null>(null);
 
-    function handleTabPress(newTab: 'videos' | 'history' | 'saved' | 'myvideos' | 'playlists') {
+    function handleTabPress(newTab: 'videos' | 'history' | 'saved') {
         setTab(newTab);
         setOpenedTab(prev => (prev === newTab ? null : newTab));
     }
-
-    const handleSendMessage = () => {
-        console.log('Message envoyé:', messageText);
-        setMessageText('');
-        setShowMessageModal(false);
-    };
-
-    const handleEditVideo = (videoId: string) => {
-        console.log('Éditer vidéo:', videoId);
-        // Navigation vers l'éditeur
-    };
-
-    const handleDeleteVideo = (videoId: string) => {
-        console.log('Supprimer vidéo:', videoId);
-        // Logique de suppression
-    };
-
-    const handleVideoMenu = (videoId: string) => {
-        setSelectedVideo(videoId);
-    };
-
-    const handleCreatePlaylist = () => {
-        console.log('Créer playlist:', newPlaylistName, newPlaylistDescription);
-        setNewPlaylistName('');
-        setNewPlaylistDescription('');
-        setShowCreatePlaylistModal(false);
-    };
-
-    const handleSharePlaylist = (playlistId: string) => {
-        console.log('Partager playlist:', playlistId);
-    };
-
-    const handleDeletePlaylist = (playlistId: string) => {
-        console.log('Supprimer playlist:', playlistId);
-    };
-
-    // Playlists du créateur par thématique
-    const playlists = [
-        {
-            id: 'p1',
-            title: 'Excel - Expertise',
-            description: 'Maîtrisez Excel de A à Z',
-            videoCount: 12,
-            level: 'expert',
-            thumbnail: '📊',
-            totalDuration: '4h 30min',
-            isPublic: true,
-        },
-        {
-            id: 'p2',
-            title: 'Comptabilité - Base',
-            description: 'Les fondamentaux de la comptabilité',
-            videoCount: 8,
-            level: 'debutant',
-            thumbnail: '💰',
-            totalDuration: '2h 15min',
-            isPublic: true,
-        },
-        {
-            id: 'p3',
-            title: 'Marketing Digital - Expertise',
-            description: 'Stratégies avancées de marketing',
-            videoCount: 15,
-            level: 'expert',
-            thumbnail: '🎯',
-            totalDuration: '6h 45min',
-            isPublic: true,
-        },
-        {
-            id: 'p4',
-            title: 'Comptabilité - Expertise',
-            description: 'Comptabilité avancée et fiscalité',
-            videoCount: 10,
-            level: 'expert',
-            thumbnail: '📈',
-            totalDuration: '5h 20min',
-            isPublic: false,
-        },
-        {
-            id: 'p5',
-            title: 'PowerPoint - Intermédiaire',
-            description: 'Créez des présentations professionnelles',
-            videoCount: 6,
-            level: 'intermediaire',
-            thumbnail: '🎨',
-            totalDuration: '1h 50min',
-            isPublic: true,
-        },
-    ];
-
-    // Mes vidéos créées
-    const myVideos = [
-        { 
-            id: 'mv1', 
-            title: "Marketing Digital 2024", 
-            views: '12.5K',
-            likes: '1.2K',
-            status: 'validated', // validated, rejected, pending
-            duration: '15:30',
-            thumbnail: '🎯'
-        },
-        { 
-            id: 'mv2', 
-            title: "Growth Hacking Stratégies", 
-            views: '8.3K',
-            likes: '890',
-            status: 'validated',
-            duration: '12:45',
-            thumbnail: '📈'
-        },
-        { 
-            id: 'mv3', 
-            title: "SEO Avancé 2024", 
-            views: '5.1K',
-            likes: '450',
-            status: 'pending',
-            duration: '18:20',
-            thumbnail: '🔍'
-        },
-    ];
 
     const videos = [
         { id: 'v1', title: "Comment créer une campagne", subtitle: '3 min • publié' },
@@ -174,34 +44,6 @@ export default function UserProfileContentCreatorComplete() {
         { title: 'Designer\nUI/UX', emoji: '🎨' }
     ];
 
-    // Diplômes du créateur
-    const diplomas = [
-        { id: 'd1', title: 'Master Marketing Digital', institution: 'HEC Paris', year: '2020' },
-        { id: 'd2', title: 'Certification Google Ads', institution: 'Google', year: '2022' },
-    ];
-
-    // Stats du créateur
-    const creatorStats = {
-        totalViews: '156.8K',
-        totalLikes: '23.4K',
-        totalVideos: '47',
-        growthRate: '+12%'
-    };
-
-    // Badge de vérification selon le niveau
-    const getVerificationBadge = (): { icon: any; color: string; label: string } => {
-        switch(creatorLevel) {
-            case 'expert':
-                return { icon: 'shield-checkmark', color: '#FFD700', label: 'Expert Vérifié' };
-            case 'diplome':
-                return { icon: 'school', color: '#6B46FF', label: 'Diplômé' };
-            case 'amateur':
-                return { icon: 'checkmark-circle', color: '#4CAF50', label: 'Vérifié' };
-        }
-    };
-
-    const verificationBadge = getVerificationBadge();
-
     return (
         <View style={styles.screen}>
             <ScrollView contentContainerStyle={styles.content}>
@@ -212,7 +54,7 @@ export default function UserProfileContentCreatorComplete() {
                             <Ionicons name="chevron-back" size={28} color="#6b6b6b" />
                         </Pressable>
                     </Link>
-                    <View style={styles.headerSpacer} />
+                    <ThemedText type="title">Profile - créateur</ThemedText>
                     <Pressable style={styles.infoButton}>
                         <Ionicons name="settings-outline" size={24} color="#6B46FF" />
                     </Pressable>
@@ -220,51 +62,15 @@ export default function UserProfileContentCreatorComplete() {
 
                 {/* Center Content */}
                 <View style={styles.centerColumn}>
-                    {/* Avatar avec badge premium */}
-                    <View style={styles.avatarWrapper}>
-                        <Avatar />
-                        {isPremium && (
-                            <View style={styles.premiumBadge}>
-                                <Ionicons name="star" size={16} color="#FFD700" />
-                            </View>
-                        )}
-                        {/* Badge de vérification */}
-                        <View style={styles.verificationBadge}>
-                            <Ionicons name={verificationBadge.icon as any} size={14} color={verificationBadge.color} />
-                        </View>
-                    </View>
-
+                    <Avatar />
                     <ThemedText type="defaultSemiBold" style={styles.handle}>@clairedubois</ThemedText>
-                    
-                    {/* Bio avec vérification */}
-                    <View style={styles.bioContainer}>
-                        <ThemedText style={styles.bio}>
-                            Experte Marketing Digital 🚀 | Formatrice | Partagez vos stratégies de croissance
-                        </ThemedText>
-                        <View style={styles.verificationLabel}>
-                            <Ionicons name={verificationBadge.icon as any} size={12} color={verificationBadge.color} />
-                            <ThemedText style={[styles.verificationText, { color: verificationBadge.color }]}>
-                                {verificationBadge.label}
-                            </ThemedText>
-                        </View>
-                    </View>
-
                     <View style={styles.roleBadge}>
                         <ThemedText style={styles.roleText}>Professionnelle</ThemedText>
                     </View>
 
-                    {/* Boutons d'action */}
-                    <View style={styles.actionButtons}>
-                        <Pressable style={styles.editButton}>
-                            <ThemedText style={styles.editButtonText}>Modifier le profil</ThemedText>
-                        </Pressable>
-                        <Pressable 
-                            style={styles.messageButton}
-                            onPress={() => setShowMessageModal(true)}
-                        >
-                            <Ionicons name="mail-outline" size={20} color="#FFFFFF" />
-                        </Pressable>
-                    </View>
+                    <Pressable style={styles.editButton}>
+                        <ThemedText style={styles.editButtonText}>Modifier le profil</ThemedText>
+                    </Pressable>
 
                     {/* Stats Row */}
                     <View style={styles.statsRow}>
@@ -280,35 +86,6 @@ export default function UserProfileContentCreatorComplete() {
                             <ThemedText type="defaultSemiBold" style={styles.statNumber}>124</ThemedText>
                             <ThemedText style={styles.statLabel}>Sauvegardes</ThemedText>
                         </View>
-                    </View>
-
-                    {/* Statistiques du créateur */}
-                    <View style={styles.creatorStatsCard}>
-                        <View style={styles.creatorStatsHeader}>
-                            <Ionicons name="stats-chart" size={20} color="#6B46FF" />
-                            <ThemedText type="subtitle" style={styles.creatorStatsTitle}>Mes statistiques</ThemedText>
-                            <View style={styles.growthBadge}>
-                                <ThemedText style={styles.growthText}>{creatorStats.growthRate}</ThemedText>
-                            </View>
-                        </View>
-                        <View style={styles.creatorStatsGrid}>
-                            <View style={styles.creatorStatItem}>
-                                <ThemedText style={styles.creatorStatValue}>{creatorStats.totalViews}</ThemedText>
-                                <ThemedText style={styles.creatorStatLabel}>Vues totales</ThemedText>
-                            </View>
-                            <View style={styles.creatorStatItem}>
-                                <ThemedText style={styles.creatorStatValue}>{creatorStats.totalLikes}</ThemedText>
-                                <ThemedText style={styles.creatorStatLabel}>Likes totaux</ThemedText>
-                            </View>
-                            <View style={styles.creatorStatItem}>
-                                <ThemedText style={styles.creatorStatValue}>{creatorStats.totalVideos}</ThemedText>
-                                <ThemedText style={styles.creatorStatLabel}>Vidéos</ThemedText>
-                            </View>
-                        </View>
-                        <Pressable style={styles.viewAnalyticsButton}>
-                            <ThemedText style={styles.viewAnalyticsText}>Voir les analyses détaillées</ThemedText>
-                            <Ionicons name="chevron-forward" size={16} color="#6B46FF" />
-                        </Pressable>
                     </View>
 
                     {/* Progress Card */}
@@ -358,29 +135,16 @@ export default function UserProfileContentCreatorComplete() {
                                 </View>
                             ))}
                         </ScrollView>
-                        <Pressable 
-                            style={styles.ctaButton}
-                            onPress={() => setShowDiplomaModal(true)}
-                        >
-                            <ThemedText style={styles.ctaText}>Voir mes certificats et diplômes</ThemedText>
+                        <Pressable style={styles.ctaButton}>
+                            <ThemedText style={styles.ctaText}>Voir mes certificats</ThemedText>
                         </Pressable>
                     </View>
 
                     {/* Profile tabs */}
                     <View style={styles.tabsContainer}>
-                        <ScrollView 
-                            horizontal 
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.tabRow}
-                        >
-                            <Pressable onPress={() => handleTabPress('myvideos')} style={[styles.tabButton, tab === 'myvideos' && styles.tabButtonActive]}>
-                                <ThemedText style={[styles.tabLabel, tab === 'myvideos' && styles.tabLabelActive]}>Mes Vidéos</ThemedText>
-                            </Pressable>
-                            <Pressable onPress={() => handleTabPress('playlists')} style={[styles.tabButton, tab === 'playlists' && styles.tabButtonActive]}>
-                                <ThemedText style={[styles.tabLabel, tab === 'playlists' && styles.tabLabelActive]}>Playlists</ThemedText>
-                            </Pressable>
+                        <View style={styles.tabRow}>
                             <Pressable onPress={() => handleTabPress('videos')} style={[styles.tabButton, tab === 'videos' && styles.tabButtonActive]}>
-                                <ThemedText style={[styles.tabLabel, tab === 'videos' && styles.tabLabelActive]}>Publiées</ThemedText>
+                                <ThemedText style={[styles.tabLabel, tab === 'videos' && styles.tabLabelActive]}>Vidéos</ThemedText>
                             </Pressable>
                             <Pressable onPress={() => handleTabPress('history')} style={[styles.tabButton, tab === 'history' && styles.tabButtonActive]}>
                                 <ThemedText style={[styles.tabLabel, tab === 'history' && styles.tabLabelActive]}>Historique</ThemedText>
@@ -388,426 +152,30 @@ export default function UserProfileContentCreatorComplete() {
                             <Pressable onPress={() => handleTabPress('saved')} style={[styles.tabButton, tab === 'saved' && styles.tabButtonActive]}>
                                 <ThemedText style={[styles.tabLabel, tab === 'saved' && styles.tabLabelActive]}>Sauvegardés</ThemedText>
                             </Pressable>
-                        </ScrollView>
+                        </View>
 
                         {openedTab === tab && (
-                            <View style={styles.tabContentContainer}>
-                                {tab === 'playlists' && (
-                                    <View>
-                                        {/* Bouton créer playlist */}
-                                        <Pressable 
-                                            style={styles.createPlaylistButton}
-                                            onPress={() => setShowCreatePlaylistModal(true)}
-                                        >
-                                            <Ionicons name="add-circle" size={20} color="#FFFFFF" />
-                                            <ThemedText style={styles.createPlaylistText}>Créer une playlist</ThemedText>
+                            <FlatList
+                                data={tab === 'videos' ? videos : tab === 'history' ? history : saved}
+                                keyExtractor={(item) => item.id}
+                                style={styles.contentList}
+                                renderItem={({ item }) => (
+                                    <View style={styles.itemCardRow}>
+                                        <View style={styles.itemCardContent}>
+                                            <ThemedText type="defaultSemiBold">{item.title}</ThemedText>
+                                            <ThemedText style={styles.itemSub}>{item.subtitle}</ThemedText>
+                                        </View>
+                                        <Pressable style={styles.itemCta} android_ripple={{ color: 'rgba(0,0,0,0.08)' }}>
+                                            <ThemedText style={styles.itemCtaText}>Voir</ThemedText>
                                         </Pressable>
-
-                                        {/* Liste des playlists */}
-                                        <FlatList
-                                            data={playlists}
-                                            keyExtractor={(item) => item.id}
-                                            style={styles.contentList}
-                                            renderItem={({ item }) => {
-                                                const getLevelColor = () => {
-                                                    switch(item.level) {
-                                                        case 'debutant': return '#4CAF50';
-                                                        case 'intermediaire': return '#FF9A2A';
-                                                        case 'expert': return '#6B46FF';
-                                                        default: return '#6b6b6b';
-                                                    }
-                                                };
-
-                                                const getLevelLabel = () => {
-                                                    switch(item.level) {
-                                                        case 'debutant': return 'Débutant';
-                                                        case 'intermediaire': return 'Intermédiaire';
-                                                        case 'expert': return 'Expert';
-                                                        default: return '';
-                                                    }
-                                                };
-
-                                                return (
-                                                    <View style={styles.playlistCard}>
-                                                        {/* Indicateur public/privé */}
-                                                        <View style={styles.playlistHeader}>
-                                                            <View style={[
-                                                                styles.privacyBadge,
-                                                                { backgroundColor: item.isPublic ? '#E8FFE8' : '#FFE8E8' }
-                                                            ]}>
-                                                                <Ionicons 
-                                                                    name={item.isPublic ? 'globe-outline' : 'lock-closed-outline'} 
-                                                                    size={12} 
-                                                                    color={item.isPublic ? '#4CAF50' : '#FF6B6B'} 
-                                                                />
-                                                                <ThemedText style={[
-                                                                    styles.privacyText,
-                                                                    { color: item.isPublic ? '#4CAF50' : '#FF6B6B' }
-                                                                ]}>
-                                                                    {item.isPublic ? 'Public' : 'Privé'}
-                                                                </ThemedText>
-                                                            </View>
-                                                        </View>
-
-                                                        {/* Contenu principal */}
-                                                        <View style={styles.playlistContent}>
-                                                            <View style={styles.playlistThumbnail}>
-                                                                <ThemedText style={styles.playlistEmoji}>{item.thumbnail}</ThemedText>
-                                                                <View style={styles.videoCountBadge}>
-                                                                    <ThemedText style={styles.videoCountText}>
-                                                                        {item.videoCount} vidéos
-                                                                    </ThemedText>
-                                                                </View>
-                                                            </View>
-
-                                                            <View style={styles.playlistInfo}>
-                                                                <ThemedText type="defaultSemiBold" style={styles.playlistTitle}>
-                                                                    {item.title}
-                                                                </ThemedText>
-                                                                <ThemedText style={styles.playlistDescription}>
-                                                                    {item.description}
-                                                                </ThemedText>
-                                                                
-                                                                {/* Niveau et durée */}
-                                                                <View style={styles.playlistMeta}>
-                                                                    <View style={[
-                                                                        styles.levelBadgeSmall,
-                                                                        { backgroundColor: getLevelColor() + '20' }
-                                                                    ]}>
-                                                                        <ThemedText style={[
-                                                                            styles.levelBadgeText,
-                                                                            { color: getLevelColor() }
-                                                                        ]}>
-                                                                            {getLevelLabel()}
-                                                                        </ThemedText>
-                                                                    </View>
-                                                                    <View style={styles.durationInfo}>
-                                                                        <Ionicons name="time-outline" size={14} color="#6b6b6b" />
-                                                                        <ThemedText style={styles.durationText}>
-                                                                            {item.totalDuration}
-                                                                        </ThemedText>
-                                                                    </View>
-                                                                </View>
-                                                            </View>
-                                                        </View>
-
-                                                        {/* Actions */}
-                                                        <View style={styles.playlistActions}>
-                                                            <Pressable 
-                                                                style={styles.playlistActionButton}
-                                                                onPress={() => console.log('Modifier playlist', item.id)}
-                                                            >
-                                                                <Ionicons name="create-outline" size={18} color="#6B46FF" />
-                                                                <ThemedText style={styles.playlistActionText}>Modifier</ThemedText>
-                                                            </Pressable>
-
-                                                            <Pressable 
-                                                                style={styles.playlistActionButton}
-                                                                onPress={() => handleSharePlaylist(item.id)}
-                                                            >
-                                                                <Ionicons name="share-social-outline" size={18} color="#FF9A2A" />
-                                                                <ThemedText style={styles.playlistActionText}>Partager</ThemedText>
-                                                            </Pressable>
-
-                                                            <Pressable 
-                                                                style={styles.playlistActionButton}
-                                                                onPress={() => handleDeletePlaylist(item.id)}
-                                                            >
-                                                                <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
-                                                                <ThemedText style={[styles.playlistActionText, { color: '#FF6B6B' }]}>
-                                                                    Supprimer
-                                                                </ThemedText>
-                                                            </Pressable>
-                                                        </View>
-                                                    </View>
-                                                );
-                                            }}
-                                            showsVerticalScrollIndicator={false}
-                                        />
                                     </View>
                                 )}
-
-                                {tab === 'myvideos' && (
-                                    <FlatList
-                                        data={myVideos}
-                                        keyExtractor={(item) => item.id}
-                                        style={styles.contentList}
-                                        renderItem={({ item }) => (
-                                            <View style={styles.myVideoCard}>
-                                                {/* Indicateur de validation */}
-                                                <View style={[
-                                                    styles.validationIndicator,
-                                                    item.status === 'validated' && styles.validationGreen,
-                                                    item.status === 'rejected' && styles.validationRed,
-                                                    item.status === 'pending' && styles.validationYellow
-                                                ]} />
-                                                
-                                                <View style={styles.myVideoThumbnail}>
-                                                    <ThemedText style={styles.thumbnailEmoji}>{item.thumbnail}</ThemedText>
-                                                    <View style={styles.videoDuration}>
-                                                        <ThemedText style={styles.durationText}>{item.duration}</ThemedText>
-                                                    </View>
-                                                </View>
-                                                
-                                                <View style={styles.myVideoInfo}>
-                                                    <ThemedText type="defaultSemiBold" style={styles.myVideoTitle}>{item.title}</ThemedText>
-                                                    <View style={styles.myVideoStats}>
-                                                        <View style={styles.videoStat}>
-                                                            <Ionicons name="eye-outline" size={14} color="#6b6b6b" />
-                                                            <ThemedText style={styles.videoStatText}>{item.views}</ThemedText>
-                                                        </View>
-                                                        <View style={styles.videoStat}>
-                                                            <Ionicons name="heart-outline" size={14} color="#6b6b6b" />
-                                                            <ThemedText style={styles.videoStatText}>{item.likes}</ThemedText>
-                                                        </View>
-                                                    </View>
-                                                </View>
-
-                                                {/* Menu contextuel */}
-                                                <Pressable 
-                                                    style={styles.videoMenuButton}
-                                                    onPress={() => handleVideoMenu(item.id)}
-                                                >
-                                                    <Ionicons name="ellipsis-vertical" size={20} color="#6b6b6b" />
-                                                </Pressable>
-
-                                                {/* Menu options */}
-                                                {selectedVideo === item.id && (
-                                                    <View style={styles.videoMenu}>
-                                                        <Pressable 
-                                                            style={styles.menuItem}
-                                                            onPress={() => handleEditVideo(item.id)}
-                                                        >
-                                                            <Ionicons name="create-outline" size={18} color="#6B46FF" />
-                                                            <ThemedText style={styles.menuItemText}>Modifier</ThemedText>
-                                                        </Pressable>
-                                                        <Pressable 
-                                                            style={styles.menuItem}
-                                                            onPress={() => handleDeleteVideo(item.id)}
-                                                        >
-                                                            <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
-                                                            <ThemedText style={[styles.menuItemText, { color: '#FF6B6B' }]}>Supprimer</ThemedText>
-                                                        </Pressable>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        )}
-                                        showsVerticalScrollIndicator={false}
-                                    />
-                                )}
-
-                                {tab === 'videos' && (
-                                    <FlatList
-                                        data={videos}
-                                        keyExtractor={(item) => item.id}
-                                        style={styles.contentList}
-                                        renderItem={({ item }) => (
-                                            <View style={styles.itemCardRow}>
-                                                <View style={styles.itemCardContent}>
-                                                    <ThemedText type="defaultSemiBold">{item.title}</ThemedText>
-                                                    <ThemedText style={styles.itemSub}>{item.subtitle}</ThemedText>
-                                                </View>
-                                                <Pressable style={styles.itemCta} android_ripple={{ color: 'rgba(0,0,0,0.08)' }}>
-                                                    <ThemedText style={styles.itemCtaText}>Voir</ThemedText>
-                                                </Pressable>
-                                            </View>
-                                        )}
-                                        showsVerticalScrollIndicator={false}
-                                    />
-                                )}
-
-                                {tab === 'history' && (
-                                    <FlatList
-                                        data={history}
-                                        keyExtractor={(item) => item.id}
-                                        style={styles.contentList}
-                                        renderItem={({ item }) => (
-                                            <View style={styles.itemCardRow}>
-                                                <View style={styles.itemCardContent}>
-                                                    <ThemedText type="defaultSemiBold">{item.title}</ThemedText>
-                                                    <ThemedText style={styles.itemSub}>{item.subtitle}</ThemedText>
-                                                </View>
-                                                <Pressable style={styles.itemCta} android_ripple={{ color: 'rgba(0,0,0,0.08)' }}>
-                                                    <ThemedText style={styles.itemCtaText}>Voir</ThemedText>
-                                                </Pressable>
-                                            </View>
-                                        )}
-                                        showsVerticalScrollIndicator={false}
-                                    />
-                                )}
-
-                                {tab === 'saved' && (
-                                    <FlatList
-                                        data={saved}
-                                        keyExtractor={(item) => item.id}
-                                        style={styles.contentList}
-                                        renderItem={({ item }) => (
-                                            <View style={styles.itemCardRow}>
-                                                <View style={styles.itemCardContent}>
-                                                    <ThemedText type="defaultSemiBold">{item.title}</ThemedText>
-                                                    <ThemedText style={styles.itemSub}>{item.subtitle}</ThemedText>
-                                                </View>
-                                                <Pressable style={styles.itemCta} android_ripple={{ color: 'rgba(0,0,0,0.08)' }}>
-                                                    <ThemedText style={styles.itemCtaText}>Voir</ThemedText>
-                                                </Pressable>
-                                            </View>
-                                        )}
-                                        showsVerticalScrollIndicator={false}
-                                    />
-                                )}
-                            </View>
+                                showsVerticalScrollIndicator={false}
+                            />
                         )}
                     </View>
                 </View>
             </ScrollView>
-
-            {/* Modal de message */}
-            <Modal
-                visible={showMessageModal}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowMessageModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <ThemedText style={styles.modalTitle}>Envoyer un message</ThemedText>
-                            <Pressable onPress={() => setShowMessageModal(false)}>
-                                <Ionicons name="close" size={24} color="#1A1A1A" />
-                            </Pressable>
-                        </View>
-                        <TextInput
-                            style={styles.messageInput}
-                            placeholder="Écrivez votre message..."
-                            multiline
-                            value={messageText}
-                            onChangeText={setMessageText}
-                            maxLength={500}
-                        />
-                        <Pressable 
-                            style={styles.sendButton}
-                            onPress={handleSendMessage}
-                        >
-                            <ThemedText style={styles.sendButtonText}>Envoyer</ThemedText>
-                        </Pressable>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* Modal des diplômes */}
-            <Modal
-                visible={showDiplomaModal}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowDiplomaModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <ThemedText style={styles.modalTitle}>Mes diplômes et certifications</ThemedText>
-                            <Pressable onPress={() => setShowDiplomaModal(false)}>
-                                <Ionicons name="close" size={24} color="#1A1A1A" />
-                            </Pressable>
-                        </View>
-                        <ScrollView style={styles.diplomaList}>
-                            {diplomas.map((diploma) => (
-                                <View key={diploma.id} style={styles.diplomaItem}>
-                                    <View style={styles.diplomaIcon}>
-                                        <Ionicons name="school" size={24} color="#6B46FF" />
-                                    </View>
-                                    <View style={styles.diplomaInfo}>
-                                        <ThemedText style={styles.diplomaTitle}>{diploma.title}</ThemedText>
-                                        <ThemedText style={styles.diplomaDetails}>
-                                            {diploma.institution} • {diploma.year}
-                                        </ThemedText>
-                                    </View>
-                                </View>
-                            ))}
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* Modal de création de playlist */}
-            <Modal
-                visible={showCreatePlaylistModal}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowCreatePlaylistModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <ThemedText style={styles.modalTitle}>Créer une playlist</ThemedText>
-                            <Pressable onPress={() => setShowCreatePlaylistModal(false)}>
-                                <Ionicons name="close" size={24} color="#1A1A1A" />
-                            </Pressable>
-                        </View>
-                        
-                        <View style={styles.formGroup}>
-                            <ThemedText style={styles.formLabel}>Nom de la playlist *</ThemedText>
-                            <TextInput
-                                style={styles.formInput}
-                                placeholder="Ex: Excel - Expertise"
-                                value={newPlaylistName}
-                                onChangeText={setNewPlaylistName}
-                                maxLength={50}
-                            />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <ThemedText style={styles.formLabel}>Description</ThemedText>
-                            <TextInput
-                                style={[styles.formInput, styles.formInputMultiline]}
-                                placeholder="Décrivez votre playlist..."
-                                value={newPlaylistDescription}
-                                onChangeText={setNewPlaylistDescription}
-                                multiline
-                                maxLength={200}
-                            />
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <ThemedText style={styles.formLabel}>Niveau</ThemedText>
-                            <View style={styles.levelSelector}>
-                                <Pressable style={[styles.levelOption, styles.levelOptionActive]}>
-                                    <ThemedText style={styles.levelOptionText}>Débutant</ThemedText>
-                                </Pressable>
-                                <Pressable style={styles.levelOption}>
-                                    <ThemedText style={styles.levelOptionText}>Intermédiaire</ThemedText>
-                                </Pressable>
-                                <Pressable style={styles.levelOption}>
-                                    <ThemedText style={styles.levelOptionText}>Expert</ThemedText>
-                                </Pressable>
-                            </View>
-                        </View>
-
-                        <View style={styles.formGroup}>
-                            <ThemedText style={styles.formLabel}>Visibilité</ThemedText>
-                            <View style={styles.visibilitySelector}>
-                                <Pressable style={[styles.visibilityOption, styles.visibilityOptionActive]}>
-                                    <Ionicons name="globe-outline" size={18} color="#4CAF50" />
-                                    <ThemedText style={[styles.visibilityOptionText, { color: '#4CAF50' }]}>
-                                        Public
-                                    </ThemedText>
-                                </Pressable>
-                                <Pressable style={styles.visibilityOption}>
-                                    <Ionicons name="lock-closed-outline" size={18} color="#6b6b6b" />
-                                    <ThemedText style={styles.visibilityOptionText}>Privé</ThemedText>
-                                </Pressable>
-                            </View>
-                        </View>
-
-                        <Pressable 
-                            style={[styles.sendButton, !newPlaylistName && styles.sendButtonDisabled]}
-                            onPress={handleCreatePlaylist}
-                            disabled={!newPlaylistName}
-                        >
-                            <ThemedText style={styles.sendButtonText}>Créer la playlist</ThemedText>
-                        </Pressable>
-                    </View>
-                </View>
-            </Modal>
 
             {/* Bottom Navigation */}
             <View style={styles.bottomNav}>
@@ -849,8 +217,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFFFFF'
     },
     content: { 
-        paddingHorizontal: 16,
-        paddingTop: Platform.OS === 'ios' ? 50 : 20,
+        padding: 16, 
         paddingBottom: Platform.OS === 'ios' ? 100 : 90,
         backgroundColor: '#FFFFFF'
     },
@@ -860,16 +227,13 @@ const styles = StyleSheet.create({
         flexDirection: 'row', 
         alignItems: 'center', 
         justifyContent: 'space-between', 
-        marginBottom: 16
+        marginBottom: 8 
     },
     backButton: {
         width: 40,
         height: 40,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    headerSpacer: {
-        flex: 1,
     },
     infoButton: {
         width: 40,
@@ -884,120 +248,41 @@ const styles = StyleSheet.create({
     centerColumn: { alignItems: 'center' },
 
     // Avatar
-    avatarWrapper: {
-        position: 'relative',
-        marginBottom: 12,
-    },
     avatar: { 
         width: 100, 
         height: 100, 
         borderRadius: 50, 
         alignItems: 'center', 
         justifyContent: 'center',
+        marginTop: 8
     },
-    avatarEmoji: { fontSize: 50 },
-    premiumBadge: {
-        position: 'absolute',
-        top: 0,
-        right: 0,
-        backgroundColor: '#1A1A1A',
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 2,
-        borderColor: '#FFFFFF',
-    },
-    verificationBadge: {
-        position: 'absolute',
-        bottom: 0,
-        right: 0,
-        backgroundColor: '#FFFFFF',
-        width: 28,
-        height: 28,
-        borderRadius: 14,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 2,
-        borderColor: '#E8E8E8',
-    },
+    avatarEmoji: { fontSize: 48 },
 
     // User Info
-    handle: { 
-        marginBottom: 8,
-        color: '#1A1A1A',
-        fontSize: 16,
-        fontWeight: '600'
-    },
-    bioContainer: {
-        alignItems: 'center',
-        marginBottom: 12,
-        paddingHorizontal: 20,
-    },
-    bio: {
-        fontSize: 14,
-        color: '#6b6b6b',
-        textAlign: 'center',
-        lineHeight: 20,
-        marginBottom: 6,
-    },
-    verificationLabel: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-        backgroundColor: '#F8F6FF',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    verificationText: {
-        fontSize: 11,
-        fontWeight: '600',
-    },
+    handle: { marginTop: 8, color: '#2b2b2b' },
     roleBadge: { 
-        marginBottom: 12,
+        marginTop: 6, 
         backgroundColor: '#FF9A2A', 
         paddingHorizontal: 16, 
         paddingVertical: 6, 
         borderRadius: 20 
     },
-    roleText: { 
-        color: '#FFFFFF', 
-        fontWeight: '600',
-        fontSize: 14
-    },
+    roleText: { color: '#fff', fontWeight: '600' },
 
-    // Action Buttons
-    actionButtons: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 20,
-    },
+    // Edit Button
     editButton: { 
+        marginTop: 12, 
         backgroundColor: '#6B46FF', 
         paddingHorizontal: 24, 
         paddingVertical: 12, 
         borderRadius: 25 
     },
-    editButtonText: { 
-        color: '#FFFFFF', 
-        fontWeight: '600',
-        fontSize: 14
-    },
-    messageButton: {
-        backgroundColor: '#FF9A2A',
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
+    editButtonText: { color: '#fff', fontWeight: '600' },
 
     // Stats
     statsRow: { 
         flexDirection: 'row', 
-        marginBottom: 20,
+        marginTop: 16, 
         width: '100%', 
         justifyContent: 'space-between',
         paddingHorizontal: 8
@@ -1013,100 +298,22 @@ const styles = StyleSheet.create({
     },
     statOrange: { backgroundColor: '#FF9A2A' },
     statPurple: { backgroundColor: '#6B46FF' },
-    statNumber: { 
-        color: '#FFFFFF', 
-        fontSize: 18, 
-        fontWeight: '700' 
-    },
-    statLabel: { 
-        color: '#FFFFFF', 
-        fontSize: 11, 
-        marginTop: 2 
-    },
-
-    // Creator Stats Card
-    creatorStatsCard: {
-        width: '100%',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: '#E8E8E8',
-    },
-    creatorStatsHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 16,
-        gap: 8,
-    },
-    creatorStatsTitle: {
-        flex: 1,
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1A1A1A',
-    },
-    growthBadge: {
-        backgroundColor: '#E8FFE8',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    growthText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#4CAF50',
-    },
-    creatorStatsGrid: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginBottom: 16,
-    },
-    creatorStatItem: {
-        flex: 1,
-        alignItems: 'center',
-    },
-    creatorStatValue: {
-        fontSize: 20,
-        fontWeight: '700',
-        color: '#6B46FF',
-        marginBottom: 4,
-    },
-    creatorStatLabel: {
-        fontSize: 11,
-        color: '#6b6b6b',
-        textAlign: 'center',
-    },
-    viewAnalyticsButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#F8F6FF',
-        paddingVertical: 10,
-        borderRadius: 12,
-        gap: 6,
-    },
-    viewAnalyticsText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#6B46FF',
-    },
+    statNumber: { color: '#fff', fontSize: 18, fontWeight: '700' },
+    statLabel: { color: '#fff', fontSize: 11, marginTop: 2 },
 
     // Cards
     card: { 
         width: '100%', 
-        marginBottom: 16,
+        marginTop: 16, 
         padding: 16, 
         borderRadius: 16, 
-        backgroundColor: '#FFFFFF',
-        borderWidth: 1,
-        borderColor: '#E8E8E8'
+        backgroundColor: '#F8F6FF' 
     },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16
+        marginBottom: 12
     },
     cardTitleRow: {
         flexDirection: 'row',
@@ -1115,11 +322,9 @@ const styles = StyleSheet.create({
     cardTitleText: {
         marginLeft: 8,
         fontSize: 16,
-        fontWeight: '600',
-        color: '#1A1A1A'
     },
     levelBadgeContainer: {
-        backgroundColor: '#F8F6FF',
+        backgroundColor: '#FFFFFF',
         paddingHorizontal: 12,
         paddingVertical: 4,
         borderRadius: 12,
@@ -1130,7 +335,7 @@ const styles = StyleSheet.create({
         fontWeight: '600'
     },
     countBadgeContainer: {
-        backgroundColor: '#F8F6FF',
+        backgroundColor: '#FFFFFF',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 10,
@@ -1144,13 +349,11 @@ const styles = StyleSheet.create({
     // Progress Card
     progressCard: {
         width: '100%',
-        backgroundColor: '#FFFFFF',
+        backgroundColor: '#F8F6FF',
         borderRadius: 16,
         paddingVertical: 16,
         paddingHorizontal: 16,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: '#E8E8E8'
+        marginTop: 16,
     },
     progressTitleRow: { 
         flexDirection: 'row', 
@@ -1159,12 +362,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
     },
     titleLeft: { flexDirection: 'row', alignItems: 'center' },
-    progressTitle: { 
-        marginLeft: 8, 
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1A1A1A'
-    },
+    progressTitle: { marginLeft: 8, fontSize: 16 },
     progressBarContainer: {
         marginBottom: 8,
     },
@@ -1179,11 +377,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#FF9A2A', 
         borderRadius: 4,
     },
-    progressSub: { 
-        color: '#6b6b6b', 
-        fontSize: 12,
-        textAlign: 'left'
-    },
+    progressSub: { color: '#6b6b6b', fontSize: 12 },
 
     // Badges
     badgesRow: { marginTop: 8 },
@@ -1203,16 +397,12 @@ const styles = StyleSheet.create({
     // CTA Button
     ctaButton: { 
         marginTop: 16, 
-        backgroundColor: '#FF9A2A', 
+        backgroundColor: '#FD9A34', 
         paddingVertical: 12, 
         borderRadius: 25, 
         alignItems: 'center' 
     },
-    ctaText: { 
-        color: '#FFFFFF', 
-        fontWeight: '600',
-        fontSize: 14
-    },
+    ctaText: { color: '#fff', fontWeight: '600' },
 
     // Bottom Navigation
     bottomNav: {
@@ -1262,452 +452,30 @@ const styles = StyleSheet.create({
     // Tabs
     tabsContainer: { 
         width: '100%', 
-        marginTop: 0,
-        backgroundColor: '#FFFFFF',
+        marginTop: 16, 
+        backgroundColor: '#F8F6FF', 
         paddingVertical: 12, 
         paddingHorizontal: 12, 
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#E8E8E8'
+        borderRadius: 16 
     },
-    tabRow: { 
-        flexDirection: 'row', 
-        justifyContent: 'flex-start', 
-        marginBottom: 8,
-        gap: 8,
-        paddingHorizontal: 4,
-    },
-    tabButton: { 
-        paddingVertical: 8, 
-        paddingHorizontal: 16, 
-        borderRadius: 20, 
-        backgroundColor: 'transparent',
-        minWidth: 90,
-    },
+    tabRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 8 },
+    tabButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20, backgroundColor: 'transparent' },
     tabButtonActive: { backgroundColor: '#6B46FF' },
-    tabLabel: { fontSize: 12, color: '#6b6b6b', textAlign: 'center' },
+    tabLabel: { fontSize: 14, color: '#6b6b6b' },
     tabLabelActive: { color: '#fff' },
-    tabContentContainer: {
-        width: '100%',
-    },
-    contentList: { 
-        width: '100%', 
-        marginTop: 8, 
-        maxHeight: 500,
-    },
-
-    // Playlists
-    createPlaylistButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#6B46FF',
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 25,
-        marginBottom: 16,
-        gap: 8,
-    },
-    createPlaylistText: {
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    playlistCard: {
-        backgroundColor: '#F8F6FF',
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 12,
-        borderWidth: 1,
-        borderColor: '#E8E8E8',
-    },
-    playlistHeader: {
-        marginBottom: 12,
-    },
-    privacyBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-        gap: 4,
-    },
-    privacyText: {
-        fontSize: 11,
-        fontWeight: '600',
-    },
-    playlistContent: {
-        flexDirection: 'row',
-        marginBottom: 12,
-    },
-    playlistThumbnail: {
-        width: 100,
-        height: 100,
-        borderRadius: 12,
-        backgroundColor: '#6B46FF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-        position: 'relative',
-    },
-    playlistEmoji: {
-        fontSize: 40,
-    },
-    videoCountBadge: {
-        position: 'absolute',
-        bottom: 6,
-        left: 6,
-        right: 6,
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 8,
-    },
-    videoCountText: {
-        color: '#FFFFFF',
-        fontSize: 10,
-        fontWeight: '600',
-        textAlign: 'center',
-    },
-    playlistInfo: {
-        flex: 1,
-        justifyContent: 'space-between',
-    },
-    playlistTitle: {
-        fontSize: 15,
-        color: '#1A1A1A',
-        marginBottom: 4,
-    },
-    playlistDescription: {
-        fontSize: 13,
-        color: '#6b6b6b',
-        marginBottom: 8,
-        lineHeight: 18,
-    },
-    playlistMeta: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-    },
-    levelBadgeSmall: {
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    levelBadgeText: {
-        fontSize: 11,
-        fontWeight: '600',
-    },
-    durationInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    durationText: {
-        fontSize: 12,
-        color: '#6b6b6b',
-        fontWeight: '500',
-    },
-    playlistActions: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        borderTopWidth: 1,
-        borderTopColor: '#E8E8E8',
-        paddingTop: 12,
-    },
-    playlistActionButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-    },
-    playlistActionText: {
-        fontSize: 13,
-        fontWeight: '500',
-        color: '#6B46FF',
-    },
-
-    // Form styles
-    formGroup: {
-        marginBottom: 20,
-    },
-    formLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#1A1A1A',
-        marginBottom: 8,
-    },
-    formInput: {
-        backgroundColor: '#F8F6FF',
-        borderRadius: 12,
-        padding: 14,
-        fontSize: 14,
-        borderWidth: 1,
-        borderColor: '#E8E8E8',
-    },
-    formInputMultiline: {
-        minHeight: 100,
-        textAlignVertical: 'top',
-    },
-    levelSelector: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    levelOption: {
-        flex: 1,
-        paddingVertical: 10,
-        paddingHorizontal: 12,
-        borderRadius: 12,
-        backgroundColor: '#F8F6FF',
-        borderWidth: 1,
-        borderColor: '#E8E8E8',
-        alignItems: 'center',
-    },
-    levelOptionActive: {
-        backgroundColor: '#6B46FF',
-        borderColor: '#6B46FF',
-    },
-    levelOptionText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#6b6b6b',
-    },
-    visibilitySelector: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    visibilityOption: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        borderRadius: 12,
-        backgroundColor: '#F8F6FF',
-        borderWidth: 1,
-        borderColor: '#E8E8E8',
-        gap: 8,
-    },
-    visibilityOptionActive: {
-        backgroundColor: '#E8FFE8',
-        borderColor: '#4CAF50',
-    },
-    visibilityOptionText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#6b6b6b',
-    },
-    sendButtonDisabled: {
-        backgroundColor: '#B0B0B0',
-        opacity: 0.5,
-    },
+    contentList: { width: '100%', marginTop: 8, maxHeight: 260 },
     itemCardRow: { 
         width: '100%', 
         flexDirection: 'row', 
         alignItems: 'center', 
         justifyContent: 'space-between', 
         padding: 14, 
-        backgroundColor: '#F8F6FF', 
+        backgroundColor: '#FFFFFF', 
         borderRadius: 12, 
         marginBottom: 8 
     },
     itemCardContent: { flex: 1, paddingRight: 8 },
-    itemCta: { 
-        backgroundColor: '#FD9A34', 
-        paddingVertical: 8, 
-        paddingHorizontal: 16, 
-        borderRadius: 20, 
-        alignSelf: 'center' 
-    },
+    itemCta: { backgroundColor: '#FD9A34', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, alignSelf: 'center' },
     itemCtaText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-    itemSub: { marginTop: 4, color: '#6b6b6b', fontSize: 12 },
-
-    // My Videos
-    myVideoCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 12,
-        backgroundColor: '#F8F6FF',
-        borderRadius: 12,
-        marginBottom: 8,
-        position: 'relative',
-    },
-    validationIndicator: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: 4,
-        borderTopLeftRadius: 12,
-        borderBottomLeftRadius: 12,
-    },
-    validationGreen: {
-        backgroundColor: '#4CAF50',
-    },
-    validationRed: {
-        backgroundColor: '#FF6B6B',
-    },
-    validationYellow: {
-        backgroundColor: '#FFC107',
-    },
-    myVideoThumbnail: {
-        width: 80,
-        height: 80,
-        borderRadius: 12,
-        backgroundColor: '#6B46FF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginLeft: 8,
-        marginRight: 12,
-        position: 'relative',
-    },
-    thumbnailEmoji: {
-        fontSize: 32,
-    },
-    videoDuration: {
-        position: 'absolute',
-        bottom: 6,
-        right: 6,
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-    },
-    VideodurationText: {
-        color: '#FFFFFF',
-        fontSize: 10,
-        fontWeight: '600',
-    },
-    myVideoInfo: {
-        flex: 1,
-    },
-    myVideoTitle: {
-        fontSize: 14,
-        color: '#1A1A1A',
-        marginBottom: 6,
-    },
-    myVideoStats: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    videoStat: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    videoStatText: {
-        fontSize: 12,
-        color: '#6b6b6b',
-        fontWeight: '500',
-    },
-    videoMenuButton: {
-        padding: 8,
-    },
-    videoMenu: {
-        position: 'absolute',
-        right: 12,
-        top: 50,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        padding: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 5,
-        zIndex: 10,
-    },
-    menuItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 10,
-        gap: 10,
-    },
-    menuItemText: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#1A1A1A',
-    },
-
-    // Modals
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-end',
-    },
-    modalContent: {
-        backgroundColor: '#FFFFFF',
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        padding: 20,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-        maxHeight: '80%',
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#1A1A1A',
-    },
-    messageInput: {
-        backgroundColor: '#F8F6FF',
-        borderRadius: 12,
-        padding: 16,
-        minHeight: 120,
-        textAlignVertical: 'top',
-        fontSize: 14,
-        marginBottom: 16,
-    },
-    sendButton: {
-        backgroundColor: '#6B46FF',
-        paddingVertical: 14,
-        borderRadius: 25,
-        alignItems: 'center',
-    },
-    sendButtonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '600',
-    },
-    diplomaList: {
-        maxHeight: 400,
-    },
-    diplomaItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: '#F8F6FF',
-        borderRadius: 12,
-        marginBottom: 12,
-    },
-    diplomaIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#FFFFFF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    diplomaInfo: {
-        flex: 1,
-    },
-    diplomaTitle: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#1A1A1A',
-        marginBottom: 4,
-    },
-    diplomaDetails: {
-        fontSize: 13,
-        color: '#6b6b6b',
-    },
+    itemSub: { marginTop: 4, color: '#6b6b6b', fontSize: 12 }
 });
