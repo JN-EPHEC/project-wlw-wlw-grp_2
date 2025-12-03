@@ -65,23 +65,7 @@ export default function UserProfileLearner() {
 
     // Fonction pour supprimer un favori
     const removeFavorite = (id: string) => {
-        Alert.alert(
-            'Retirer des favoris',
-            'Voulez-vous retirer cette vidéo de vos favoris ?',
-            [
-                {
-                    text: 'Annuler',
-                    style: 'cancel',
-                },
-                {
-                    text: 'Retirer',
-                    style: 'destructive',
-                    onPress: () => {
-                        setFavorites(prevFavorites => prevFavorites.filter(item => item.id !== id));
-                    },
-                },
-            ]
-        );
+        setFavorites(prevFavorites => prevFavorites.filter(item => item.id !== id));
     };
 
     // Fonction pour ouvrir le modal
@@ -303,7 +287,7 @@ export default function UserProfileLearner() {
                                                     <Ionicons name="heart" size={24} color="#FF3B30" />
                                                 </Pressable>
                                             )}
-                                            <Pressable style={styles.itemCta} android_ripple={{ color: 'rgba(0,0,0,0.08)' }}>
+                                            <Pressable style={styles.itemCta}>
                                                 <Text style={styles.itemCtaText}>Voir</Text>
                                             </Pressable>
                                         </View>
@@ -437,6 +421,7 @@ export default function UserProfileLearner() {
                                 multiline
                                 numberOfLines={4}
                                 maxLength={200}
+                                textAlignVertical="top"
                             />
                             <Text style={styles.charCount}>{tempBio.length}/200 caractères</Text>
 
@@ -751,7 +736,13 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    itemCta: { backgroundColor: '#FD9A34', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, alignSelf: 'center' },
+    itemCta: { 
+        backgroundColor: '#FD9A34', 
+        paddingVertical: 8, 
+        paddingHorizontal: 16, 
+        borderRadius: 20, 
+        alignSelf: 'center' 
+    },
     itemCtaText: { color: '#fff', fontWeight: '600', fontSize: 13 },
     itemSub: { marginTop: 4, color: '#6b6b6b', fontSize: 12 },
 
