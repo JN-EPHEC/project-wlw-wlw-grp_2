@@ -4,6 +4,7 @@ import { Alert, Dimensions, FlatList, Image, Modal, Platform, Pressable, ScrollV
 
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
+import { useProgress } from './ProgressContext';
 
 function Avatar({ emoji, imageUri }: { emoji: string; imageUri: string | null }) {
     return (
@@ -23,9 +24,17 @@ interface VideoItem {
     subtitle: string;
 }
 
+interface Badge {
+    title: string;
+    emoji: string;
+}
+
 export default function UserProfileLearner() {
     const [tab, setTab] = useState<'favorites' | 'history' | 'saved'>('favorites');
     const [openedTab, setOpenedTab] = useState<'favorites' | 'history' | 'saved' | null>(null);
+    
+    // Utiliser le contexte de progression
+    const { progressData, badges, badgesCount } = useProgress();
     
     // États pour le profil
     const [username, setUsername] = useState('@sophiedubois');
@@ -145,13 +154,6 @@ export default function UserProfileLearner() {
 
     const emojis = ['👩‍🎓', '👨‍🎓', '🧑‍💻', '👩‍💼', '👨‍💼', '🧑‍🔬', '👩‍🏫', '👨‍🏫', '🧑‍🎨', '👩‍🚀'];
 
-    const badges = [
-        { title: 'Expert\nMarketing', emoji: '🏅' },
-        { title: 'Développeur\nPython', emoji: '🐍' },
-        { title: 'Expert\nData', emoji: '📊' },
-        { title: 'Designer\nUI/UX', emoji: '🎨' }
-    ];
-
     return (
         <View style={styles.screen}>
             <ScrollView contentContainerStyle={styles.content}>
@@ -203,55 +205,81 @@ export default function UserProfileLearner() {
                     </View>
 
                     {/* Progress Card */}
-                    <View style={styles.progressCard}>
-                        <View style={styles.progressTitleRow}>
-                            <View style={styles.titleLeft}>
-                                <Ionicons name="trending-up" size={20} color="#FF9A2A" />
-                                <Text style={styles.progressTitle}>Progression globale</Text>
+                    <Link href="/progression" asChild>
+                        <Pressable 
+                            style={({ pressed }) => [
+                                styles.progressCard,
+                                pressed && styles.cardPressed
+                            ]}
+                        >
+                            <View style={styles.progressTitleRow}>
+                                <View style={styles.titleLeft}>
+                                    <Ionicons name="trending-up" size={20} color="#FF9A2A" />
+                                    <Text style={styles.progressTitle}>Progression globale</Text>
+                                </View>
+                                <View style={styles.levelBadgeContainer}>
+                                    <Text style={styles.levelBadge}>Niveau {progressData.level}</Text>
+                                </View>
                             </View>
-                            <View style={styles.levelBadgeContainer}>
-                                <Text style={styles.levelBadge}>Niveau 2</Text>
-                            </View>
-                        </View>
 
-                        <View style={styles.progressBarContainer}>
-                            <View style={styles.progressTrack}>
-                                <View style={[styles.progressFill, { width: '20%' }]} />
+                            <View style={styles.progressBarContainer}>
+                                <View style={styles.progressTrack}>
+                                    <View style={[
+                                        styles.progressFill, 
+                                        { width: `${(progressData.currentXP / progressData.nextLevelXP) * 100}%` }
+                                    ]} />
+                                </View>
                             </View>
-                        </View>
 
-                        <Text style={styles.progressSub}>200 / 3,000 XP pour niveau 8</Text>
-                    </View>
+                            <Text style={styles.progressSub}>
+                                {progressData.currentXP} / {progressData.nextLevelXP} XP pour niveau {progressData.level + 1}
+                            </Text>
+                            
+                            {/* Indicateur cliquable */}
+                            <View style={styles.progressCardFooter}>
+                                <Text style={styles.progressCardLink}>Voir plus de détails</Text>
+                                <Ionicons name="chevron-forward" size={18} color="#6B46FF" />
+                            </View>
+                        </Pressable>
+                    </Link>
 
                     {/* Badges Card */}
-                    <View style={styles.card}>
-                        <View style={styles.cardHeader}>
-                            <View style={styles.cardTitleRow}>
-                                <Ionicons name="ribbon" size={20} color="#FF9A2A" />
-                                <Text style={styles.cardTitleText}>Badges & Réalisation</Text>
-                            </View>
-                            <View style={styles.countBadgeContainer}>
-                                <Text style={styles.countBadge}>4/8</Text>
-                            </View>
-                        </View>
-                        <ScrollView 
-                            horizontal 
-                            showsHorizontalScrollIndicator={false} 
-                            style={styles.badgesRow}
+                    <Link href="/progression" asChild>
+                        <Pressable 
+                            style={({ pressed }) => [
+                                styles.card,
+                                pressed && styles.cardPressed
+                            ]}
                         >
-                            {badges.map((badge, index) => (
-                                <View key={index} style={styles.badgeItem}>
-                                    <View style={styles.badgeIcon}>
-                                        <Text style={styles.badgeEmoji}>{badge.emoji}</Text>
-                                    </View>
-                                    <Text style={[styles.badgeLabel, { color: '#6B46FF' }]}>{badge.title}</Text>
+                            <View style={styles.cardHeader}>
+                                <View style={styles.cardTitleRow}>
+                                    <Ionicons name="ribbon" size={20} color="#FF9A2A" />
+                                    <Text style={styles.cardTitleText}>Badges & Réalisation</Text>
                                 </View>
-                            ))}
-                        </ScrollView>
-                        <Pressable style={styles.ctaButton}>
-                            <Text style={styles.ctaText}>Voir mes certificats</Text>
+                                <View style={styles.countBadgeContainer}>
+                                    <Text style={styles.countBadge}>{badgesCount.earned}/{badgesCount.total}</Text>
+                                </View>
+                            </View>
+                            <ScrollView 
+                                horizontal 
+                                showsHorizontalScrollIndicator={false} 
+                                style={styles.badgesRow}
+                            >
+                                {badges.map((badge: Badge, index: number) => (
+                                    <View key={index} style={styles.badgeItem}>
+                                        <View style={styles.badgeIcon}>
+                                            <Text style={styles.badgeEmoji}>{badge.emoji}</Text>
+                                        </View>
+                                        <Text style={[styles.badgeLabel, { color: '#6B46FF' }]}>{badge.title}</Text>
+                                    </View>
+                                ))}
+                            </ScrollView>
+                            <View style={styles.badgeCardFooter}>
+                                <Text style={styles.badgeCardLink}>Voir tous les badges</Text>
+                                <Ionicons name="chevron-forward" size={18} color="#6B46FF" />
+                            </View>
                         </Pressable>
-                    </View>
+                    </Link>
 
                     {/* Profile tabs */}
                     <View style={styles.tabsContainer}>
@@ -555,6 +583,10 @@ const styles = StyleSheet.create({
         borderRadius: 16, 
         backgroundColor: '#F8F6FF' 
     },
+    cardPressed: {
+        opacity: 0.7,
+        transform: [{ scale: 0.98 }],
+    },
     cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -625,6 +657,21 @@ const styles = StyleSheet.create({
         borderRadius: 4,
     },
     progressSub: { color: '#6b6b6b', fontSize: 12 },
+    progressCardFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        marginTop: 12,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#E0D6FF',
+    },
+    progressCardLink: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#6B46FF',
+        marginRight: 4,
+    },
 
     // Badges
     badgesRow: { marginTop: 8 },
@@ -640,16 +687,21 @@ const styles = StyleSheet.create({
     },
     badgeEmoji: { fontSize: 24 },
     badgeLabel: { fontSize: 10, textAlign: 'center', lineHeight: 13 },
-
-    // CTA Button
-    ctaButton: { 
-        marginTop: 16, 
-        backgroundColor: '#FD9A34', 
-        paddingVertical: 12, 
-        borderRadius: 25, 
-        alignItems: 'center' 
+    badgeCardFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        marginTop: 16,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#E0D6FF',
     },
-    ctaText: { color: '#fff', fontWeight: '600' },
+    badgeCardLink: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#6B46FF',
+        marginRight: 4,
+    },
 
     // Bottom Navigation
     bottomNav: {
