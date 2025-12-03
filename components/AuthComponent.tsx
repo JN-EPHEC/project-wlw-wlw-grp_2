@@ -4,7 +4,6 @@ import * as Google from 'expo-auth-session/providers/google';
 import { useRouter } from "expo-router";
 import * as WebBrowser from 'expo-web-browser';
 import {
-  // FacebookAuthProvider, // Décommenté quand Facebook Login sera prêt
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithCredential,
@@ -139,7 +138,7 @@ WebBrowser.maybeCompleteAuthSession();
         email: user.email,
         firstName: firstName,
         lastName: lastName,
-        birthDate: '', // À compléter par l'utilisateur dans son profil
+        birthDate: '', 
         createdAt: new Date(),
       }, { merge: true });
 
