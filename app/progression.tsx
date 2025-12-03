@@ -2,19 +2,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-
-interface Goal {
-    id: string;
-    title: string;
-    target: number;
-    current: number;
-    unit: string;
-    emoji: string;
-    color: string;
-}
+import { Goal, useProgress } from './ProgressContext';
 
 export default function ProgressionPage() {
     const [activeTab, setActiveTab] = useState<'progression' | 'objectifs'>('progression');
+    
+    // Utiliser le contexte de progression
+    const {
+        progressData,
+        goals,
+        addGoal,
+        updateGoal,
+        deleteGoal,
+        incrementGoal,
+        decrementGoal,
+    } = useProgress();
     
     // Modal pour ajouter/éditer un objectif
     const [isModalVisible, setIsModalVisible] = useState(false);
@@ -23,47 +25,6 @@ export default function ProgressionPage() {
     const [tempTarget, setTempTarget] = useState('');
     const [tempEmoji, setTempEmoji] = useState('🎯');
     const [tempColor, setTempColor] = useState('#6B46FF');
-
-    // États pour les objectifs
-    const [goals, setGoals] = useState<Goal[]>([
-        {
-            id: 'g1',
-            title: 'Vidéos regardées',
-            target: 10,
-            current: 6,
-            unit: 'vidéos',
-            emoji: '📺',
-            color: '#6B46FF'
-        },
-        {
-            id: 'g2',
-            title: 'Heures d\'étude',
-            target: 15,
-            current: 8,
-            unit: 'heures',
-            emoji: '⏱️',
-            color: '#FF9A2A'
-        },
-        {
-            id: 'g3',
-            title: 'Quiz complétés',
-            target: 5,
-            current: 5,
-            unit: 'quiz',
-            emoji: '✅',
-            color: '#4CAF50'
-        },
-    ]);
-
-    // Données de progression générale
-    const overallStats = {
-        level: 8,
-        currentXP: 2450,
-        nextLevelXP: 3000,
-        totalVideos: 45,
-        totalHours: 32,
-        streak: 7,
-    };
 
     const emojis = ['🎯', '📺', '📚', '⏱️', '✅', '🎓', '💪', '🔥', '⭐', '🏆'];
     const colors = [
@@ -108,19 +69,12 @@ export default function ProgressionPage() {
 
         if (editingGoal) {
             // Modifier l'objectif existant
-            setGoals(prevGoals =>
-                prevGoals.map(g =>
-                    g.id === editingGoal.id
-                        ? {
-                              ...g,
-                              title: tempTitle,
-                              target: Number(tempTarget),
-                              emoji: tempEmoji,
-                              color: tempColor,
-                          }
-                        : g
-                )
-            );
+            updateGoal(editingGoal.id, {
+                title: tempTitle,
+                target: Number(tempTarget),
+                emoji: tempEmoji,
+                color: tempColor,
+            });
         } else {
             // Créer un nouveau objectif
             const newGoal: Goal = {
@@ -132,14 +86,14 @@ export default function ProgressionPage() {
                 emoji: tempEmoji,
                 color: tempColor,
             };
-            setGoals(prevGoals => [...prevGoals, newGoal]);
+            addGoal(newGoal);
         }
 
         setIsModalVisible(false);
     };
 
     // Supprimer un objectif
-    const deleteGoal = (id: string) => {
+    const handleDeleteGoal = (id: string) => {
         Alert.alert(
             'Supprimer l\'objectif',
             'Êtes-vous sûr de vouloir supprimer cet objectif ?',
@@ -148,33 +102,9 @@ export default function ProgressionPage() {
                 {
                     text: 'Supprimer',
                     style: 'destructive',
-                    onPress: () => {
-                        setGoals(prevGoals => prevGoals.filter(g => g.id !== id));
-                    },
+                    onPress: () => deleteGoal(id),
                 },
             ]
-        );
-    };
-
-    // Incrémenter la progression d'un objectif
-    const incrementGoal = (id: string) => {
-        setGoals(prevGoals =>
-            prevGoals.map(g =>
-                g.id === id && g.current < g.target
-                    ? { ...g, current: g.current + 1 }
-                    : g
-            )
-        );
-    };
-
-    // Décrémenter la progression d'un objectif
-    const decrementGoal = (id: string) => {
-        setGoals(prevGoals =>
-            prevGoals.map(g =>
-                g.id === id && g.current > 0
-                    ? { ...g, current: g.current - 1 }
-                    : g
-            )
         );
     };
 
@@ -240,7 +170,7 @@ export default function ProgressionPage() {
                                 </View>
                                 <View style={styles.levelBadge}>
                                     <Text style={styles.levelBadgeText}>
-                                        Niveau {overallStats.level}
+                                        Niveau {progressData.level}
                                     </Text>
                                 </View>
                             </View>
@@ -251,8 +181,8 @@ export default function ProgressionPage() {
                                             styles.progressFill,
                                             {
                                                 width: `${
-                                                    (overallStats.currentXP /
-                                                        overallStats.nextLevelXP) *
+                                                    (progressData.currentXP /
+                                                        progressData.nextLevelXP) *
                                                     100
                                                 }%`,
                                             },
@@ -261,7 +191,7 @@ export default function ProgressionPage() {
                                 </View>
                             </View>
                             <Text style={styles.progressText}>
-                                {overallStats.currentXP} / {overallStats.nextLevelXP} XP
+                                {progressData.currentXP} / {progressData.nextLevelXP} XP
                             </Text>
                         </View>
 
@@ -270,21 +200,21 @@ export default function ProgressionPage() {
                             <View style={[styles.statCard, { backgroundColor: '#6B46FF' }]}>
                                 <Text style={styles.statEmoji}>📺</Text>
                                 <Text style={styles.statNumber}>
-                                    {overallStats.totalVideos}
+                                    {progressData.totalVideos}
                                 </Text>
                                 <Text style={styles.statLabel}>Vidéos vues</Text>
                             </View>
                             <View style={[styles.statCard, { backgroundColor: '#FF9A2A' }]}>
                                 <Text style={styles.statEmoji}>⏱️</Text>
                                 <Text style={styles.statNumber}>
-                                    {overallStats.totalHours}h
+                                    {progressData.totalHours}h
                                 </Text>
                                 <Text style={styles.statLabel}>D'étude</Text>
                             </View>
                             <View style={[styles.statCard, { backgroundColor: '#4CAF50' }]}>
                                 <Text style={styles.statEmoji}>🔥</Text>
                                 <Text style={styles.statNumber}>
-                                    {overallStats.streak}
+                                    {progressData.streak}
                                 </Text>
                                 <Text style={styles.statLabel}>Jours de suite</Text>
                             </View>
@@ -371,7 +301,7 @@ export default function ProgressionPage() {
                                                 />
                                             </Pressable>
                                             <Pressable
-                                                onPress={() => deleteGoal(item.id)}
+                                                onPress={() => handleDeleteGoal(item.id)}
                                                 style={styles.goalActionButton}
                                             >
                                                 <Ionicons
