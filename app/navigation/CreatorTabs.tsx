@@ -4,8 +4,9 @@ import React from 'react';
 import { Platform } from 'react-native';
 
 import Explore from '../(tabs)/explore';
-import CreatorHomePage from '../(tabs)/home';
+import HomeUser from '../(tabs)/homeuser';
 import Notifications from '../(tabs)/notifications';
+import UserProfileContentCreator from '../(tabs)/userprofile';
 
 
 export type TabMenuParamList = {
@@ -55,10 +56,10 @@ export default function CreatorTabs() {
         tabBarInactiveTintColor: '#B0B0B0',
       })}
     >
-      <Tab.Screen name="Notifications" component={Notifications} />
-      <Tab.Screen name="Explore" component={Explore} />
-      <Tab.Screen name="Home" component={CreatorHomePage} />
-
+  <Tab.Screen name="Home" component={HomeUser} />
+  <Tab.Screen name="Explore" component={Explore} />
+  <Tab.Screen name="Notifications" component={Notifications} />
+  <Tab.Screen name="Profile" component={UserProfileContentCreator} />
     </Tab.Navigator>
   );
 }
