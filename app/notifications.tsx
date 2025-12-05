@@ -1,31 +1,40 @@
+
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import React, { useEffect, useMemo, useState } from 'react';
+import { router } from 'expo-router';
+import React, { useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
   Pressable,
   RefreshControl,
+  SafeAreaView,
+  StatusBar,
   StyleSheet,
-  View
+  View,
 } from 'react-native';
+
+// 🎨 Palette SwipeSkills
+const COLORS = {
+  violetPrincipal: '#7459F0',    // Actions principales, CTA, navigation
+  orangeSecondaire: '#FBA31A',   // Actions secondaires, feedback positif, badges
+  bleuNuit: '#242A65',           // Titres, icônes sombres, contraste fort
+  blancCasse: '#F8F8F6',         // Arrière-plans clairs
+  gris: '#6B7280',               // Texte secondaire
+  grisClair: '#E5E7EB',          // Bordures
+  blanc: '#FFFFFF',              // Blanc pur
+};
 
 // Types
 type NotificationType = 
-  | 'message' 
-  | 'alert' 
-  | 'info' 
+  | 'new_video' 
   | 'course_update' 
   | 'progress' 
   | 'certificate' 
   | 'reminder' 
-  | 'question' 
-  | 'review' 
-  | 'milestone';
+  | 'followed_creator';
 
 type Priority = 'high' | 'normal' | 'low';
-type FilterType = 'all' | 'unread' | 'read';
-type SortType = 'date' | 'priority';
 
 interface Notification {
   id: string;
@@ -35,13 +44,12 @@ interface Notification {
   timestamp: string;
   read: boolean;
   priority: Priority;
+  creatorName?: string;
   courseId?: string;
   courseName?: string;
   actionUrl?: string;
   metadata?: {
     progress?: number;
-    studentCount?: number;
-    rating?: number;
   };
 }
 
@@ -49,15 +57,14 @@ interface Notification {
 const INITIAL_NOTIFICATIONS: Notification[] = [
   {
     id: '1',
-    type: 'course_update',
-    title: 'Nouveau contenu disponible',
-    message: 'Un nouveau module a été ajouté à "React Native Avancé"',
+    type: 'new_video',
+    title: 'Nouvelle vidéo disponible',
+    message: 'Jean Dupont a posté une nouvelle vidéo : "Les bases de React Native"',
     timestamp: '2024-01-20T10:30:00',
     read: false,
     priority: 'high',
-    courseId: 'course-123',
-    courseName: 'React Native Avancé',
-    actionUrl: '/courses/course-123',
+    creatorName: 'Jean Dupont',
+    actionUrl: '/videos/video-123',
   },
   {
     id: '2',
@@ -67,174 +74,50 @@ const INITIAL_NOTIFICATIONS: Notification[] = [
     timestamp: '2024-01-20T09:15:00',
     read: false,
     priority: 'normal',
-    courseId: 'course-456',
     courseName: 'TypeScript pour débutants',
     actionUrl: '/courses/course-456',
     metadata: { progress: 50 },
   },
   {
     id: '3',
-    type: 'certificate',
-    title: 'Certificat disponible',
-    message: 'Votre certificat de "JavaScript ES6" est prêt à télécharger',
+    type: 'followed_creator',
+    title: 'Nouveau contenu',
+    message: 'Marie Martin (créateur que vous suivez) a ajouté un module à "JavaScript ES6"',
     timestamp: '2024-01-19T14:20:00',
-    read: true,
+    read: false,
     priority: 'normal',
-    courseId: 'course-789',
+    creatorName: 'Marie Martin',
     courseName: 'JavaScript ES6',
-    actionUrl: '/certificates/cert-789',
+    actionUrl: '/courses/course-789',
   },
   {
     id: '4',
-    type: 'reminder',
-    title: 'Rappel de cours',
-    message: 'Vous n\'avez pas continué "Python Basics" depuis 7 jours',
-    timestamp: '2024-01-18T08:00:00',
-    read: false,
-    priority: 'low',
-    courseId: 'course-101',
-    courseName: 'Python Basics',
+    type: 'course_update',
+    title: 'Mise à jour de cours',
+    message: 'Un nouveau chapitre a été ajouté à "Python Avancé"',
+    timestamp: '2024-01-19T11:00:00',
+    read: true,
+    priority: 'normal',
+    courseName: 'Python Avancé',
     actionUrl: '/courses/course-101',
   },
   {
     id: '5',
-    type: 'question',
-    title: 'Nouvelle question',
-    message: 'Un étudiant a posé une question dans "React Hooks"',
-    timestamp: '2024-01-17T16:45:00',
+    type: 'certificate',
+    title: 'Certificat disponible 🏆',
+    message: 'Votre certificat de "React Hooks" est prêt à télécharger',
+    timestamp: '2024-01-18T16:45:00',
     read: true,
     priority: 'high',
-    courseId: 'course-202',
     courseName: 'React Hooks',
-    actionUrl: '/courses/course-202/discussions',
+    actionUrl: '/certificates/cert-202',
   },
 ];
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>(INITIAL_NOTIFICATIONS);
-  const [filter, setFilter] = useState<FilterType>('all');
-  const [sortBy, setSortBy] = useState<SortType>('date');
   const [refreshing, setRefreshing] = useState(false);
 
-  // ✨ FONCTIONNALITÉ 1 : Génération automatique de notifications d'avancement
-  // Simule la vérification des progrès de l'utilisateur
-  const checkUserProgress = () => {
-    // Dans une vraie app, tu récupérerais les données depuis Firebase
-    // Ici on simule avec des données mockées
-    
-    const mockCourses = [
-      { id: 'course-123', name: 'React Native Avancé', progress: 75 },
-      { id: 'course-456', name: 'TypeScript pour débutants', progress: 50 },
-      { id: 'course-789', name: 'JavaScript ES6', progress: 100 },
-    ];
-
-    mockCourses.forEach((course) => {
-      // Génère une notification pour les milestones (25%, 50%, 75%, 100%)
-      if (course.progress === 25 || course.progress === 50 || course.progress === 75) {
-        generateProgressNotification(course.id, course.name, course.progress);
-      }
-      
-      // Génère une notification de certificat à 100%
-      if (course.progress === 100) {
-        generateCertificateNotification(course.id, course.name);
-      }
-    });
-  };
-
-  // Génère une notification de progression
-  const generateProgressNotification = (courseId: string, courseName: string, progress: number) => {
-    const newNotification: Notification = {
-      id: `progress-${courseId}-${progress}-${Date.now()}`,
-      type: 'progress',
-      title: `Bravo ! Milestone atteint 🎯`,
-      message: `Vous avez complété ${progress}% de "${courseName}"`,
-      timestamp: new Date().toISOString(),
-      read: false,
-      priority: progress >= 75 ? 'high' : 'normal',
-      courseId,
-      courseName,
-      actionUrl: `/courses/${courseId}`,
-      metadata: { progress },
-    };
-
-    // Vérifie si cette notification n'existe pas déjà
-    const exists = notifications.some(
-      (n) => n.courseId === courseId && n.type === 'progress' && n.metadata?.progress === progress
-    );
-
-    if (!exists) {
-      setNotifications((prev) => [newNotification, ...prev]);
-    }
-  };
-
-  // Génère une notification de certificat
-  const generateCertificateNotification = (courseId: string, courseName: string) => {
-    const newNotification: Notification = {
-      id: `certificate-${courseId}-${Date.now()}`,
-      type: 'certificate',
-      title: '🏆 Certificat disponible !',
-      message: `Félicitations ! Votre certificat de "${courseName}" est prêt`,
-      timestamp: new Date().toISOString(),
-      read: false,
-      priority: 'high',
-      courseId,
-      courseName,
-      actionUrl: `/certificates/${courseId}`,
-    };
-
-    // Vérifie si cette notification n'existe pas déjà
-    const exists = notifications.some(
-      (n) => n.courseId === courseId && n.type === 'certificate'
-    );
-
-    if (!exists) {
-      setNotifications((prev) => [newNotification, ...prev]);
-    }
-  };
-
-  // Génère une notification de nouveau contenu
-  const generateNewContentNotification = (courseId: string, courseName: string, contentTitle: string) => {
-    const newNotification: Notification = {
-      id: `content-${courseId}-${Date.now()}`,
-      type: 'course_update',
-      title: '📚 Nouveau contenu disponible',
-      message: `"${contentTitle}" a été ajouté à "${courseName}"`,
-      timestamp: new Date().toISOString(),
-      read: false,
-      priority: 'high',
-      courseId,
-      courseName,
-      actionUrl: `/courses/${courseId}`,
-    };
-
-    setNotifications((prev) => [newNotification, ...prev]);
-  };
-
-  // Génère une notification de rappel si inactif
-  const generateReminderNotification = (courseId: string, courseName: string, daysSinceLastActivity: number) => {
-    const newNotification: Notification = {
-      id: `reminder-${courseId}-${Date.now()}`,
-      type: 'reminder',
-      title: '⏰ Rappel de cours',
-      message: `Vous n'avez pas continué "${courseName}" depuis ${daysSinceLastActivity} jours`,
-      timestamp: new Date().toISOString(),
-      read: false,
-      priority: 'low',
-      courseId,
-      courseName,
-      actionUrl: `/courses/${courseId}`,
-    };
-
-    setNotifications((prev) => [newNotification, ...prev]);
-  };
-
-  // Simule la vérification au chargement
-  useEffect(() => {
-    // Dans une vraie app, tu écouterais Firebase ici
-    // checkUserProgress();
-  }, []);
-
-  // Fonctions de gestion
   const markAsRead = (id: string) => {
     setNotifications((prev) =>
       prev.map((notif) => (notif.id === id ? { ...notif, read: true } : notif))
@@ -262,48 +145,17 @@ export default function NotificationsPage() {
     );
   };
 
-  const clearAll = () => {
-    Alert.alert(
-      'Tout supprimer',
-      'Êtes-vous sûr de vouloir supprimer toutes les notifications ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Tout supprimer',
-          style: 'destructive',
-          onPress: () => setNotifications([]),
-        },
-      ]
-    );
-  };
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    // Simule un chargement
-    setTimeout(() => {
-      setRefreshing(false);
-      // checkUserProgress(); // Vérifie les nouveaux progrès
-    }, 1500);
-  };
-
-  // ✨ FONCTIONNALITÉ 2 : Navigation vers les cours
   const handleNotificationPress = (notification: Notification) => {
-    // Marque comme lu automatiquement
     markAsRead(notification.id);
 
-    // Navigation vers le cours ou la page concernée
     if (notification.actionUrl) {
-      // Dans une vraie app avec expo-router :
-      // router.push(notification.actionUrl);
-      
-      // Pour le moment, on affiche juste une alerte
       Alert.alert(
-        'Navigation',
-        `Redirection vers : ${notification.actionUrl}\n\nCours : ${notification.courseName}`,
+        notification.title,
+        `Redirection vers : ${notification.courseName || 'Contenu'}`,
         [
-          { text: 'OK' },
+          { text: 'Annuler' },
           {
-            text: 'Voir le cours',
+            text: 'Voir',
             onPress: () => {
               // router.push(notification.actionUrl);
               console.log('Navigation vers:', notification.actionUrl);
@@ -314,29 +166,21 @@ export default function NotificationsPage() {
     }
   };
 
-  // Filtrage et tri
-  const filteredAndSortedNotifications = useMemo(() => {
-    // Filtrage
-    let filtered = notifications;
-    if (filter === 'unread') {
-      filtered = notifications.filter((n) => !n.read);
-    } else if (filter === 'read') {
-      filtered = notifications.filter((n) => n.read);
-    }
+  const onRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 1500);
+  };
 
-    // Tri
-    return [...filtered].sort((a, b) => {
-      if (sortBy === 'date') {
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      }
-      const priorityOrder: Record<Priority, number> = { high: 3, normal: 2, low: 1 };
-      return priorityOrder[b.priority] - priorityOrder[a.priority];
+  const sortedNotifications = useMemo(() => {
+    return [...notifications].sort((a, b) => {
+      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
     });
-  }, [notifications, filter, sortBy]);
+  }, [notifications]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  // Fonctions utilitaires
   const formatTimestamp = (timestamp: string): string => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -352,212 +196,151 @@ export default function NotificationsPage() {
 
   const getTypeIcon = (type: NotificationType): string => {
     const icons: Record<NotificationType, string> = {
-      message: '💬',
-      alert: '⚠️',
-      info: 'ℹ️',
+      new_video: '🎥',
       course_update: '📚',
       progress: '🎯',
       certificate: '🏆',
       reminder: '⏰',
-      question: '❓',
-      review: '⭐',
-      milestone: '🎉',
+      followed_creator: '👤',
     };
     return icons[type] || '📢';
   };
 
-  const getPriorityColor = (priority: Priority): string => {
-    switch (priority) {
-      case 'high':
-        return '#ef4444';
-      case 'normal':
-        return '#3b82f6';
-      case 'low':
-        return '#6b7280';
-      default:
-        return '#6b7280';
-    }
-  };
-
-  const getPriorityLabel = (priority: Priority): string => {
-    switch (priority) {
-      case 'high':
-        return 'Urgent';
-      case 'normal':
-        return 'Normal';
-      case 'low':
-        return 'Faible';
-    }
-  };
-
-  // Render functions
+  // Render du header
   const renderHeader = () => (
-    <View style={styles.header}>
-      <View style={styles.headerTop}>
-        <View style={styles.headerLeft}>
-          <ThemedText type="title">🔔 Notifications</ThemedText>
-          <ThemedText style={styles.subtitle}>
-            {unreadCount > 0 ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : 'Tout est lu'}
-          </ThemedText>
-        </View>
-        {unreadCount > 0 && (
-          <View style={styles.badge}>
-            <ThemedText style={styles.badgeText}>{unreadCount}</ThemedText>
-          </View>
-        )}
-      </View>
-
-      {/* Actions principales */}
-      <View style={styles.actions}>
-        <Pressable
-          style={[styles.button, styles.buttonPrimary, unreadCount === 0 && styles.buttonDisabled]}
-          onPress={markAllAsRead}
-          disabled={unreadCount === 0}
+    <View style={styles.headerContainer}>
+      {/* Top bar avec navigation */}
+      <View style={styles.topBar}>
+        {/* Bouton retour (ID036) */}
+        <Pressable 
+          style={styles.backButton}
+          onPress={() => router.back()}
         >
-          <ThemedText style={styles.buttonText}>✓ Tout marquer lu</ThemedText>
+          <ThemedText style={styles.backIcon}>←</ThemedText>
         </Pressable>
 
-        <Pressable
-          style={[styles.button, styles.buttonDanger, notifications.length === 0 && styles.buttonDisabled]}
-          onPress={clearAll}
-          disabled={notifications.length === 0}
-        >
-          <ThemedText style={styles.buttonText}>🗑️ Tout supprimer</ThemedText>
-        </Pressable>
-      </View>
-
-      {/* Filtres */}
-      <View style={styles.filters}>
-        <ThemedText type="defaultSemiBold" style={styles.filterLabel}>
-          Filtres:
+        {/* Titre H1 */}
+        <ThemedText style={styles.headerTitle}>
+          Notifications
         </ThemedText>
-        <View style={styles.filterButtons}>
-          <Pressable
-            style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
-            onPress={() => setFilter('all')}
-          >
-            <ThemedText style={[styles.filterButtonText, filter === 'all' && styles.filterButtonTextActive]}>
-              Toutes ({notifications.length})
-            </ThemedText>
-          </Pressable>
 
-          <Pressable
-            style={[styles.filterButton, filter === 'unread' && styles.filterButtonActive]}
-            onPress={() => setFilter('unread')}
-          >
-            <ThemedText style={[styles.filterButtonText, filter === 'unread' && styles.filterButtonTextActive]}>
-              Non lues ({unreadCount})
-            </ThemedText>
-          </Pressable>
-
-          <Pressable
-            style={[styles.filterButton, filter === 'read' && styles.filterButtonActive]}
-            onPress={() => setFilter('read')}
-          >
-            <ThemedText style={[styles.filterButtonText, filter === 'read' && styles.filterButtonTextActive]}>
-              Lues ({notifications.length - unreadCount})
-            </ThemedText>
-          </Pressable>
-        </View>
+        {/* Bouton Messages (ID040, ID193) */}
+        <Pressable 
+          style={styles.inboxButton}
+          onPress={() => {
+            // router.push('/messages');
+            Alert.alert('Messages', 'Redirection vers la page Messages');
+          }}
+        >
+          <ThemedText style={styles.inboxIcon}>📨</ThemedText>
+          {/* Badge orange secondaire pour feedback positif */}
+          <View style={styles.inboxBadge}>
+            <ThemedText style={styles.inboxBadgeText}>3</ThemedText>
+          </View>
+        </Pressable>
       </View>
 
-      {/* Tri */}
-      <View style={styles.sortContainer}>
-        <ThemedText style={styles.sortLabel}>Trier par:</ThemedText>
-        <View style={styles.sortButtons}>
-          <Pressable
-            style={[styles.sortButton, sortBy === 'date' && styles.sortButtonActive]}
-            onPress={() => setSortBy('date')}
-          >
-            <ThemedText style={[styles.sortButtonText, sortBy === 'date' && styles.sortButtonTextActive]}>
-              Date
-            </ThemedText>
-          </Pressable>
-
-          <Pressable
-            style={[styles.sortButton, sortBy === 'priority' && styles.sortButtonActive]}
-            onPress={() => setSortBy('priority')}
-          >
-            <ThemedText style={[styles.sortButtonText, sortBy === 'priority' && styles.sortButtonTextActive]}>
-              Priorité
-            </ThemedText>
-          </Pressable>
-        </View>
+      {/* Résumé avec Small typography */}
+      <View style={styles.summaryContainer}>
+        <ThemedText style={styles.summaryText}>
+          {unreadCount > 0 
+            ? `${unreadCount} notification${unreadCount > 1 ? 's' : ''} non lue${unreadCount > 1 ? 's' : ''}`
+            : 'Toutes vos notifications sont lues'}
+        </ThemedText>
       </View>
+
+      {/* CTA violet principal */}
+      {unreadCount > 0 && (
+        <Pressable
+          style={styles.markAllButton}
+          onPress={markAllAsRead}
+        >
+          <ThemedText style={styles.markAllButtonText}>
+            ✓ Tout marquer comme lu
+          </ThemedText>
+        </Pressable>
+      )}
     </View>
   );
 
+  // Render d'une notification
   const renderNotification = ({ item }: { item: Notification }) => (
     <Pressable 
       style={[styles.notifCard, !item.read && styles.notifCardUnread]}
       onPress={() => handleNotificationPress(item)}
     >
-      <View style={styles.notifHeader}>
-        <View style={styles.notifIconContainer}>
-          <ThemedText style={styles.notifIcon}>{getTypeIcon(item.type)}</ThemedText>
-        </View>
-        <View style={styles.notifContent}>
-          <View style={styles.notifTitleRow}>
-            <ThemedText type="defaultSemiBold" style={[styles.notifTitle, !item.read && styles.notifTitleUnread]}>
-              {item.title}
-            </ThemedText>
-            <View style={[styles.priorityBadge, { borderColor: getPriorityColor(item.priority) }]}>
-              <ThemedText style={[styles.priorityText, { color: getPriorityColor(item.priority) }]}>
-                {getPriorityLabel(item.priority)}
-              </ThemedText>
-            </View>
+      {/* Indicateur non lu - violet principal */}
+      {!item.read && <View style={styles.unreadIndicator} />}
+
+      <View style={styles.notifContent}>
+        <View style={styles.notifRow}>
+          {/* Icône */}
+          <View style={styles.notifIconContainer}>
+            <ThemedText style={styles.notifIcon}>{getTypeIcon(item.type)}</ThemedText>
           </View>
 
-          <ThemedText style={styles.notifMessage}>{item.message}</ThemedText>
+          <View style={styles.notifTextContainer}>
+            {/* Titre H2 - Semi-bold */}
+            <ThemedText style={[styles.notifTitle, !item.read && styles.notifTitleUnread]}>
+              {item.title}
+            </ThemedText>
 
-          {item.metadata?.progress !== undefined && (
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${item.metadata.progress}%` }]} />
+            {/* Message Body - Regular */}
+            <ThemedText style={styles.notifMessage}>
+              {item.message}
+            </ThemedText>
+
+            {/* Barre de progression - Violet principal */}
+            {item.metadata?.progress !== undefined && (
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBar}>
+                  <View 
+                    style={[
+                      styles.progressFill, 
+                      { width: `${item.metadata.progress}%` }
+                    ]} 
+                  />
+                </View>
+                <ThemedText style={styles.progressText}>
+                  {item.metadata.progress}%
+                </ThemedText>
               </View>
-              <ThemedText style={styles.progressText}>{item.metadata.progress}%</ThemedText>
-            </View>
-          )}
+            )}
 
-          {/* ✨ NOUVEAU : Bouton d'action rapide */}
-          {item.actionUrl && (
+            {/* Timestamp Small */}
+            <ThemedText style={styles.timestamp}>
+              {formatTimestamp(item.timestamp)}
+            </ThemedText>
+          </View>
+        </View>
+
+        {/* Actions secondaires */}
+        <View style={styles.actionsRow}>
+          {!item.read && (
             <Pressable 
-              style={styles.actionUrlButton}
-              onPress={() => handleNotificationPress(item)}
+              style={styles.actionButton}
+              onPress={(e) => {
+                e.stopPropagation();
+                markAsRead(item.id);
+              }}
             >
-              <ThemedText style={styles.actionUrlButtonText}>
-                {item.type === 'certificate' ? '📥 Télécharger' : '👉 Voir le cours'}
+              <ThemedText style={styles.actionButtonText}>
+                ✓ Lu
               </ThemedText>
             </Pressable>
           )}
 
-          <View style={styles.notifFooter}>
-            <ThemedText style={styles.timestamp}>{formatTimestamp(item.timestamp)}</ThemedText>
-
-            <View style={styles.notifActions}>
-              {!item.read && (
-                <Pressable 
-                  style={styles.actionButton} 
-                  onPress={(e) => {
-                    e.stopPropagation(); // Empêche la navigation
-                    markAsRead(item.id);
-                  }}
-                >
-                  <ThemedText style={styles.actionButtonText}>✓ Marquer lu</ThemedText>
-                </Pressable>
-              )}
-
-              <Pressable 
-                style={styles.actionButton} 
-                onPress={(e) => {
-                  e.stopPropagation(); // Empêche la navigation
-                  deleteNotification(item.id);
-                }}
-              >
-                <ThemedText style={[styles.actionButtonText, styles.actionButtonTextDanger]}>🗑️ Supprimer</ThemedText>
-              </Pressable>
-            </View>
-          </View>
+          <Pressable 
+            style={styles.actionButtonDelete}
+            onPress={(e) => {
+              e.stopPropagation();
+              deleteNotification(item.id);
+            }}
+          >
+            <ThemedText style={styles.deleteText}>
+              🗑️
+            </ThemedText>
+          </Pressable>
         </View>
       </View>
     </Pressable>
@@ -566,280 +349,298 @@ export default function NotificationsPage() {
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <ThemedText style={styles.emptyIcon}>🔔</ThemedText>
-      <ThemedText type="subtitle" style={styles.emptyText}>
+      <ThemedText style={styles.emptyText}>
         Aucune notification
+      </ThemedText>
+      <ThemedText style={styles.emptySubtext}>
+        Vous serez notifié des nouveaux contenus
       </ThemedText>
     </View>
   );
 
   return (
-    <ThemedView style={styles.container}>
-      <FlatList
-        data={filteredAndSortedNotifications}
-        keyExtractor={(item) => item.id}
-        renderItem={renderNotification}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        contentContainerStyle={styles.listContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      />
-    </ThemedView>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" />
+      <ThemedView style={styles.container}>
+        <FlatList
+          data={sortedNotifications}
+          keyExtractor={(item) => item.id}
+          renderItem={renderNotification}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={renderEmpty}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh}
+              tintColor={COLORS.violetPrincipal}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        />
+      </ThemedView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.blanc,
+  },
   container: {
     flex: 1,
+    backgroundColor: COLORS.blancCasse,
   },
   listContent: {
-    padding: 16,
     paddingBottom: 32,
   },
-  header: {
-    gap: 16,
-    marginBottom: 16,
+  
+  // Header
+  headerContainer: {
+    backgroundColor: COLORS.blanc,
+    paddingTop: 8,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.grisClair,
   },
-  headerTop: {
+  topBar: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  headerLeft: {
-    flex: 1,
-    gap: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  badge: {
-    backgroundColor: '#ef4444',
-    borderRadius: 20,
-    minWidth: 32,
-    height: 32,
+  backButton: {
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    borderRadius: 20,
+    backgroundColor: COLORS.blancCasse,
   },
-  badgeText: {
-    color: '#fff',
-    fontSize: 14,
+  backIcon: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.bleuNuit,
+  },
+  // H1 écran - 28-32px, 700 bold
+  headerTitle: {
+    fontSize: 30,
+    fontWeight: '700',
+    color: COLORS.bleuNuit,
+    fontFamily: 'Poppins',
+  },
+  inboxButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 20,
+    backgroundColor: COLORS.blancCasse,
+    position: 'relative',
+  },
+  inboxIcon: {
+    fontSize: 20,
+  },
+  // Badge orange secondaire (feedback positif)
+  inboxBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: COLORS.orangeSecondaire,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: COLORS.blanc,
+  },
+  inboxBadgeText: {
+    color: COLORS.blanc,
+    fontSize: 10,
     fontWeight: 'bold',
   },
-  actions: {
-    flexDirection: 'row',
-    gap: 8,
+  summaryContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  button: {
-    flex: 1,
+  // Small - 12-13px, 400 medium
+  summaryText: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: COLORS.gris,
+    fontFamily: 'Poppins',
+  },
+  // CTA violet principal
+  markAllButton: {
+    marginHorizontal: 16,
+    marginTop: 8,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  buttonPrimary: {
-    backgroundColor: '#3b82f6',
-  },
-  buttonDanger: {
-    backgroundColor: '#ef4444',
-  },
-  buttonDisabled: {
-    backgroundColor: '#d1d5db',
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  filters: {
-    gap: 8,
-  },
-  filterLabel: {
-    fontSize: 14,
-  },
-  filterButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  filterButton: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    alignItems: 'center',
-  },
-  filterButtonActive: {
-    backgroundColor: '#3b82f6',
-  },
-  filterButtonText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  filterButtonTextActive: {
-    color: '#fff',
-  },
-  sortContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  sortLabel: {
-    fontSize: 14,
-    color: '#6b7280',
-  },
-  sortButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  sortButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-  },
-  sortButtonActive: {
-    backgroundColor: '#3b82f6',
-  },
-  sortButtonText: {
-    fontSize: 13,
-  },
-  sortButtonTextActive: {
-    color: '#fff',
-  },
-  separator: {
-    height: 12,
-  },
-  notifCard: {
-    backgroundColor: 'rgba(0,0,0,0.02)',
+    backgroundColor: COLORS.violetPrincipal,
     borderRadius: 12,
-    padding: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: 'transparent',
+    alignItems: 'center',
+  },
+  markAllButtonText: {
+    color: COLORS.blanc,
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: 'Poppins',
+  },
+
+  // Separator
+  separator: {
+    height: 1,
+    backgroundColor: COLORS.grisClair,
+    marginHorizontal: 16,
+  },
+
+  // Notification Card
+  notifCard: {
+    backgroundColor: COLORS.blanc,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    position: 'relative',
   },
   notifCardUnread: {
-    backgroundColor: 'rgba(59, 130, 246, 0.05)',
-    borderLeftColor: '#3b82f6',
+    backgroundColor: '#F5F1FF', // Violet très clair
   },
-  notifHeader: {
+  // Indicateur violet principal
+  unreadIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: COLORS.violetPrincipal,
+  },
+  notifContent: {
+    gap: 12,
+  },
+  notifRow: {
     flexDirection: 'row',
     gap: 12,
   },
   notifIconContainer: {
     width: 40,
     height: 40,
+    backgroundColor: COLORS.blancCasse,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   notifIcon: {
-    fontSize: 24,
+    fontSize: 20,
   },
-  notifContent: {
+  notifTextContainer: {
     flex: 1,
-    gap: 8,
+    gap: 6,
   },
-  notifTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
+  // H2 - 20-22px, 600 semi-bold
   notifTitle: {
-    flex: 1,
-    fontSize: 15,
+    fontSize: 20,
+    fontWeight: '600',
+    color: COLORS.bleuNuit,
+    lineHeight: 26,
+    fontFamily: 'Poppins',
   },
   notifTitleUnread: {
     fontWeight: '700',
   },
-  priorityBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  priorityText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
+  // Body - 14-16px, 400/500 regular
   notifMessage: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#4b5563',
+    fontSize: 15,
+    fontWeight: '400',
+    color: COLORS.gris,
+    lineHeight: 22,
+    fontFamily: 'Poppins',
   },
+  // Small - 12-13px, 400 medium
+  timestamp: {
+    fontSize: 12,
+    fontWeight: '400',
+    color: COLORS.gris,
+    marginTop: 2,
+    fontFamily: 'Poppins',
+  },
+
+  // Progress bar - Violet principal
   progressContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginTop: 8,
   },
   progressBar: {
     flex: 1,
     height: 6,
-    backgroundColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: COLORS.grisClair,
     borderRadius: 3,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#10b981',
+    backgroundColor: COLORS.violetPrincipal,
     borderRadius: 3,
   },
   progressText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#10b981',
+    color: COLORS.violetPrincipal,
+    minWidth: 35,
+    fontFamily: 'Poppins',
   },
-  // ✨ NOUVEAU : Styles pour le bouton d'action
-  actionUrlButton: {
-    backgroundColor: '#3b82f6',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  actionUrlButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  notifFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  timestamp: {
-    fontSize: 12,
-    color: '#9ca3af',
-  },
-  notifActions: {
+
+  // Actions
+  actionsRow: {
     flexDirection: 'row',
     gap: 8,
+    marginLeft: 52,
   },
   actionButton: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: COLORS.blancCasse,
+    borderRadius: 8,
   },
   actionButtonText: {
     fontSize: 12,
-    color: '#3b82f6',
     fontWeight: '500',
+    color: COLORS.bleuNuit,
+    fontFamily: 'Poppins',
   },
-  actionButtonTextDanger: {
-    color: '#ef4444',
+  actionButtonDelete: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
+  deleteText: {
+    fontSize: 16,
+  },
+
+  // Empty state
   emptyContainer: {
-    paddingVertical: 48,
+    paddingVertical: 80,
     alignItems: 'center',
     gap: 12,
   },
   emptyIcon: {
-    fontSize: 48,
+    fontSize: 64,
     opacity: 0.3,
   },
   emptyText: {
-    color: '#9ca3af',
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.gris,
+    fontFamily: 'Poppins',
+  },
+  emptySubtext: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: COLORS.gris,
+    fontFamily: 'Poppins',
   },
 });
