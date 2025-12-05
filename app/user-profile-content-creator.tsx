@@ -184,7 +184,7 @@ export default function UserProfileContentCreator() {
 
             {/* Bottom Navigation */}
             <View style={styles.bottomNav}>
-                <a href ="/homeuser">
+                <a href ="/home">
                 <Pressable style={styles.navItem}>
                     <IconSymbol name="house" size={24} color="#999" />
                     <ThemedText style={styles.navText}>Accueil</ThemedText>
