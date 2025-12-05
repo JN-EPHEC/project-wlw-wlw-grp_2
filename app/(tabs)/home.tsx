@@ -171,31 +171,39 @@ export default function CreatorHomePage() {
 
       {/* Navigation en bas */}
       <View style={styles.bottomNav}>
+        <a href = "/homeuser">
         <TouchableOpacity style={styles.navItem}>
           <Ionicons name="home" size={28} color="#6A4EFB" />
           <Text style={[styles.navText, { color: '#6A4EFB' }]}>Accueil</Text>
         </TouchableOpacity>
+        </a>
 
+        <a href="/search">
         <TouchableOpacity style={styles.navItem}>
           <Ionicons name="search" size={28} color="#B0B0B0" />
           <Text style={styles.navText}>Explorer</Text>
         </TouchableOpacity>
+        </a>
 
         <TouchableOpacity style={styles.navItemCenter}>
           <View style={styles.addButton}>
             <Ionicons name="add" size={32} color="#FD9A34" />
           </View>
         </TouchableOpacity>
-
+        
+        <a href = "../notifications">
         <TouchableOpacity style={styles.navItem}>
           <Ionicons name="chatbox-outline" size={26} color="#B0B0B0" />
           <Text style={styles.navText}>Notifications</Text>
         </TouchableOpacity>
+        </a>
 
+        <a href = "../user-profile-content-creator">
         <TouchableOpacity style={styles.navItem}>
           <Ionicons name="person-outline" size={28} color="#B0B0B0" />
           <Text style={styles.navText}>Profil</Text>
         </TouchableOpacity>
+        </a>
       </View>
     </View>
   );
