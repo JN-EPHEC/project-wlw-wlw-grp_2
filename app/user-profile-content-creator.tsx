@@ -184,15 +184,19 @@ export default function UserProfileContentCreator() {
 
             {/* Bottom Navigation */}
             <View style={styles.bottomNav}>
+                <a href ="/homeuser">
                 <Pressable style={styles.navItem}>
                     <IconSymbol name="house" size={24} color="#999" />
                     <ThemedText style={styles.navText}>Accueil</ThemedText>
                 </Pressable>
-                
+                </a>
+
+                <a href = "explore">
                 <Pressable style={styles.navItem}>
                     <IconSymbol name="magnifyingglass" size={24} color="#999" />
                     <ThemedText style={styles.navText}>Explorer</ThemedText>
                 </Pressable>
+                </a>
                 
                 <Pressable style={styles.navItemActive}>
                     <View style={styles.plusButton}>
@@ -200,15 +204,19 @@ export default function UserProfileContentCreator() {
                     </View>
                 </Pressable>
                 
+                <a href = "notifications">
                 <Pressable style={styles.navItem}>
                     <IconSymbol name="bell" size={24} color="#999" />
                     <ThemedText style={styles.navText}>Notifications</ThemedText>
                 </Pressable>
-                
+                </a>
+
+                <a href = "profil-content-creator">
                 <Pressable style={styles.navItem}>
                     <IconSymbol name="person" size={24} color="#6B46FF" />
                     <ThemedText style={[styles.navText, { color: '#6B46FF' }]}>Profil</ThemedText>
                 </Pressable>
+                </a>
             </View>
         </ThemedView>
     );
