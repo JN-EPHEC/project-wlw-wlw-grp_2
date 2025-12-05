@@ -171,7 +171,7 @@ export default function CreatorHomePage() {
 
       {/* Navigation en bas */}
       <View style={styles.bottomNav}>
-        <a href = "/homeuser">
+        <a href = "/home">
         <TouchableOpacity style={styles.navItem}>
           <Ionicons name="home" size={28} color="#6A4EFB" />
           <Text style={[styles.navText, { color: '#6A4EFB' }]}>Accueil</Text>
