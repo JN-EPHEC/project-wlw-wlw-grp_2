@@ -191,7 +191,7 @@ export default function UserProfileContentCreator() {
                 </Pressable>
                 </a>
 
-                <a href = "explore">
+                <a href = "search">
                 <Pressable style={styles.navItem}>
                     <IconSymbol name="magnifyingglass" size={24} color="#999" />
                     <ThemedText style={styles.navText}>Explorer</ThemedText>
