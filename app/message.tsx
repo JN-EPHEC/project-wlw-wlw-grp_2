@@ -1,97 +1,192 @@
-// app/messages.tsx
-// Page de messages/inbox - SwipeSkills
-// ✅ Palette de couleurs officielle SwipeSkills
-// ✅ Typographie Poppins avec tailles et poids corrects
-
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    FlatList,
-    Image,
-    Pressable,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    TextInput,
-    View,
+  FlatList,
+  Image,
+  Pressable,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  TextInput,
+  View,
 } from 'react-native';
 
 // 🎨 Palette SwipeSkills
 const COLORS = {
-  violetPrincipal: '#7459F0',    // Actions principales, CTA, navigation
-  orangeSecondaire: '#FBA31A',   // Actions secondaires, feedback positif, badges
-  bleuNuit: '#242A65',           // Titres, icônes sombres, contraste fort
-  blancCasse: '#F8F8F6',         // Arrière-plans clairs
-  gris: '#6B7280',               // Texte secondaire
-  grisClair: '#E5E7EB',          // Bordures
-  blanc: '#FFFFFF',              // Blanc pur
-  vert: '#10B981',               // En ligne
+  violetPrincipal: '#7459F0',
+  orangeSecondaire: '#FBA31A',
+  bleuNuit: '#242A65',
+  blancCasse: '#F8F8F6',
+  gris: '#6B7280',
+  grisClair: '#E5E7EB',
+  blanc: '#FFFFFF',
+  vert: '#10B981',
 };
 
 // Types
-interface Message {
+type ConversationType = 'user_to_user' | 'creator_to_user' | 'system';
+
+interface Conversation {
   id: string;
   userName: string;
-  userAvatar?: string;
+  userAvatar: string; // URL de la photo
+  userRole?: 'creator' | 'user' | 'system'; // Rôle de l'interlocuteur
   lastMessage: string;
   timestamp: string;
   unread: boolean;
   unreadCount?: number;
+  type: ConversationType;
+  hasImage?: boolean; // Si le dernier message contient une image
+  badge?: string; // Badge spécial (ex: "Nouvelle réalisation")
+  verified?: boolean; // Si c'est un créateur vérifié
 }
 
-// Données mockées
-const INITIAL_MESSAGES: Message[] = [
+// 🎭 Données mockées diversifiées avec photos de profil
+const INITIAL_CONVERSATIONS: Conversation[] = [
+  // 1. Créateur → Utilisateur
   {
     id: '1',
-    userName: 'Jean Dupont',
-    lastMessage: 'Merci pour la réponse ! C\'était très clair 👍',
-    timestamp: '2024-01-20T14:30:00',
-    unread: true,
-    unreadCount: 2,
-  },
-  {
-    id: '2',
-    userName: 'Marie Martin',
-    lastMessage: 'Quand est-ce que le nouveau cours sera disponible ?',
-    timestamp: '2024-01-20T10:15:00',
+    userName: 'Claire Petit',
+    userAvatar: 'https://i.pravatar.cc/150?img=5',
+    userRole: 'creator',
+    lastMessage: 'votre experte excel a posté une nouvelle vidéo',
+    timestamp: '2024-01-20T16:30:00',
     unread: true,
     unreadCount: 1,
+    type: 'creator_to_user',
+    verified: true,
   },
+  
+  // 2. Système (notifications de progression)
+  {
+    id: '2',
+    userName: 'Félicitations',
+    userAvatar: 'system', // Icône système
+    userRole: 'system',
+    lastMessage: 'Vous avez atteint le niveau 4.',
+    timestamp: '2024-01-20T13:00:00',
+    unread: false,
+    type: 'system',
+  },
+  
+  // 3. Système (achievement avec badge)
   {
     id: '3',
-    userName: 'Pierre Dubois',
-    lastMessage: 'D\'accord, je vais essayer ça. Merci !',
-    timestamp: '2024-01-19T16:45:00',
+    userName: 'Plus que 2 vidéos',
+    userAvatar: 'achievement',
+    userRole: 'system',
+    lastMessage: 'pour débloquer \'Développeur Python!\'',
+    timestamp: '2024-01-20T08:00:00',
     unread: false,
+    type: 'system',
+    badge: 'Nouvelle réalisation',
   },
+  
+  // 4. Créateur → Utilisateur (demande d'abonnement)
   {
     id: '4',
-    userName: 'Sophie Laurent',
-    lastMessage: 'Super cours ! J\'ai beaucoup appris',
-    timestamp: '2024-01-19T09:20:00',
+    userName: 'Marc Leroy',
+    userAvatar: 'https://i.pravatar.cc/150?img=12',
+    userRole: 'creator',
+    lastMessage: 'vous a envoyé une demande d\'abonnement.',
+    timestamp: '2024-01-19T18:45:00',
     unread: false,
+    type: 'creator_to_user',
+    verified: true,
   },
+  
+  // 5. Utilisateur ↔ Utilisateur (discussion entre apprenants)
   {
     id: '5',
-    userName: 'Lucas Bernard',
-    lastMessage: 'Je n\'arrive pas à télécharger le certificat',
-    timestamp: '2024-01-18T11:30:00',
+    userName: 'Aïcha Benali',
+    userAvatar: 'https://i.pravatar.cc/150?img=47',
+    userRole: 'user',
+    lastMessage: 'Tu as réussi l\'exercice 3 ? Je bloque dessus 😅',
+    timestamp: '2024-01-19T15:20:00',
+    unread: true,
+    unreadCount: 3,
+    type: 'user_to_user',
+  },
+  
+  // 6. Créateur → Utilisateur (réponse à une question)
+  {
+    id: '6',
+    userName: 'Léo Traoré',
+    userAvatar: 'https://i.pravatar.cc/150?img=14',
+    userRole: 'creator',
+    lastMessage: 'Bonne question ! Je t\'explique : utilise map() plutôt que forEach() ici',
+    timestamp: '2024-01-19T11:30:00',
     unread: false,
+    type: 'creator_to_user',
+    verified: true,
+  },
+  
+  // 7. Utilisateur ↔ Utilisateur (avec image)
+  {
+    id: '7',
+    userName: 'Inès El Amrani',
+    userAvatar: 'https://i.pravatar.cc/150?img=31',
+    userRole: 'user',
+    lastMessage: '📸 Photo',
+    timestamp: '2024-01-18T20:15:00',
+    unread: false,
+    type: 'user_to_user',
+    hasImage: true,
+  },
+  
+  // 8. Créateur → Utilisateur (annonce de live)
+  {
+    id: '8',
+    userName: 'Karim Nguyen',
+    userAvatar: 'https://i.pravatar.cc/150?img=68',
+    userRole: 'creator',
+    lastMessage: '🔴 LIVE demain à 19h : Session de code en direct !',
+    timestamp: '2024-01-18T14:00:00',
+    unread: true,
+    unreadCount: 1,
+    type: 'creator_to_user',
+    verified: true,
+  },
+  
+  // 9. Utilisateur ↔ Utilisateur (groupe d'étude)
+  {
+    id: '9',
+    userName: 'Zara Patel',
+    userAvatar: 'https://i.pravatar.cc/150?img=43',
+    userRole: 'user',
+    lastMessage: 'On se retrouve sur Discord pour réviser ?',
+    timestamp: '2024-01-17T16:40:00',
+    unread: false,
+    type: 'user_to_user',
+  },
+  
+  // 10. Créateur → Utilisateur (feedback)
+  {
+    id: '10',
+    userName: 'Noah Kowalski',
+    userAvatar: 'https://i.pravatar.cc/150?img=51',
+    userRole: 'creator',
+    lastMessage: 'Excellent travail sur ton projet ! Continue comme ça 💪',
+    timestamp: '2024-01-17T09:20:00',
+    unread: false,
+    type: 'creator_to_user',
+    verified: true,
   },
 ];
 
 export default function MessagesPage() {
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [conversations, setConversations] = useState<Conversation[]>(INITIAL_CONVERSATIONS);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredMessages = messages.filter((msg) =>
-    msg.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    msg.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredConversations = conversations.filter((conv) =>
+    conv.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    conv.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalUnread = messages.reduce((sum, msg) => sum + (msg.unreadCount || 0), 0);
+  const unreadCount = conversations.filter(c => c.unread).length;
+  const hasUnread = unreadCount > 0;
 
   const formatTimestamp = (timestamp: string): string => {
     const date = new Date(timestamp);
@@ -99,24 +194,35 @@ export default function MessagesPage() {
     const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
 
     if (diffInHours < 1) return "À l'instant";
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    }
+    if (diffInHours < 24) return `Il y a ${Math.floor(diffInHours)}h`;
     const diffInDays = Math.floor(diffInHours / 24);
     if (diffInDays === 1) return 'Hier';
-    if (diffInDays < 7) return `${diffInDays}j`;
+    if (diffInDays < 7) return `Il y a ${diffInDays}j`;
     return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   };
 
-  const handleMessagePress = (messageId: string) => {
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId ? { ...msg, unread: false, unreadCount: 0 } : msg
+  const handleConversationPress = (conversation: Conversation) => {
+    // Marquer comme lu
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === conversation.id ? { ...conv, unread: false, unreadCount: 0 } : conv
       )
     );
 
-    // router.push(`/conversation/${messageId}`);
-    console.log('Ouvrir conversation:', messageId);
+    // Navigation selon le type
+    if (conversation.type === 'system') {
+      // Si c'est un message système, aller vers la page appropriée
+      console.log('Message système:', conversation.userName);
+    } else {
+      // Sinon, ouvrir la conversation
+      // router.push(`/conversation/${conversation.id}`);
+      console.log('Ouvrir conversation avec:', conversation.userName);
+    }
+  };
+
+  const handleNewMessage = () => {
+    // router.push('/new-message');
+    console.log('Nouveau message');
   };
 
   // Render du header
@@ -128,22 +234,11 @@ export default function MessagesPage() {
           <ThemedText style={styles.backIcon}>←</ThemedText>
         </Pressable>
 
-        <View style={styles.headerTitleContainer}>
-          {/* Titre H1 */}
-          <ThemedText style={styles.headerTitle}>
-            Messages
-          </ThemedText>
-          {/* Badge orange secondaire (feedback positif) */}
-          {totalUnread > 0 && (
-            <View style={styles.headerBadge}>
-              <ThemedText style={styles.headerBadgeText}>{totalUnread}</ThemedText>
-            </View>
-          )}
-        </View>
+        <ThemedText style={styles.headerTitle}>Discussions</ThemedText>
 
-        {/* Bouton nouveau message - Violet principal (CTA) */}
-        <Pressable style={styles.newMessageButton}>
-          <ThemedText style={styles.newMessageIcon}>✏️</ThemedText>
+        {/* Bouton composer (✏️ crayon) */}
+        <Pressable style={styles.composeButton} onPress={handleNewMessage}>
+          <ThemedText style={styles.composeIcon}>✏️</ThemedText>
         </Pressable>
       </View>
 
@@ -166,68 +261,130 @@ export default function MessagesPage() {
     </View>
   );
 
-  // Render d'un message
-  const renderMessage = ({ item }: { item: Message }) => (
-    <Pressable
-      style={[styles.messageCard, item.unread && styles.messageCardUnread]}
-      onPress={() => handleMessagePress(item.id)}
-    >
-      {/* Avatar */}
-      <View style={styles.avatarContainer}>
-        {item.userAvatar ? (
-          <Image source={{ uri: item.userAvatar }} style={styles.avatar} />
-        ) : (
-          <View style={styles.avatarPlaceholder}>
-            <ThemedText style={styles.avatarText}>
-              {item.userName.charAt(0).toUpperCase()}
-            </ThemedText>
-          </View>
-        )}
-        {item.unread && <View style={styles.onlineIndicator} />}
-      </View>
-
-      {/* Contenu */}
-      <View style={styles.messageContent}>
-        <View style={styles.messageHeader}>
-          {/* Nom H2 */}
-          <ThemedText
-            style={[styles.userName, item.unread && styles.userNameUnread]}
-          >
-            {item.userName}
-          </ThemedText>
-          {/* Timestamp Small */}
-          <ThemedText style={styles.timestamp}>
-            {formatTimestamp(item.timestamp)}
-          </ThemedText>
-        </View>
-
-        <View style={styles.messageFooter}>
-          {/* Message Body */}
-          <ThemedText
-            style={[styles.lastMessage, item.unread && styles.lastMessageUnread]}
-            numberOfLines={1}
-          >
-            {item.lastMessage}
-          </ThemedText>
-          {/* Badge orange secondaire (feedback positif) */}
-          {item.unreadCount && item.unreadCount > 0 && (
-            <View style={styles.unreadBadge}>
-              <ThemedText style={styles.unreadBadgeText}>
-                {item.unreadCount}
+  // Render d'une conversation
+  const renderConversation = ({ item }: { item: Conversation }) => {
+    const isSystemMessage = item.userRole === 'system';
+    
+    return (
+      <Pressable
+        style={[
+          styles.conversationCard,
+          item.unread && styles.conversationCardUnread,
+        ]}
+        onPress={() => handleConversationPress(item)}
+      >
+        {/* Avatar */}
+        <View style={styles.avatarContainer}>
+          {isSystemMessage ? (
+            // Avatar système (icône)
+            <View style={[
+              styles.systemAvatar,
+              item.userAvatar === 'achievement' && styles.achievementAvatar
+            ]}>
+              <ThemedText style={styles.systemAvatarIcon}>
+                {item.userAvatar === 'achievement' ? '🎯' : '📊'}
               </ThemedText>
             </View>
+          ) : (
+            // Avatar utilisateur/créateur (photo)
+            <View style={styles.photoAvatarContainer}>
+              <Image 
+                source={{ uri: item.userAvatar }} 
+                style={styles.avatar}
+              />
+              {/* Badge vérifié pour les créateurs */}
+              {item.verified && (
+                <View style={styles.verifiedBadge}>
+                  <ThemedText style={styles.verifiedIcon}>✓</ThemedText>
+                </View>
+              )}
+            </View>
+          )}
+          
+          {/* Indicateur non lu */}
+          {item.unread && !isSystemMessage && (
+            <View style={styles.unreadDot} />
           )}
         </View>
-      </View>
-    </Pressable>
+
+        {/* Contenu */}
+        <View style={styles.conversationContent}>
+          {/* Header */}
+          <View style={styles.conversationHeader}>
+            <View style={styles.nameContainer}>
+              <ThemedText
+                style={[
+                  styles.userName,
+                  item.unread && styles.userNameUnread,
+                  isSystemMessage && styles.systemUserName,
+                ]}
+                numberOfLines={1}
+              >
+                {item.userName}
+              </ThemedText>
+              
+              {/* Badge "Nouvelle réalisation" ou rôle */}
+              {item.badge && (
+                <View style={styles.orangeBadge}>
+                  <ThemedText style={styles.badgeText}>{item.badge}</ThemedText>
+                </View>
+              )}
+              
+              {/* Indicateur de rôle (créateur) */}
+              {item.userRole === 'creator' && !item.badge && (
+                <View style={styles.creatorBadge}>
+                  <ThemedText style={styles.creatorBadgeText}>Créateur</ThemedText>
+                </View>
+              )}
+            </View>
+
+            <ThemedText style={styles.timestamp}>
+              {formatTimestamp(item.timestamp)}
+            </ThemedText>
+          </View>
+
+          {/* Message */}
+          <View style={styles.messageFooter}>
+            <ThemedText
+              style={[
+                styles.lastMessage,
+                item.unread && styles.lastMessageUnread,
+              ]}
+              numberOfLines={2}
+            >
+              {item.hasImage && '📸 '}
+              {item.lastMessage}
+            </ThemedText>
+
+            {/* Badge compteur */}
+            {item.unreadCount && item.unreadCount > 0 && (
+              <View style={styles.countBadge}>
+                <ThemedText style={styles.countBadgeText}>
+                  {item.unreadCount}
+                </ThemedText>
+              </View>
+            )}
+          </View>
+        </View>
+      </Pressable>
+    );
+  };
+
+  // État "Vous êtes à jour !"
+  const renderAllCaughtUp = () => (
+    <View style={styles.caughtUpContainer}>
+      <ThemedText style={styles.caughtUpIcon}>✨</ThemedText>
+      <ThemedText style={styles.caughtUpText}>Vous êtes à jour !</ThemedText>
+      <ThemedText style={styles.caughtUpSubtext}>
+        Aucun nouveau message
+      </ThemedText>
+    </View>
   );
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
       <ThemedText style={styles.emptyIcon}>💬</ThemedText>
-      <ThemedText style={styles.emptyText}>
-        Aucun message
-      </ThemedText>
+      <ThemedText style={styles.emptyText}>Aucune discussion</ThemedText>
       <ThemedText style={styles.emptySubtext}>
         Vos conversations apparaîtront ici
       </ThemedText>
@@ -239,11 +396,12 @@ export default function MessagesPage() {
       <StatusBar barStyle="dark-content" />
       <ThemedView style={styles.container}>
         <FlatList
-          data={filteredMessages}
+          data={filteredConversations}
           keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
+          renderItem={renderConversation}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmpty}
+          ListFooterComponent={!hasUnread && conversations.length > 0 ? renderAllCaughtUp : null}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -294,36 +452,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.bleuNuit,
   },
-  headerTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  // H1 écran - 28-32px, 700 bold
   headerTitle: {
     fontSize: 30,
     fontWeight: '700',
     color: COLORS.bleuNuit,
     fontFamily: 'Poppins',
   },
-  // Badge orange secondaire (feedback positif)
-  headerBadge: {
-    backgroundColor: COLORS.orangeSecondaire,
-    borderRadius: 12,
-    minWidth: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-  },
-  headerBadgeText: {
-    color: COLORS.blanc,
-    fontSize: 12,
-    fontWeight: 'bold',
-    fontFamily: 'Poppins',
-  },
-  // CTA violet principal
-  newMessageButton: {
+  composeButton: {
     width: 40,
     height: 40,
     justifyContent: 'center',
@@ -331,11 +466,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: COLORS.violetPrincipal,
   },
-  newMessageIcon: {
+  composeIcon: {
     fontSize: 18,
   },
 
-  // Search bar
+  // Search
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -351,7 +486,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     opacity: 0.5,
   },
-  // Body - 14-16px, 400/500 regular
   searchInput: {
     flex: 1,
     fontSize: 15,
@@ -372,66 +506,93 @@ const styles = StyleSheet.create({
     marginLeft: 76,
   },
 
-  // Message Card
-  messageCard: {
+  // Conversation Card
+  conversationCard: {
     flexDirection: 'row',
     backgroundColor: COLORS.blanc,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     gap: 12,
   },
-  messageCardUnread: {
-    backgroundColor: '#F5F1FF', // Violet très clair
+  conversationCardUnread: {
+    backgroundColor: '#F5F1FF',
   },
 
   // Avatar
   avatarContainer: {
     position: 'relative',
   },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  photoAvatarContainer: {
+    position: 'relative',
   },
-  avatarPlaceholder: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.violetPrincipal,
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  systemAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: COLORS.blancCasse,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarText: {
-    color: COLORS.blanc,
-    fontSize: 20,
-    fontWeight: 'bold',
-    fontFamily: 'Poppins',
+  achievementAvatar: {
+    backgroundColor: '#FFF4E6',
   },
-  onlineIndicator: {
+  systemAvatarIcon: {
+    fontSize: 24,
+  },
+  verifiedBadge: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: COLORS.vert,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.violetPrincipal,
+    borderWidth: 2,
+    borderColor: COLORS.blanc,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  verifiedIcon: {
+    color: COLORS.blanc,
+    fontSize: 10,
+    fontWeight: 'bold',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: COLORS.violetPrincipal,
     borderWidth: 2,
     borderColor: COLORS.blanc,
   },
 
-  // Message content
-  messageContent: {
+  // Content
+  conversationContent: {
     flex: 1,
     gap: 4,
   },
-  messageHeader: {
+  conversationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
-  // H2 - 20-22px, 600 semi-bold
+  nameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
   userName: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '600',
     color: COLORS.bleuNuit,
     fontFamily: 'Poppins',
@@ -439,7 +600,33 @@ const styles = StyleSheet.create({
   userNameUnread: {
     fontWeight: '700',
   },
-  // Small - 12-13px, 400 medium
+  systemUserName: {
+    fontSize: 15,
+  },
+  orangeBadge: {
+    backgroundColor: COLORS.orangeSecondaire,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  badgeText: {
+    color: COLORS.blanc,
+    fontSize: 10,
+    fontWeight: 'bold',
+    fontFamily: 'Poppins',
+  },
+  creatorBadge: {
+    backgroundColor: COLORS.violetPrincipal,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  creatorBadgeText: {
+    color: COLORS.blanc,
+    fontSize: 9,
+    fontWeight: '600',
+    fontFamily: 'Poppins',
+  },
   timestamp: {
     fontSize: 12,
     fontWeight: '400',
@@ -449,40 +636,61 @@ const styles = StyleSheet.create({
   messageFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
+    marginTop: 2,
   },
-  // Body - 14-16px, 400/500 regular
   lastMessage: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '400',
     color: COLORS.gris,
     lineHeight: 20,
     fontFamily: 'Poppins',
   },
   lastMessageUnread: {
-    fontWeight: '600',
+    fontWeight: '500',
     color: COLORS.bleuNuit,
   },
-  // Badge orange secondaire (feedback positif)
-  unreadBadge: {
-    backgroundColor: COLORS.orangeSecondaire,
+  countBadge: {
+    backgroundColor: COLORS.violetPrincipal,
     borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+    minWidth: 22,
+    height: 22,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 6,
   },
-  unreadBadgeText: {
+  countBadgeText: {
     color: COLORS.blanc,
     fontSize: 11,
     fontWeight: 'bold',
     fontFamily: 'Poppins',
   },
 
-  // Empty state
+  // Caught up
+  caughtUpContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    gap: 8,
+  },
+  caughtUpIcon: {
+    fontSize: 48,
+  },
+  caughtUpText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.bleuNuit,
+    fontFamily: 'Poppins',
+  },
+  caughtUpSubtext: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: COLORS.gris,
+    fontFamily: 'Poppins',
+  },
+
+  // Empty
   emptyContainer: {
     paddingVertical: 80,
     alignItems: 'center',
