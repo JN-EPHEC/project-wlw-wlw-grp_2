@@ -9,6 +9,7 @@ export default function TabsLayout() {
                 screenOptions={{
                     headerShown: false,
                     tabBarActiveTintColor: '#6B46FF',
+                    tabBarInactiveTintColor: '#B0B0B0',
                 }}
             >
                 <Tabs.Screen
@@ -38,6 +39,7 @@ export default function TabsLayout() {
                         ),
                     }}
                 />
+                {/* Ajoutez vos autres tabs ici */}
             </Tabs>
         </ProgressProvider>
     );
