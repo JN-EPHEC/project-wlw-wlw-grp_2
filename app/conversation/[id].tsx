@@ -15,7 +15,6 @@ import {
     View,
 } from 'react-native';
 
-// 🎨 Palette SwipeSkills
 const COLORS = {
   violetPrincipal: '#7459F0',
   orangeSecondaire: '#FBA31A',
