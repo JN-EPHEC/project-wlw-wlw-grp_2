@@ -26,32 +26,31 @@ const COLORS = {
 };
 
 // Types
-type ConversationType = 'user_to_user' | 'creator_to_user' | 'system';
+type ConversationType = 'user_to_user' | 'creator_to_user';
 
 interface Conversation {
   id: string;
   userName: string;
-  userAvatar: string; // URL de la photo
-  userRole?: 'creator' | 'user' | 'system'; // Rôle de l'interlocuteur
+  userAvatar: string; // URL Unsplash
+  userRole: 'creator' | 'user';
   lastMessage: string;
   timestamp: string;
   unread: boolean;
   unreadCount?: number;
   type: ConversationType;
-  hasImage?: boolean; // Si le dernier message contient une image
-  badge?: string; // Badge spécial (ex: "Nouvelle réalisation")
-  verified?: boolean; // Si c'est un créateur vérifié
+  hasImage?: boolean;
+  verified?: boolean; // Créateur vérifié
 }
 
-// 🎭 Données mockées diversifiées avec photos de profil
+// 🎭 Conversations réalistes avec photos Unsplash
 const INITIAL_CONVERSATIONS: Conversation[] = [
-  // 1. Créateur → Utilisateur
+  // 1. Créateur → Utilisateur (nouvelle vidéo)
   {
     id: '1',
-    userName: 'Claire Petit',
-    userAvatar: 'https://i.pravatar.cc/150?img=5',
+    userName: 'Amara Diallo',
+    userAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop',
     userRole: 'creator',
-    lastMessage: 'votre experte excel a posté une nouvelle vidéo',
+    lastMessage: 'Nouvelle vidéo disponible : "Les bases de React Native" 🎥',
     timestamp: '2024-01-20T16:30:00',
     unread: true,
     unreadCount: 1,
@@ -59,120 +58,145 @@ const INITIAL_CONVERSATIONS: Conversation[] = [
     verified: true,
   },
   
-  // 2. Système (notifications de progression)
+  // 2. Utilisateur ↔ Utilisateur (entraide)
   {
     id: '2',
-    userName: 'Félicitations',
-    userAvatar: 'system', // Icône système
-    userRole: 'system',
-    lastMessage: 'Vous avez atteint le niveau 4.',
-    timestamp: '2024-01-20T13:00:00',
-    unread: false,
-    type: 'system',
-  },
-  
-  // 3. Système (achievement avec badge)
-  {
-    id: '3',
-    userName: 'Plus que 2 vidéos',
-    userAvatar: 'achievement',
-    userRole: 'system',
-    lastMessage: 'pour débloquer \'Développeur Python!\'',
-    timestamp: '2024-01-20T08:00:00',
-    unread: false,
-    type: 'system',
-    badge: 'Nouvelle réalisation',
-  },
-  
-  // 4. Créateur → Utilisateur (demande d'abonnement)
-  {
-    id: '4',
-    userName: 'Marc Leroy',
-    userAvatar: 'https://i.pravatar.cc/150?img=12',
-    userRole: 'creator',
-    lastMessage: 'vous a envoyé une demande d\'abonnement.',
-    timestamp: '2024-01-19T18:45:00',
-    unread: false,
-    type: 'creator_to_user',
-    verified: true,
-  },
-  
-  // 5. Utilisateur ↔ Utilisateur (discussion entre apprenants)
-  {
-    id: '5',
-    userName: 'Aïcha Benali',
-    userAvatar: 'https://i.pravatar.cc/150?img=47',
+    userName: 'Léo Mercier',
+    userAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
     userRole: 'user',
-    lastMessage: 'Tu as réussi l\'exercice 3 ? Je bloque dessus 😅',
-    timestamp: '2024-01-19T15:20:00',
+    lastMessage: 'Tu as réussi l\'exercice 3 ? Je bloque sur la partie async/await',
+    timestamp: '2024-01-20T14:15:00',
     unread: true,
-    unreadCount: 3,
+    unreadCount: 2,
     type: 'user_to_user',
   },
   
-  // 6. Créateur → Utilisateur (réponse à une question)
+  // 3. Créateur → Utilisateur (réponse à question)
   {
-    id: '6',
-    userName: 'Léo Traoré',
-    userAvatar: 'https://i.pravatar.cc/150?img=14',
+    id: '3',
+    userName: 'Yasmine Benali',
+    userAvatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop',
     userRole: 'creator',
-    lastMessage: 'Bonne question ! Je t\'explique : utilise map() plutôt que forEach() ici',
-    timestamp: '2024-01-19T11:30:00',
+    lastMessage: 'Excellente question ! Pour utiliser map(), tu dois retourner un élément...',
+    timestamp: '2024-01-20T11:30:00',
     unread: false,
     type: 'creator_to_user',
     verified: true,
   },
   
-  // 7. Utilisateur ↔ Utilisateur (avec image)
+  // 4. Utilisateur ↔ Utilisateur (partage de ressources)
   {
-    id: '7',
-    userName: 'Inès El Amrani',
-    userAvatar: 'https://i.pravatar.cc/150?img=31',
+    id: '4',
+    userName: 'Malik Traoré',
+    userAvatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&h=150&fit=crop',
     userRole: 'user',
-    lastMessage: '📸 Photo',
-    timestamp: '2024-01-18T20:15:00',
+    lastMessage: 'J\'ai trouvé un super article sur les hooks, je te l\'envoie !',
+    timestamp: '2024-01-19T18:45:00',
     unread: false,
     type: 'user_to_user',
     hasImage: true,
   },
   
-  // 8. Créateur → Utilisateur (annonce de live)
+  // 5. Créateur → Utilisateur (feedback sur projet)
   {
-    id: '8',
-    userName: 'Karim Nguyen',
-    userAvatar: 'https://i.pravatar.cc/150?img=68',
+    id: '5',
+    userName: 'Inès Rousseau',
+    userAvatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop',
     userRole: 'creator',
-    lastMessage: '🔴 LIVE demain à 19h : Session de code en direct !',
-    timestamp: '2024-01-18T14:00:00',
+    lastMessage: 'J\'ai regardé ton projet, c\'est vraiment bien ! Quelques suggestions...',
+    timestamp: '2024-01-19T15:20:00',
     unread: true,
     unreadCount: 1,
     type: 'creator_to_user',
     verified: true,
   },
   
-  // 9. Utilisateur ↔ Utilisateur (groupe d'étude)
+  // 6. Utilisateur ↔ Utilisateur (organisation étude)
   {
-    id: '9',
-    userName: 'Zara Patel',
-    userAvatar: 'https://i.pravatar.cc/150?img=43',
+    id: '6',
+    userName: 'Sofia Martinez',
+    userAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop',
     userRole: 'user',
-    lastMessage: 'On se retrouve sur Discord pour réviser ?',
-    timestamp: '2024-01-17T16:40:00',
+    lastMessage: 'On se fait une session de code ensemble demain soir ?',
+    timestamp: '2024-01-19T12:10:00',
     unread: false,
     type: 'user_to_user',
   },
   
-  // 10. Créateur → Utilisateur (feedback)
+  // 7. Créateur → Utilisateur (annonce live)
   {
-    id: '10',
-    userName: 'Noah Kowalski',
-    userAvatar: 'https://i.pravatar.cc/150?img=51',
+    id: '7',
+    userName: 'Karim Dubois',
+    userAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop',
     userRole: 'creator',
-    lastMessage: 'Excellent travail sur ton projet ! Continue comme ça 💪',
-    timestamp: '2024-01-17T09:20:00',
+    lastMessage: '🔴 LIVE demain 19h : On code une app de A à Z en direct !',
+    timestamp: '2024-01-19T09:00:00',
+    unread: true,
+    unreadCount: 1,
+    type: 'creator_to_user',
+    verified: true,
+  },
+  
+  // 8. Utilisateur ↔ Utilisateur (demande d'aide)
+  {
+    id: '8',
+    userName: 'Noah Laurent',
+    userAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop',
+    userRole: 'user',
+    lastMessage: 'Salut ! Tu peux m\'expliquer comment tu as fait pour déployer ton app ?',
+    timestamp: '2024-01-18T20:15:00',
+    unread: false,
+    type: 'user_to_user',
+  },
+  
+  // 9. Créateur → Utilisateur (message de motivation)
+  {
+    id: '9',
+    userName: 'Emma Kowalski',
+    userAvatar: 'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=150&h=150&fit=crop',
+    userRole: 'creator',
+    lastMessage: 'Continue comme ça, tu fais d\'énormes progrès ! 💪',
+    timestamp: '2024-01-18T16:40:00',
     unread: false,
     type: 'creator_to_user',
     verified: true,
+  },
+  
+  // 10. Utilisateur ↔ Utilisateur (partage de succès)
+  {
+    id: '10',
+    userName: 'Liam Nguyen',
+    userAvatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&h=150&fit=crop',
+    userRole: 'user',
+    lastMessage: 'Devine quoi ? J\'ai décroché mon premier stage en tant que dev ! 🎉',
+    timestamp: '2024-01-18T11:25:00',
+    unread: false,
+    type: 'user_to_user',
+  },
+  
+  // 11. Créateur → Utilisateur (correction exercice)
+  {
+    id: '11',
+    userName: 'Zara Patel',
+    userAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop',
+    userRole: 'creator',
+    lastMessage: 'Ton code est presque parfait ! Juste une petite modification à faire...',
+    timestamp: '2024-01-17T14:50:00',
+    unread: false,
+    type: 'creator_to_user',
+    verified: true,
+  },
+  
+  // 12. Utilisateur ↔ Utilisateur (question technique)
+  {
+    id: '12',
+    userName: 'Adam Bernard',
+    userAvatar: 'https://images.unsplash.com/photo-1463453091185-61582044d556?w=150&h=150&fit=crop',
+    userRole: 'user',
+    lastMessage: 'Tu utilises quel framework pour le backend ? Node.js ou Django ?',
+    timestamp: '2024-01-17T09:30:00',
+    unread: false,
+    type: 'user_to_user',
   },
 ];
 
@@ -202,33 +226,22 @@ export default function MessagesPage() {
   };
 
   const handleConversationPress = (conversation: Conversation) => {
-    // Marquer comme lu
     setConversations((prev) =>
       prev.map((conv) =>
         conv.id === conversation.id ? { ...conv, unread: false, unreadCount: 0 } : conv
       )
     );
-
-    // Navigation selon le type
-    if (conversation.type === 'system') {
-      // Si c'est un message système, aller vers la page appropriée
-      console.log('Message système:', conversation.userName);
-    } else {
-      // Sinon, ouvrir la conversation
-      // router.push(`/conversation/${conversation.id}`);
-      console.log('Ouvrir conversation avec:', conversation.userName);
-    }
+    router.push(`/conversation/${conversation.id}`);
+    console.log('Ouvrir conversation avec:', conversation.userName);
   };
 
   const handleNewMessage = () => {
-    // router.push('/new-message');
     console.log('Nouveau message');
   };
 
   // Render du header
   const renderHeader = () => (
     <View style={styles.headerContainer}>
-      {/* Top bar */}
       <View style={styles.topBar}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
           <ThemedText style={styles.backIcon}>←</ThemedText>
@@ -236,13 +249,11 @@ export default function MessagesPage() {
 
         <ThemedText style={styles.headerTitle}>Discussions</ThemedText>
 
-        {/* Bouton composer (✏️ crayon) */}
         <Pressable style={styles.composeButton} onPress={handleNewMessage}>
           <ThemedText style={styles.composeIcon}>✏️</ThemedText>
         </Pressable>
       </View>
 
-      {/* Barre de recherche */}
       <View style={styles.searchContainer}>
         <ThemedText style={styles.searchIcon}>🔍</ThemedText>
         <TextInput
@@ -263,8 +274,6 @@ export default function MessagesPage() {
 
   // Render d'une conversation
   const renderConversation = ({ item }: { item: Conversation }) => {
-    const isSystemMessage = item.userRole === 'system';
-    
     return (
       <Pressable
         style={[
@@ -273,65 +282,42 @@ export default function MessagesPage() {
         ]}
         onPress={() => handleConversationPress(item)}
       >
-        {/* Avatar */}
+        {/* Avatar avec photo Unsplash */}
         <View style={styles.avatarContainer}>
-          {isSystemMessage ? (
-            // Avatar système (icône)
-            <View style={[
-              styles.systemAvatar,
-              item.userAvatar === 'achievement' && styles.achievementAvatar
-            ]}>
-              <ThemedText style={styles.systemAvatarIcon}>
-                {item.userAvatar === 'achievement' ? '🎯' : '📊'}
-              </ThemedText>
-            </View>
-          ) : (
-            // Avatar utilisateur/créateur (photo)
-            <View style={styles.photoAvatarContainer}>
-              <Image 
-                source={{ uri: item.userAvatar }} 
-                style={styles.avatar}
-              />
-              {/* Badge vérifié pour les créateurs */}
-              {item.verified && (
-                <View style={styles.verifiedBadge}>
-                  <ThemedText style={styles.verifiedIcon}>✓</ThemedText>
-                </View>
-              )}
+          <Image 
+            source={{ uri: item.userAvatar }} 
+            style={styles.avatar}
+          />
+          
+          {/* Badge vérifié pour créateurs */}
+          {item.verified && (
+            <View style={styles.verifiedBadge}>
+              <ThemedText style={styles.verifiedIcon}>✓</ThemedText>
             </View>
           )}
           
-          {/* Indicateur non lu */}
-          {item.unread && !isSystemMessage && (
+          {/* Point non lu */}
+          {item.unread && (
             <View style={styles.unreadDot} />
           )}
         </View>
 
         {/* Contenu */}
         <View style={styles.conversationContent}>
-          {/* Header */}
           <View style={styles.conversationHeader}>
             <View style={styles.nameContainer}>
               <ThemedText
                 style={[
                   styles.userName,
                   item.unread && styles.userNameUnread,
-                  isSystemMessage && styles.systemUserName,
                 ]}
                 numberOfLines={1}
               >
                 {item.userName}
               </ThemedText>
               
-              {/* Badge "Nouvelle réalisation" ou rôle */}
-              {item.badge && (
-                <View style={styles.orangeBadge}>
-                  <ThemedText style={styles.badgeText}>{item.badge}</ThemedText>
-                </View>
-              )}
-              
-              {/* Indicateur de rôle (créateur) */}
-              {item.userRole === 'creator' && !item.badge && (
+              {/* Badge Créateur */}
+              {item.userRole === 'creator' && (
                 <View style={styles.creatorBadge}>
                   <ThemedText style={styles.creatorBadgeText}>Créateur</ThemedText>
                 </View>
@@ -343,7 +329,6 @@ export default function MessagesPage() {
             </ThemedText>
           </View>
 
-          {/* Message */}
           <View style={styles.messageFooter}>
             <ThemedText
               style={[
@@ -356,7 +341,6 @@ export default function MessagesPage() {
               {item.lastMessage}
             </ThemedText>
 
-            {/* Badge compteur */}
             {item.unreadCount && item.unreadCount > 0 && (
               <View style={styles.countBadge}>
                 <ThemedText style={styles.countBadgeText}>
@@ -370,7 +354,6 @@ export default function MessagesPage() {
     );
   };
 
-  // État "Vous êtes à jour !"
   const renderAllCaughtUp = () => (
     <View style={styles.caughtUpContainer}>
       <ThemedText style={styles.caughtUpIcon}>✨</ThemedText>
@@ -423,8 +406,6 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: 32,
   },
-
-  // Header
   headerContainer: {
     backgroundColor: COLORS.blanc,
     paddingTop: 8,
@@ -469,8 +450,6 @@ const styles = StyleSheet.create({
   composeIcon: {
     fontSize: 18,
   },
-
-  // Search
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -498,15 +477,11 @@ const styles = StyleSheet.create({
     color: COLORS.gris,
     padding: 4,
   },
-
-  // Separator
   separator: {
     height: 1,
     backgroundColor: COLORS.grisClair,
     marginLeft: 76,
   },
-
-  // Conversation Card
   conversationCard: {
     flexDirection: 'row',
     backgroundColor: COLORS.blanc,
@@ -517,32 +492,13 @@ const styles = StyleSheet.create({
   conversationCardUnread: {
     backgroundColor: '#F5F1FF',
   },
-
-  // Avatar
   avatarContainer: {
-    position: 'relative',
-  },
-  photoAvatarContainer: {
     position: 'relative',
   },
   avatar: {
     width: 50,
     height: 50,
     borderRadius: 25,
-  },
-  systemAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: COLORS.blancCasse,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  achievementAvatar: {
-    backgroundColor: '#FFF4E6',
-  },
-  systemAvatarIcon: {
-    fontSize: 24,
   },
   verifiedBadge: {
     position: 'absolute',
@@ -573,8 +529,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: COLORS.blanc,
   },
-
-  // Content
   conversationContent: {
     flex: 1,
     gap: 4,
@@ -589,7 +543,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     flex: 1,
-    flexWrap: 'wrap',
   },
   userName: {
     fontSize: 16,
@@ -599,21 +552,6 @@ const styles = StyleSheet.create({
   },
   userNameUnread: {
     fontWeight: '700',
-  },
-  systemUserName: {
-    fontSize: 15,
-  },
-  orangeBadge: {
-    backgroundColor: COLORS.orangeSecondaire,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-  },
-  badgeText: {
-    color: COLORS.blanc,
-    fontSize: 10,
-    fontWeight: 'bold',
-    fontFamily: 'Poppins',
   },
   creatorBadge: {
     backgroundColor: COLORS.violetPrincipal,
@@ -667,8 +605,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontFamily: 'Poppins',
   },
-
-  // Caught up
   caughtUpContainer: {
     paddingVertical: 40,
     alignItems: 'center',
@@ -689,8 +625,6 @@ const styles = StyleSheet.create({
     color: COLORS.gris,
     fontFamily: 'Poppins',
   },
-
-  // Empty
   emptyContainer: {
     paddingVertical: 80,
     alignItems: 'center',
