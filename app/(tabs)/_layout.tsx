@@ -1,35 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { ProgressProvider } from '../ProgressContext';
+import { ProgressProvider } from '../ProgressContext'; // ← AJOUTER CETTE LIGNE
 
 export default function TabsLayout() {
     return (
         <ProgressProvider>
             <Tabs
                 screenOptions={{
-                    headerShown: false,
-                    tabBarActiveTintColor: '#6B46FF',
-                    tabBarInactiveTintColor: '#B0B0B0',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="search" size={size} color={color} />
+                    ),
                 }}
             >
-                <Tabs.Screen
-                    name="index"
-                    options={{
-                        title: 'Accueil',
-                        tabBarIcon: ({ color, size }) => (
-                            <Ionicons name="home" size={size} color={color} />
-                        ),
-                    }}
-                />
-                <Tabs.Screen
-                    name="explore"
-                    options={{
-                        title: 'Explorer',
-                        tabBarIcon: ({ color, size }) => (
-                            <Ionicons name="search" size={size} color={color} />
-                        ),
-                    }}
-                />
+                {/* Vos Tabs.Screen existants */}
                 <Tabs.Screen
                     name="userprofile"
                     options={{
