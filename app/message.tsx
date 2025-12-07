@@ -1,9 +1,3 @@
-// app/messages.tsx
-// Page Discussions - SwipeSkills
-// ✅ Seulement des vraies conversations (pas de système/achievements)
-// ✅ Photos Unsplash pour les avatars
-// ✅ Design selon maquette Figma
-
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { router } from 'expo-router';
