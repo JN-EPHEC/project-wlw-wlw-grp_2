@@ -1,8 +1,15 @@
+// app/conversation/[id].tsx
+// Page de conversation détaillée - SwipeSkills
+// ✅ Design selon maquette Figma
+// ✅ Conversations différentes selon l'ID
+// ✅ Boutons cliquables (emoji, fichier, image)
+
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -15,6 +22,7 @@ import {
   View,
 } from 'react-native';
 
+// 🎨 Palette SwipeSkills
 const COLORS = {
   violetPrincipal: '#7459F0',
   orangeSecondaire: '#FBA31A',
@@ -33,7 +41,7 @@ interface Message {
   timestamp: string;
   senderId: string;
   senderName: string;
-  isCurrentUser: boolean; // Si c'est l'utilisateur connecté
+  isCurrentUser: boolean;
 }
 
 interface ConversationInfo {
@@ -43,88 +51,125 @@ interface ConversationInfo {
   isCreator: boolean;
 }
 
-// 🎭 Données mockées pour la conversation
-const MOCK_CONVERSATION: ConversationInfo = {
-  id: '1',
-  name: 'Amara Diallo',
-  avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop',
-  isCreator: true,
+// 🎭 Base de données mockée de toutes les conversations
+const ALL_CONVERSATIONS: Record<string, ConversationInfo> = {
+  '1': {
+    id: '1',
+    name: 'Amara Diallo',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop',
+    isCreator: true,
+  },
+  '2': {
+    id: '2',
+    name: 'Léo Mercier',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop',
+    isCreator: false,
+  },
+  '3': {
+    id: '3',
+    name: 'Yasmine Benali',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop',
+    isCreator: true,
+  },
+  '4': {
+    id: '4',
+    name: 'Malik Traoré',
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&h=150&fit=crop',
+    isCreator: false,
+  },
+  '5': {
+    id: '5',
+    name: 'Inès Rousseau',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop',
+    isCreator: true,
+  },
 };
 
-const MOCK_MESSAGES: Message[] = [
-  {
-    id: '1',
-    text: 'Salut ! J\'ai une question sur React Native',
-    timestamp: '2024-01-20T14:00:00',
-    senderId: 'currentUser',
-    senderName: 'Toi',
-    isCurrentUser: true,
-  },
-  {
-    id: '2',
-    text: 'Salut ! Bien sûr, je suis là pour t\'aider 😊',
-    timestamp: '2024-01-20T14:02:00',
-    senderId: 'user123',
-    senderName: 'Amara Diallo',
-    isCurrentUser: false,
-  },
-  {
-    id: '3',
-    text: 'Comment je peux utiliser les hooks avec TypeScript ?',
-    timestamp: '2024-01-20T14:03:00',
-    senderId: 'currentUser',
-    senderName: 'Toi',
-    isCurrentUser: true,
-  },
-  {
-    id: '4',
-    text: 'Excellente question ! Tu peux typer tes hooks comme ça :',
-    timestamp: '2024-01-20T14:04:00',
-    senderId: 'user123',
-    senderName: 'Amara Diallo',
-    isCurrentUser: false,
-  },
-  {
-    id: '5',
-    imageUrl: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&h=300&fit=crop',
-    timestamp: '2024-01-20T14:05:00',
-    senderId: 'user123',
-    senderName: 'Amara Diallo',
-    isCurrentUser: false,
-  },
-  {
-    id: '6',
-    text: 'const [state, setState] = useState<string>("")',
-    timestamp: '2024-01-20T14:06:00',
-    senderId: 'user123',
-    senderName: 'Amara Diallo',
-    isCurrentUser: false,
-  },
-  {
-    id: '7',
-    text: 'Super merci ! C\'est très clair 🙏',
-    timestamp: '2024-01-20T14:08:00',
-    senderId: 'currentUser',
-    senderName: 'Toi',
-    isCurrentUser: true,
-  },
-  {
-    id: '8',
-    text: 'De rien ! N\'hésite pas si tu as d\'autres questions',
-    timestamp: '2024-01-20T14:09:00',
-    senderId: 'user123',
-    senderName: 'Amara Diallo',
-    isCurrentUser: false,
-  },
-];
+// Messages différents pour chaque conversation
+const ALL_MESSAGES: Record<string, Message[]> = {
+  '1': [
+    {
+      id: '1',
+      text: 'Bonjour Amara ! J\'ai regardé votre nouvelle vidéo sur React Native',
+      timestamp: '2024-01-20T14:00:00',
+      senderId: 'currentUser',
+      senderName: 'Toi',
+      isCurrentUser: true,
+    },
+    {
+      id: '2',
+      text: 'Salut ! Merci beaucoup, qu\'est-ce que tu en as pensé ? 😊',
+      timestamp: '2024-01-20T14:02:00',
+      senderId: 'user1',
+      senderName: 'Amara Diallo',
+      isCurrentUser: false,
+    },
+    {
+      id: '3',
+      text: 'C\'était super clair ! Par contre j\'ai une question sur les hooks',
+      timestamp: '2024-01-20T14:03:00',
+      senderId: 'currentUser',
+      senderName: 'Toi',
+      isCurrentUser: true,
+    },
+  ],
+  '2': [
+    {
+      id: '1',
+      text: 'Salut Léo ! Tu as réussi l\'exercice 3 ?',
+      timestamp: '2024-01-20T15:00:00',
+      senderId: 'currentUser',
+      senderName: 'Toi',
+      isCurrentUser: true,
+    },
+    {
+      id: '2',
+      text: 'Hey ! Oui j\'ai fini hier soir. C\'était chaud 😅',
+      timestamp: '2024-01-20T15:05:00',
+      senderId: 'user2',
+      senderName: 'Léo Mercier',
+      isCurrentUser: false,
+    },
+    {
+      id: '3',
+      text: 'Tu peux m\'expliquer comment tu as fait pour la partie async/await ?',
+      timestamp: '2024-01-20T15:06:00',
+      senderId: 'currentUser',
+      senderName: 'Toi',
+      isCurrentUser: true,
+    },
+  ],
+  '3': [
+    {
+      id: '1',
+      text: 'Yasmine, merci pour votre cours sur TypeScript !',
+      timestamp: '2024-01-19T10:00:00',
+      senderId: 'currentUser',
+      senderName: 'Toi',
+      isCurrentUser: true,
+    },
+    {
+      id: '2',
+      text: 'Avec plaisir ! Tu as des questions ? 🤓',
+      timestamp: '2024-01-19T10:15:00',
+      senderId: 'user3',
+      senderName: 'Yasmine Benali',
+      isCurrentUser: false,
+    },
+  ],
+};
 
 export default function ConversationPage() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
+  
+  // Récupérer les infos selon l'ID
+  const conversationInfo = ALL_CONVERSATIONS[id || '1'] || ALL_CONVERSATIONS['1'];
+  const initialMessages = ALL_MESSAGES[id || '1'] || ALL_MESSAGES['1'];
+  
+  const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
 
-  // Scroll vers le bas au chargement
   useEffect(() => {
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
@@ -151,13 +196,43 @@ export default function ConversationPage() {
     setMessages([...messages, newMessage]);
     setInputText('');
 
-    // Scroll vers le bas
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 100);
   };
 
-  // Render du header
+  // 🎯 Fonction pour les emojis
+  const handleEmojiPress = () => {
+    Alert.alert('Emojis', 'Sélectionneur d\'emojis (à implémenter avec Firebase plus tard)');
+  };
+
+  // 🎯 Fonction pour joindre un fichier
+  const handleAttachFile = () => {
+    Alert.alert('Fichier', 'Sélection de fichier (à implémenter avec Firebase Storage)');
+  };
+
+  // 🎯 Fonction pour prendre/choisir une photo
+  const handleTakePhoto = () => {
+    Alert.alert(
+      'Photo',
+      'Que voulez-vous faire ?',
+      [
+        {
+          text: 'Prendre une photo',
+          onPress: () => console.log('Ouvrir caméra - à implémenter'),
+        },
+        {
+          text: 'Choisir depuis galerie',
+          onPress: () => console.log('Ouvrir galerie - à implémenter'),
+        },
+        {
+          text: 'Annuler',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
+
   const renderHeader = () => (
     <View style={styles.header}>
       <Pressable style={styles.backButton} onPress={() => router.back()}>
@@ -165,10 +240,10 @@ export default function ConversationPage() {
       </Pressable>
 
       <View style={styles.headerCenter}>
-        <Image source={{ uri: MOCK_CONVERSATION.avatar }} style={styles.headerAvatar} />
+        <Image source={{ uri: conversationInfo.avatar }} style={styles.headerAvatar} />
         <View>
-          <ThemedText style={styles.headerName}>{MOCK_CONVERSATION.name}</ThemedText>
-          {MOCK_CONVERSATION.isCreator && (
+          <ThemedText style={styles.headerName}>{conversationInfo.name}</ThemedText>
+          {conversationInfo.isCreator && (
             <ThemedText style={styles.headerRole}>Créateur</ThemedText>
           )}
         </View>
@@ -185,7 +260,6 @@ export default function ConversationPage() {
     </View>
   );
 
-  // Render d'un message
   const renderMessage = ({ item }: { item: Message }) => {
     const isCurrentUser = item.isCurrentUser;
 
@@ -196,16 +270,14 @@ export default function ConversationPage() {
           isCurrentUser ? styles.messageContainerRight : styles.messageContainerLeft,
         ]}
       >
-        {/* Avatar (seulement pour les messages reçus) */}
         {!isCurrentUser && (
           <Image
-            source={{ uri: MOCK_CONVERSATION.avatar }}
+            source={{ uri: conversationInfo.avatar }}
             style={styles.messageAvatar}
           />
         )}
 
         <View style={styles.messageContent}>
-          {/* Bulle de message */}
           <View
             style={[
               styles.messageBubble,
@@ -223,7 +295,6 @@ export default function ConversationPage() {
             )}
           </View>
 
-          {/* Timestamp */}
           <ThemedText
             style={[
               styles.messageTime,
@@ -237,10 +308,10 @@ export default function ConversationPage() {
     );
   };
 
-  // Render de la zone de saisie
   const renderInput = () => (
     <View style={styles.inputContainer}>
-      <Pressable style={styles.emojiButton}>
+      {/* Bouton Emoji - CLIQUABLE */}
+      <Pressable style={styles.emojiButton} onPress={handleEmojiPress}>
         <ThemedText style={styles.emojiIcon}>😊</ThemedText>
       </Pressable>
 
@@ -256,10 +327,13 @@ export default function ConversationPage() {
         />
 
         <View style={styles.inputActions}>
-          <Pressable style={styles.inputIconButton}>
+          {/* Bouton Fichier - CLIQUABLE */}
+          <Pressable style={styles.inputIconButton} onPress={handleAttachFile}>
             <ThemedText style={styles.inputIcon}>📎</ThemedText>
           </Pressable>
-          <Pressable style={styles.inputIconButton}>
+          
+          {/* Bouton Photo - CLIQUABLE */}
+          <Pressable style={styles.inputIconButton} onPress={handleTakePhoto}>
             <ThemedText style={styles.inputIcon}>📷</ThemedText>
           </Pressable>
         </View>
@@ -318,8 +392,6 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
-
-  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -378,8 +450,6 @@ const styles = StyleSheet.create({
   headerIcon: {
     fontSize: 20,
   },
-
-  // Messages
   messagesList: {
     paddingHorizontal: 16,
     paddingVertical: 20,
@@ -445,8 +515,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginRight: 4,
   },
-
-  // Input
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
