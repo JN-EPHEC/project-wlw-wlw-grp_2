@@ -1,10 +1,3 @@
-// app/messages.tsx
-// Page Discussions - SwipeSkills
-// ✅ Photos de profil
-// ✅ Messages diversifiés (créateurs, utilisateurs, système)
-// ✅ Design selon maquette Figma
-// ✅ Tout cliquable avec navigation
-
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { router } from 'expo-router';
