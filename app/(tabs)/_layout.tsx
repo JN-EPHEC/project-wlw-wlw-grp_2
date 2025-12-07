@@ -7,12 +7,18 @@ export default function TabsLayout() {
             screenOptions={{
                 headerShown: false,
                 tabBarActiveTintColor: '#6B46FF',
-                tabBarInactiveTintColor: '#B0B0B0',
+                tabBarInactiveTintColor: '#6A6A6B',
                 tabBarStyle: {
                     backgroundColor: '#FFFFFF',
                     borderTopWidth: 1,
                     borderTopColor: '#E8E8E8',
-                    height: 60,
+                    height: 70,
+                    paddingBottom: 10,
+                    paddingTop: 10,
+                },
+                tabBarLabelStyle: {
+                    fontSize: 10,
+                    fontWeight: '500',
                 },
             }}
         >
@@ -21,46 +27,51 @@ export default function TabsLayout() {
                 options={{
                     title: 'Accueil',
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="home-outline" size={size} color={color} />
+                        <Ionicons name="home" size={size} color={color} />
                     ),
                 }}
             />
+            
             <Tabs.Screen
                 name="explore"
                 options={{
                     title: 'Explorer',
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="search-outline" size={size} color={color} />
+                        <Ionicons name="search" size={size} color={color} />
                     ),
                 }}
             />
+            
             <Tabs.Screen
                 name="home"
                 options={{
-                    title: 'Home',
+                    title: 'Vidéos',
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="play-outline" size={size} color={color} />
+                        <Ionicons name="play-circle" size={size} color={color} />
                     ),
                 }}
             />
+            
             <Tabs.Screen
                 name="homeuser"
                 options={{
-                    title: 'User',
+                    title: 'Contenu',
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="person-outline" size={size} color={color} />
+                        <Ionicons name="albums" size={size} color={color} />
                     ),
                 }}
             />
+            
             <Tabs.Screen
                 name="notifications"
                 options={{
                     title: 'Notifications',
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="notifications-outline" size={size} color={color} />
+                        <Ionicons name="notifications" size={size} color={color} />
                     ),
                 }}
             />
+            
             <Tabs.Screen
                 name="userprofile"
                 options={{
