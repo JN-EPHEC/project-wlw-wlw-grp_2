@@ -328,35 +328,6 @@ export default function UserProfileLearner() {
                 </View>
             </ScrollView>
 
-            {/* Bottom Navigation */}
-            <View style={styles.bottomNav}>
-                <Pressable style={styles.navItem}>
-                    <Ionicons name="home-outline" size={26} color="#B0B0B0" />
-                    <Text style={styles.navText}>Accueil</Text>
-                </Pressable>
-                
-                <Pressable style={styles.navItem}>
-                    <Ionicons name="search-outline" size={26} color="#B0B0B0" />
-                    <Text style={styles.navText}>Explorer</Text>
-                </Pressable>
-                
-                <Pressable style={styles.navItemCenter}>
-                    <View style={styles.plusButton}>
-                        <Ionicons name="add" size={32} color="#FD9A34" />
-                    </View>
-                </Pressable>
-                
-                <Pressable style={styles.navItem}>
-                    <Ionicons name="notifications-outline" size={26} color="#B0B0B0" />
-                    <Text style={styles.navText}>Notifications</Text>
-                </Pressable>
-                
-                <Pressable style={styles.navItem}>
-                    <Ionicons name="person" size={26} color="#6B46FF" />
-                    <Text style={[styles.navText, styles.navTextActive]}>Profil</Text>
-                </Pressable>
-            </View>
-
             {/* Modal de modification */}
             <Modal
                 visible={isModalVisible}
@@ -703,52 +674,7 @@ const styles = StyleSheet.create({
         marginRight: 4,
     },
 
-    // Bottom Navigation
-    bottomNav: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        height: 75,
-        borderTopWidth: 1,
-        borderTopColor: '#E8E8E8',
-        backgroundColor: '#FFFFFF',
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        paddingBottom: Platform.OS === 'ios' ? 20 : 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 10,
-    },
-    navItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
-    navItemCenter: { 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        flex: 1,
-        marginTop: -10,
-    },
-    plusButton: {
-        width: 56,
-        height: 56,
-        borderRadius: 14,
-        backgroundColor: '#FFFFFF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 3,
-        borderColor: '#FD9A34',
-        shadowColor: '#FD9A34',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 8,
-    },
-    navText: { fontSize: 10, color: '#B0B0B0', marginTop: 4, fontWeight: '500' },
-    navTextActive: { color: '#6B46FF' },
-
-    // Tabs
+    // Tabs (plus de styles bottomNav)
     tabsContainer: { 
         width: '100%', 
         marginTop: 16, 
