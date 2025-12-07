@@ -26,14 +26,13 @@ export default function SwipeableVideoItem({
     const translateX = useRef(new Animated.Value(0)).current;
     const lastOffset = useRef(0);
 
-    const SWIPE_THRESHOLD = -80; // Distance pour activer la suppression
+    const SWIPE_THRESHOLD = -80;
     const DELETE_BUTTON_WIDTH = 80;
 
     const panResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
             onMoveShouldSetPanResponder: (_, gestureState) => {
-                // Active le swipe seulement si mouvement horizontal significatif
                 return Math.abs(gestureState.dx) > 10;
             },
             onPanResponderGrant: () => {
@@ -41,7 +40,6 @@ export default function SwipeableVideoItem({
                 translateX.setValue(0);
             },
             onPanResponderMove: (_, gestureState) => {
-                // Limite le swipe : seulement vers la gauche et pas trop loin
                 const newValue = Math.min(0, Math.max(gestureState.dx, -DELETE_BUTTON_WIDTH * 1.2));
                 translateX.setValue(newValue);
             },
@@ -49,7 +47,6 @@ export default function SwipeableVideoItem({
                 translateX.flattenOffset();
                 
                 if (gestureState.dx < SWIPE_THRESHOLD) {
-                    // Swipe suffisant : ouvrir le bouton de suppression
                     lastOffset.current = -DELETE_BUTTON_WIDTH;
                     Animated.spring(translateX, {
                         toValue: -DELETE_BUTTON_WIDTH,
@@ -57,7 +54,6 @@ export default function SwipeableVideoItem({
                         friction: 8,
                     }).start();
                 } else {
-                    // Swipe insuffisant : revenir à la position initiale
                     lastOffset.current = 0;
                     Animated.spring(translateX, {
                         toValue: 0,
@@ -78,7 +74,6 @@ export default function SwipeableVideoItem({
                     text: 'Annuler',
                     style: 'cancel',
                     onPress: () => {
-                        // Fermer le swipe
                         closeSwipe();
                     },
                 },
@@ -86,7 +81,6 @@ export default function SwipeableVideoItem({
                     text: 'Supprimer',
                     style: 'destructive',
                     onPress: () => {
-                        // Animation de suppression
                         Animated.timing(translateX, {
                             toValue: -500,
                             duration: 300,
@@ -113,7 +107,6 @@ export default function SwipeableVideoItem({
 
     return (
         <View style={styles.container}>
-            {/* Bouton de suppression (en arrière-plan) */}
             <View style={styles.deleteBackground}>
                 <Pressable style={styles.deleteButton} onPress={handleDelete}>
                     <Ionicons name="trash" size={24} color="#FFFFFF" />
@@ -121,7 +114,6 @@ export default function SwipeableVideoItem({
                 </Pressable>
             </View>
 
-            {/* Contenu swipeable */}
             <Animated.View
                 style={[
                     styles.swipeableContent,
@@ -135,7 +127,6 @@ export default function SwipeableVideoItem({
                     style={styles.itemCard}
                     onPress={() => {
                         if (lastOffset.current < 0) {
-                            // Si le swipe est ouvert, le fermer
                             closeSwipe();
                         } else if (onPress) {
                             onPress();
@@ -180,7 +171,6 @@ export default function SwipeableVideoItem({
                         </View>
                     </View>
 
-                    {/* Indicateur de swipe */}
                     <View style={styles.swipeIndicator}>
                         <Ionicons name="chevron-back" size={16} color="#B0B0B0" />
                     </View>
