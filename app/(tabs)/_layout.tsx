@@ -1,7 +1,44 @@
-import CreatorTabs from '../navigation/CreatorTabs';
+import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
+import { ProgressProvider } from '../ProgressContext';
 
-// Expo Router already provides the root NavigationContainer. Do not wrap
-// navigator components with another NavigationContainer in nested layouts.
-export default function App() {
-  return <CreatorTabs />;
+export default function TabsLayout() {
+    return (
+        <ProgressProvider>
+            <Tabs
+                screenOptions={{
+                    headerShown: false,
+                    tabBarActiveTintColor: '#6B46FF',
+                }}
+            >
+                <Tabs.Screen
+                    name="index"
+                    options={{
+                        title: 'Accueil',
+                        tabBarIcon: ({ color, size }) => (
+                            <Ionicons name="home" size={size} color={color} />
+                        ),
+                    }}
+                />
+                <Tabs.Screen
+                    name="explore"
+                    options={{
+                        title: 'Explorer',
+                        tabBarIcon: ({ color, size }) => (
+                            <Ionicons name="search" size={size} color={color} />
+                        ),
+                    }}
+                />
+                <Tabs.Screen
+                    name="userprofile"
+                    options={{
+                        title: 'Profil',
+                        tabBarIcon: ({ color, size }) => (
+                            <Ionicons name="person" size={size} color={color} />
+                        ),
+                    }}
+                />
+            </Tabs>
+        </ProgressProvider>
+    );
 }
