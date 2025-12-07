@@ -3,8 +3,7 @@ import React, { useState } from 'react';
 import { Alert, Dimensions, FlatList, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import SwipeableVideoItem from '../../components/SwipeableVideoItem';
+import { Link } from 'expo-router';
 import { useProgress } from '../ProgressContext';
 
 function Avatar({ emoji, imageUri }: { emoji: string; imageUri: string | null }) {
@@ -31,8 +30,6 @@ interface Badge {
 }
 
 export default function UserProfileLearner() {
-    const router = useRouter();
-    
     const [tab, setTab] = useState<'favorites' | 'history' | 'saved'>('favorites');
     const [openedTab, setOpenedTab] = useState<'favorites' | 'history' | 'saved' | null>(null);
     
@@ -60,15 +57,15 @@ export default function UserProfileLearner() {
         { id: 'f2', title: "Introduction au Python", subtitle: '8 min • favori' },
     ]);
 
-    const [history, setHistory] = useState<VideoItem[]>([
+    const history: VideoItem[] = [
         { id: 'h1', title: 'Vidéo regardée: Growth Hacking', subtitle: 'vu il y a 2 jours' },
         { id: 'h2', title: 'Podcast: Design moderne', subtitle: 'vu il y a 5 jours' },
-    ]);
+    ];
 
-    const [saved, setSaved] = useState<VideoItem[]>([
+    const saved: VideoItem[] = [
         { id: 's1', title: 'Article: SEO avancé', subtitle: 'sauvegardé' },
         { id: 's2', title: 'Checklist: Lancement produit', subtitle: 'sauvegardé' },
-    ]);
+    ];
 
     function handleTabPress(newTab: 'favorites' | 'history' | 'saved') {
         setTab(newTab);
@@ -162,12 +159,11 @@ export default function UserProfileLearner() {
             <ScrollView contentContainerStyle={styles.content}>
                 {/* Header */}
                 <View style={styles.headerRow}>
-                    <Pressable 
-                        style={styles.backButton}
-                        onPress={() => router.back()}
-                    >
-                        <Ionicons name="chevron-back" size={28} color="#6b6b6b" />
-                    </Pressable>
+                    <Link href="/" asChild>
+                        <Pressable style={styles.backButton}>
+                            <Ionicons name="chevron-back" size={28} color="#6b6b6b" />
+                        </Pressable>
+                    </Link>
                     <View style={{ flex: 1 }} />
                     <Pressable style={styles.infoButton}>
                         <Ionicons name="settings-outline" size={24} color="#6B46FF" />
@@ -209,13 +205,13 @@ export default function UserProfileLearner() {
                     </View>
 
                     {/* Progress Card */}
-                    <Pressable 
-                        style={({ pressed }) => [
-                            styles.progressCard,
-                            pressed && styles.cardPressed
-                        ]}
-                        onPress={() => router.push('/progression' as any)}
-                    >
+                    <Link href="/progression" asChild>
+                        <Pressable 
+                            style={({ pressed }) => [
+                                styles.progressCard,
+                                pressed && styles.cardPressed
+                            ]}
+                        >
                             <View style={styles.progressTitleRow}>
                                 <View style={styles.titleLeft}>
                                     <Ionicons name="trending-up" size={20} color="#FF9A2A" />
@@ -245,15 +241,16 @@ export default function UserProfileLearner() {
                                 <Ionicons name="chevron-forward" size={18} color="#6B46FF" />
                             </View>
                         </Pressable>
+                    </Link>
 
                     {/* Badges Card */}
-                    <Pressable 
-                        style={({ pressed }) => [
-                            styles.card,
-                            pressed && styles.cardPressed
-                        ]}
-                        onPress={() => router.push('/progression' as any)}
-                    >
+                    <Link href="/progression" asChild>
+                        <Pressable 
+                            style={({ pressed }) => [
+                                styles.card,
+                                pressed && styles.cardPressed
+                            ]}
+                        >
                             <View style={styles.cardHeader}>
                                 <View style={styles.cardTitleRow}>
                                     <Ionicons name="ribbon" size={20} color="#FF9A2A" />
@@ -282,6 +279,7 @@ export default function UserProfileLearner() {
                                 <Ionicons name="chevron-forward" size={18} color="#6B46FF" />
                             </View>
                         </Pressable>
+                    </Link>
 
                     {/* Profile tabs */}
                     <View style={styles.tabsContainer}>
@@ -303,27 +301,25 @@ export default function UserProfileLearner() {
                                 keyExtractor={(item) => item.id}
                                 style={styles.contentList}
                                 renderItem={({ item }) => (
-                                    <SwipeableVideoItem
-                                        id={item.id}
-                                        title={item.title}
-                                        subtitle={item.subtitle}
-                                        onDelete={(id: string) => {
-                                            if (tab === 'favorites') {
-                                                removeFavorite(id);
-                                            } else if (tab === 'history') {
-                                                setHistory((prev: VideoItem[]) => prev.filter((h: VideoItem) => h.id !== id));
-                                            } else {
-                                                setSaved((prev: VideoItem[]) => prev.filter((s: VideoItem) => s.id !== id));
-                                            }
-                                        }}
-                                        onPress={() => {
-                                            // Navigation vers la vidéo
-                                            console.log('Voir vidéo:', item.id);
-                                        }}
-                                        showFavorite={tab === 'favorites'}
-                                        isFavorite={tab === 'favorites'}
-                                        onToggleFavorite={() => removeFavorite(item.id)}
-                                    />
+                                    <View style={styles.itemCardRow}>
+                                        <View style={styles.itemCardContent}>
+                                            <Text style={styles.itemTitle}>{item.title}</Text>
+                                            <Text style={styles.itemSub}>{item.subtitle}</Text>
+                                        </View>
+                                        <View style={styles.itemActions}>
+                                            {tab === 'favorites' && (
+                                                <Pressable 
+                                                    style={styles.favoriteButton} 
+                                                    onPress={() => removeFavorite(item.id)}
+                                                >
+                                                    <Ionicons name="heart" size={24} color="#FF3B30" />
+                                                </Pressable>
+                                            )}
+                                            <Pressable style={styles.itemCta}>
+                                                <Text style={styles.itemCtaText}>Voir</Text>
+                                            </Pressable>
+                                        </View>
+                                    </View>
                                 )}
                                 showsVerticalScrollIndicator={false}
                             />
@@ -331,6 +327,35 @@ export default function UserProfileLearner() {
                     </View>
                 </View>
             </ScrollView>
+
+            {/* Bottom Navigation */}
+            <View style={styles.bottomNav}>
+                <Pressable style={styles.navItem}>
+                    <Ionicons name="home-outline" size={26} color="#B0B0B0" />
+                    <Text style={styles.navText}>Accueil</Text>
+                </Pressable>
+                
+                <Pressable style={styles.navItem}>
+                    <Ionicons name="search-outline" size={26} color="#B0B0B0" />
+                    <Text style={styles.navText}>Explorer</Text>
+                </Pressable>
+                
+                <Pressable style={styles.navItemCenter}>
+                    <View style={styles.plusButton}>
+                        <Ionicons name="add" size={32} color="#FD9A34" />
+                    </View>
+                </Pressable>
+                
+                <Pressable style={styles.navItem}>
+                    <Ionicons name="notifications-outline" size={26} color="#B0B0B0" />
+                    <Text style={styles.navText}>Notifications</Text>
+                </Pressable>
+                
+                <Pressable style={styles.navItem}>
+                    <Ionicons name="person" size={26} color="#6B46FF" />
+                    <Text style={[styles.navText, styles.navTextActive]}>Profil</Text>
+                </Pressable>
+            </View>
 
             {/* Modal de modification */}
             <Modal
@@ -677,6 +702,51 @@ const styles = StyleSheet.create({
         color: '#6B46FF',
         marginRight: 4,
     },
+
+    // Bottom Navigation
+    bottomNav: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        height: 75,
+        borderTopWidth: 1,
+        borderTopColor: '#E8E8E8',
+        backgroundColor: '#FFFFFF',
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingBottom: Platform.OS === 'ios' ? 20 : 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 10,
+    },
+    navItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
+    navItemCenter: { 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        flex: 1,
+        marginTop: -10,
+    },
+    plusButton: {
+        width: 56,
+        height: 56,
+        borderRadius: 14,
+        backgroundColor: '#FFFFFF',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 3,
+        borderColor: '#FD9A34',
+        shadowColor: '#FD9A34',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    navText: { fontSize: 10, color: '#B0B0B0', marginTop: 4, fontWeight: '500' },
+    navTextActive: { color: '#6B46FF' },
 
     // Tabs
     tabsContainer: { 
