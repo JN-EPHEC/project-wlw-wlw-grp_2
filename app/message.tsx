@@ -226,20 +226,16 @@ export default function MessagesPage() {
   };
 
   const handleConversationPress = (conversation: Conversation) => {
-    // Marquer comme lu
     setConversations((prev) =>
       prev.map((conv) =>
         conv.id === conversation.id ? { ...conv, unread: false, unreadCount: 0 } : conv
       )
     );
-
-    // Navigation vers la conversation
-    // router.push(`/conversation/${conversation.id}`);
+    router.push(`/conversation/${conversation.id}`);
     console.log('Ouvrir conversation avec:', conversation.userName);
   };
 
   const handleNewMessage = () => {
-    // router.push('/new-message');
     console.log('Nouveau message');
   };
 
