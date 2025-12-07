@@ -1,52 +1,86 @@
-import { StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Tabs } from 'expo-router';
 
-
-const styles = StyleSheet.create({
-  bottomNav: {
-    height: 75,
-    backgroundColor: '#F8F8F6',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#E8E8E8',
-    paddingBottom: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  navItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  navItemCenter: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    marginTop: -10,
-  },
-  addButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#FD9A34',
-    shadowColor: '#FD9A34',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  navText: {
-    fontSize: 12,
-    color: '#B0B0B0',
-    marginTop: 4,
-    fontWeight: '500',
-  },
-});
+export default function TabsLayout() {
+    return (
+        <Tabs
+            screenOptions={{
+                headerShown: false,
+                tabBarActiveTintColor: '#6B46FF',
+                tabBarInactiveTintColor: '#6A6A6B',
+                tabBarStyle: {
+                    backgroundColor: '#FFFFFF',
+                    borderTopWidth: 1,
+                    borderTopColor: '#E8E8E8',
+                    height: 70,
+                    paddingBottom: 10,
+                    paddingTop: 10,
+                },
+                tabBarLabelStyle: {
+                    fontSize: 10,
+                    fontWeight: '500',
+                },
+            }}
+        >
+            <Tabs.Screen
+                name="index"
+                options={{
+                    title: 'Accueil',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="home" size={size} color={color} />
+                    ),
+                }}
+            />
+            
+            <Tabs.Screen
+                name="explore"
+                options={{
+                    title: 'Explorer',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="search" size={size} color={color} />
+                    ),
+                }}
+            />
+            
+            <Tabs.Screen
+                name="home"
+                options={{
+                    title: 'Vidéos',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="play-circle" size={size} color={color} />
+                    ),
+                }}
+            />
+            
+            <Tabs.Screen
+                name="homeuser"
+                options={{
+                    title: 'Contenu',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="albums" size={size} color={color} />
+                    ),
+                }}
+            />
+            
+            <Tabs.Screen
+                name="notifications"
+                options={{
+                    title: 'Notifications',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="notifications" size={size} color={color} />
+                    ),
+                }}
+            />
+            
+            <Tabs.Screen
+                name="userprofile"
+                options={{
+                    title: 'Profil',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="person" size={size} color={color} />
+                    ),
+                }}
+            />
+        </Tabs>
+    );
+}
