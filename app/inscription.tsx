@@ -256,7 +256,7 @@ export default function SignUp() {
 
         {/* Lien login */}
         <View style={{ alignItems: "center", marginTop: 10 }}>
-          <TouchableOpacity onPress={() => router.push("../components/AuthComponent")}>
+          <TouchableOpacity onPress={() => router.push("/auth")}>
             <Text style={{ color: "navy", textDecorationLine: "underline", fontSize: 12 }}>Vous avez déjà un compte ?</Text>
           </TouchableOpacity>
         </View>
@@ -265,7 +265,7 @@ export default function SignUp() {
         <Modal visible={showWelcome} transparent animationType="slide">
           <View style={styles.modalContainer}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalText}>Bienvenue sur SwipeSkills ! Votre compte a été créé avec succès.</Text>
+              <Text style={styles.modalText}>Bienvenue sur Daily Nest ! Votre compte a été créé avec succès.</Text>
               <TouchableOpacity style={styles.closeButton} onPress={handleCloseModal}>
                 <Text style={styles.closeText}>x</Text>
               </TouchableOpacity>
