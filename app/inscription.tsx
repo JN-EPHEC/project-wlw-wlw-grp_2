@@ -265,7 +265,7 @@ export default function SignUp() {
         <Modal visible={showWelcome} transparent animationType="slide">
           <View style={styles.modalContainer}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalText}>Bienvenue sur Daily Nest ! Votre compte a été créé avec succès.</Text>
+              <Text style={styles.modalText}>Bienvenue sur SwipeSkills ! Votre compte a été créé avec succès.</Text>
               <TouchableOpacity style={styles.closeButton} onPress={handleCloseModal}>
                 <Text style={styles.closeText}>x</Text>
               </TouchableOpacity>
