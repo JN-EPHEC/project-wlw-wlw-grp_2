@@ -9,7 +9,7 @@ import {
   signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
-  User,
+  User
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
@@ -188,9 +188,6 @@ WebBrowser.maybeCompleteAuthSession();
         <TouchableOpacity onPress={() => router.push("/inscription")} style={styles.signUpButton}>
           <Text style={styles.signUpText}>S'inscrire</Text>
           </TouchableOpacity> 
-        <TouchableOpacity onPress={handleGoogleSignIn} style={[styles.signUpButton, { backgroundColor: "#DB4437" }]}>
-          <Text style={styles.signUpText}>Google</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
