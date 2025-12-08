@@ -1,5 +1,4 @@
 import { Stack } from 'expo-router';
-import './firebaseConfig';
 import { ProgressProvider } from './ProgressContext';
 
 export default function RootLayout() {
