@@ -1,10 +1,11 @@
 import * as ImagePicker from 'expo-image-picker';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Dimensions, FlatList, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { useProgress } from '../ProgressContext';
+import { getFavorites, getUserProfile, removeFromFavorites, saveUserProfile } from '../firebase-profile-functions';
 
 function Avatar({ emoji, imageUri }: { emoji: string; imageUri: string | null }) {
     return (
@@ -52,10 +53,41 @@ export default function UserProfileLearner() {
     const [tempImage, setTempImage] = useState<string | null>(profileImage);
 
     // États pour les vidéos
-    const [favorites, setFavorites] = useState<VideoItem[]>([
-        { id: 'f1', title: "Marketing digital pour débutants", subtitle: '5 min • favori' },
-        { id: 'f2', title: "Introduction au Python", subtitle: '8 min • favori' },
-    ]);
+    const [favorites, setFavorites] = useState<VideoItem[]>([]);
+
+    // 🔥 NOUVEAU : Charger les données depuis Firebase au démarrage
+    useEffect(() => {
+        loadProfile();
+        loadFavorites();
+    }, []);
+
+    const loadProfile = async () => {
+        try {
+            const profile = await getUserProfile();
+            if (profile) {
+                setUsername(profile.username || '@sophiedubois');
+                setBio(profile.bio || '');
+                setProfileEmoji(profile.profileEmoji || '👩‍🎓');
+                setProfileImage(profile.profileImage || null);
+            }
+        } catch (error) {
+            console.error('Erreur chargement profil:', error);
+        }
+    };
+
+    const loadFavorites = async () => {
+        try {
+            const favs = await getFavorites();
+            setFavorites(favs as VideoItem[]);
+        } catch (error) {
+            console.error('Erreur chargement favoris:', error);
+            // Données par défaut si erreur
+            setFavorites([
+                { id: 'f1', title: "Marketing digital pour débutants", subtitle: '5 min • favori' },
+                { id: 'f2', title: "Introduction au Python", subtitle: '8 min • favori' },
+            ]);
+        }
+    };
 
     const history: VideoItem[] = [
         { id: 'h1', title: 'Vidéo regardée: Growth Hacking', subtitle: 'vu il y a 2 jours' },
@@ -72,9 +104,16 @@ export default function UserProfileLearner() {
         setOpenedTab(prev => (prev === newTab ? null : newTab));
     }
 
-    // Fonction pour supprimer un favori
-    const removeFavorite = (id: string) => {
-        setFavorites(prevFavorites => prevFavorites.filter(item => item.id !== id));
+    // 🔥 MODIFIÉ : Fonction pour supprimer un favori (avec Firebase)
+    const removeFavorite = async (id: string) => {
+        try {
+            await removeFromFavorites(id);
+            setFavorites(prevFavorites => prevFavorites.filter(item => item.id !== id));
+            Alert.alert('✅ Succès', 'Vidéo retirée des favoris');
+        } catch (error) {
+            console.error('Erreur suppression:', error);
+            Alert.alert('❌ Erreur', 'Impossible de retirer des favoris');
+        }
     };
 
     // Fonction pour ouvrir le modal
@@ -86,13 +125,27 @@ export default function UserProfileLearner() {
         setIsModalVisible(true);
     };
 
-    // Fonction pour sauvegarder les modifications
-    const saveProfile = () => {
-        setUsername(tempUsername);
-        setBio(tempBio);
-        setProfileEmoji(tempEmoji);
-        setProfileImage(tempImage);
-        setIsModalVisible(false);
+    // 🔥 MODIFIÉ : Fonction pour sauvegarder les modifications (avec Firebase)
+    const saveProfile = async () => {
+        try {
+            await saveUserProfile({
+                username: tempUsername,
+                bio: tempBio,
+                profileEmoji: tempEmoji,
+                profileImage: tempImage,
+            });
+
+            setUsername(tempUsername);
+            setBio(tempBio);
+            setProfileEmoji(tempEmoji);
+            setProfileImage(tempImage);
+            setIsModalVisible(false);
+
+            Alert.alert('✅ Succès', 'Profil mis à jour !');
+        } catch (error) {
+            console.error('Erreur sauvegarde:', error);
+            Alert.alert('❌ Erreur', 'Impossible de sauvegarder le profil');
+        }
     };
 
     // Fonction pour annuler les modifications
@@ -674,7 +727,7 @@ const styles = StyleSheet.create({
         marginRight: 4,
     },
 
-    // Tabs (plus de styles bottomNav)
+    // Tabs
     tabsContainer: { 
         width: '100%', 
         marginTop: 16, 
