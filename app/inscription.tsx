@@ -256,7 +256,7 @@ export default function SignUp() {
 
         {/* Lien login */}
         <View style={{ alignItems: "center", marginTop: 10 }}>
-          <TouchableOpacity onPress={() => router.push("/auth")}>
+          <TouchableOpacity onPress={() => router.push("../components/AuthComponent")}>
             <Text style={{ color: "navy", textDecorationLine: "underline", fontSize: 12 }}>Vous avez déjà un compte ?</Text>
           </TouchableOpacity>
         </View>
