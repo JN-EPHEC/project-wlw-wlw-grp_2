@@ -217,7 +217,7 @@ export default function NotificationsPage() {
     if (router.canGoBack()) {
       router.back(); // Retourne à la page précédente
     } else {
-      router.push('/home' as any); // Sinon va à Home
+      router.push('/homeuser' as any); // Sinon va à Home
     }
   }}
 >
