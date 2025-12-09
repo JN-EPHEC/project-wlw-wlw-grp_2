@@ -212,11 +212,17 @@ export default function NotificationsPage() {
       <View style={styles.topBar}>
         {/* Bouton retour (ID036) */}
         <Pressable 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <ThemedText style={styles.backIcon}>←</ThemedText>
-        </Pressable>
+  style={styles.backButton}
+  onPress={() => {
+    if (router.canGoBack()) {
+      router.back(); // Retourne à la page précédente
+    } else {
+      router.push('/home' as any); // Sinon va à Home
+    }
+  }}
+>
+  <ThemedText style={styles.backIcon}>←</ThemedText>
+</Pressable>
 
         {/* Titre H1 */}
         <ThemedText style={styles.headerTitle}>
