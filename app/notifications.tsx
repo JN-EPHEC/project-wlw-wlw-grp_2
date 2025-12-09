@@ -226,7 +226,7 @@ export default function NotificationsPage() {
         {/* Bouton Messages (ID040, ID193) */}
         <Pressable 
           style={styles.inboxButton}
-          onPress={() => router.push('/[id].tsx')}
+          onPress={() => router.push('/message')}
         >
           <ThemedText style={styles.inboxIcon}>📨</ThemedText>
           {/* Badge orange secondaire pour feedback positif */}
