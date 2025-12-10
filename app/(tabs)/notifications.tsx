@@ -4,24 +4,15 @@ import { router } from 'expo-router';
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  View,
-} from 'react-native';
-
-const COLORS = {
-  violetPrincipal: '#7459F0',    // Actions principales, CTA, navigation
-  orangeSecondaire: '#FBA31A',   // Actions secondaires, feedback positif, badges
-  bleuNuit: '#242A65',           // Titres, icônes sombres, contraste fort
-  blancCasse: '#F8F8F6',         // Arrière-plans clairs
-  gris: '#6B7280',               // Texte secondaire
-  grisClair: '#E5E7EB',          // Bordures
-  blanc: '#FFFFFF',              // Blanc pur
-};
+    Alert,
+    FlatList,
+    Pressable,
+    RefreshControl,
+    SafeAreaView,
+    StatusBar,
+    StyleSheet,
+    View,
+  } from 'react-native';
 
 // Types
 type NotificationType = 

@@ -1,9 +1,13 @@
-import { Slot } from "expo-router";
-import "react-native-reanimated";
+import { Stack } from 'expo-router';
+import { ProgressProvider } from './_ProgressContext';
 
-// Removed unstable_settings.anchor to avoid expo-router looking for a grouped
-// layout file at `app/(tabs)/_layout.tsx` when that folder doesn't exist.
 export default function RootLayout() {
-  // Root layout for the app — child routes are rendered via <Slot />
-  return <Slot />;
+    return (
+        <ProgressProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="progression" />
+            </Stack>
+        </ProgressProvider>
+    );
 }

@@ -1,7 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Dimensions, FlatList, Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Dimensions, FlatList, Image, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useRouter } from "expo-router";
+import { getAuth, signOut } from "firebase/auth";
+
+export type TabMenuParamList = {
+  Home:undefined;
+  Explore:undefined;
+  Notifications:undefined;
+  Profile:undefined;
+}
+
+const Tab = createBottomTabNavigator<TabMenuParamList>();
 const { width, height } = Dimensions.get('window');
 
 // Interface pour typer les données du feed
@@ -65,17 +77,41 @@ const FEED_DATA: FeedItem[] = [
 export default function CreatorHomePage() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  // --- Auth & navigation pour la déconnexion ---
+  const router = useRouter();
+  const auth = getAuth();
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      // Redirection vers la page Register
+      router.replace("/inscription");
+    } catch (error) {
+      console.log("Erreur de déconnexion :", error);
+      Alert.alert("Erreur", "Impossible de se déconnecter. Réessayez.");
+    }
+  };
+
   const renderPost = ({ item }: { item: FeedItem }) => (
     <View style={styles.postContainer}>
       <StatusBar barStyle="light-content" />
       
-      {/* En-tête avec heure et icônes */}
+      {/* En-tête avec heure, bouton déconnexion et icônes */}
       <View style={styles.header}>
         <Text style={styles.headerTime}>9:41</Text>
-        <View style={styles.headerIcons}>
-          <Ionicons name="cellular" size={16} color="#fff" />
-          <Ionicons name="wifi" size={16} color="#fff" style={{ marginLeft: 5 }} />
-          <Ionicons name="battery-full" size={20} color="#fff" style={{ marginLeft: 5 }} />
+
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {/* Bouton Déconnexion */}
+          <TouchableOpacity onPress={handleLogout} style={{ marginRight: 15 }}>
+            <Ionicons name="log-out-outline" size={24} color="#fff" />
+          </TouchableOpacity>
+
+          {/* Icônes système */}
+          <View style={styles.headerIcons}>
+            <Ionicons name="cellular" size={16} color="#fff" />
+            <Ionicons name="wifi" size={16} color="#fff" style={{ marginLeft: 5 }} />
+            <Ionicons name="battery-full" size={20} color="#fff" style={{ marginLeft: 5 }} />
+          </View>
         </View>
       </View>
 
@@ -168,35 +204,7 @@ export default function CreatorHomePage() {
           setCurrentIndex(currentPage);
         }}
       />
-
-      {/* Navigation en bas */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="home" size={28} color="#6A4EFB" />
-          <Text style={[styles.navText, { color: '#6A4EFB' }]}>Accueil</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="search" size={28} color="#B0B0B0" />
-          <Text style={styles.navText}>Explorer</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItemCenter}>
-          <View style={styles.addButton}>
-            <Ionicons name="add" size={32} color="#FD9A34" />
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="chatbox-outline" size={26} color="#B0B0B0" />
-          <Text style={styles.navText}>Notifications</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="person-outline" size={28} color="#B0B0B0" />
-          <Text style={styles.navText}>Profil</Text>
-        </TouchableOpacity>
-      </View>
+      
     </View>
   );
 }
