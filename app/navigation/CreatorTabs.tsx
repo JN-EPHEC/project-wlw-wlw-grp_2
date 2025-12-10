@@ -4,7 +4,7 @@ import React from 'react';
 import { Platform } from 'react-native';
 
 import Explore from '../(tabs)/explore';
-import HomeUser from '../(tabs)/homeuser';
+import HomeUser from '../(tabs)/home';
 import Notifications from '../(tabs)/notifications';
 import UserProfileContentCreator from '../(tabs)/userprofile';
 
