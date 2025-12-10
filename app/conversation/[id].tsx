@@ -1,9 +1,3 @@
-// app/conversation/[id].tsx
-// Page de conversation détaillée - SwipeSkills
-// ✅ Design selon maquette Figma
-// ✅ Conversations différentes selon l'ID
-// ✅ Boutons cliquables (emoji, fichier, image)
-
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -22,7 +16,6 @@ import {
   View,
 } from 'react-native';
 
-// 🎨 Palette SwipeSkills
 const COLORS = {
   violetPrincipal: '#7459F0',
   orangeSecondaire: '#FBA31A',

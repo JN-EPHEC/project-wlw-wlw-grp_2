@@ -446,7 +446,6 @@ const styles = StyleSheet.create({
   inboxIcon: {
     fontSize: 20,
   },
-  // Badge orange secondaire (feedback positif)
   inboxBadge: {
     position: 'absolute',
     top: -2,
