@@ -26,18 +26,21 @@ export default function CreatorTabs() {
         headerShown: false,
         tabBarShowLabel: true,
         tabBarStyle: {
-          height: Platform.OS === 'ios' ? 90 : 70,
-          paddingBottom: Platform.OS === 'ios' ? 20 : 8,
+          height: Platform.OS === 'ios' ? 72 : 60,
+          paddingBottom: Platform.OS === 'ios' ? 14 : 8,
           paddingTop: 6,
           borderTopWidth: 1,
-          borderTopColor: '#E8E8E8',
+          borderTopColor: '#E6E6E6',
           backgroundColor: '#ffffff',
+          elevation: 0,
+          shadowColor: 'transparent',
         },
         tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
+          fontSize: 12,
+          fontWeight: '500',
+          marginTop: 2,
         },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused, color }) => {
           let iconName: React.ComponentProps<typeof Ionicons>['name'] = 'home';
 
           if (route.name === 'Home') {
@@ -48,11 +51,13 @@ export default function CreatorTabs() {
             iconName = focused ? 'notifications' : 'notifications-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
+          } else if (route.name === 'Logout') {
+            iconName = 'log-out-outline';
           }
 
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return <Ionicons name={iconName} size={28} color={color} />;
         },
-        tabBarActiveTintColor: '#FD9A34',
+        tabBarActiveTintColor: '#6B46FF',
         tabBarInactiveTintColor: '#B0B0B0',
       })}
     >
