@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Goal, useProgress } from './ProgressContext';
+import { Goal, useProgress } from './_ProgressContext';
 
 // Types pour les parcours
 interface Course {

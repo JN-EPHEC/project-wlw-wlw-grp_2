@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { ProgressProvider } from './ProgressContext';
+import { ProgressProvider } from './_ProgressContext';
 
 export default function RootLayout() {
     return (

@@ -4,7 +4,7 @@ import { Alert, Dimensions, FlatList, Image, Modal, Platform, Pressable, ScrollV
 
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
-import { useProgress } from '../ProgressContext';
+import { useProgress } from '../_ProgressContext';
 
 function Avatar({ emoji, imageUri }: { emoji: string; imageUri: string | null }) {
     return (
