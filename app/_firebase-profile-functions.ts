@@ -315,3 +315,7 @@ export async function addXP(amount: number) {
         throw error;
     }
 }
+// À la fin du fichier, après toutes les fonctions
+
+// Export par défaut (requis par Expo Router)
+export default {};

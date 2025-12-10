@@ -1,10 +1,11 @@
 import * as ImagePicker from 'expo-image-picker';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Alert, Dimensions, FlatList, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { useProgress } from '../ProgressContext';
+import { saveUserProfile, getUserProfile, removeFromFavorites, getFavorites } from '../_firebase-profile-functions';
 
 function Avatar({ emoji, imageUri }: { emoji: string; imageUri: string | null }) {
     return (
@@ -52,10 +53,45 @@ export default function UserProfileLearner() {
     const [tempImage, setTempImage] = useState<string | null>(profileImage);
 
     // États pour les vidéos
-    const [favorites, setFavorites] = useState<VideoItem[]>([
-        { id: 'f1', title: "Marketing digital pour débutants", subtitle: '5 min • favori' },
-        { id: 'f2', title: "Introduction au Python", subtitle: '8 min • favori' },
-    ]);
+    const [favorites, setFavorites] = useState<VideoItem[]>([]);
+
+    // 🔥 TEST Firebase au démarrage
+    useEffect(() => {
+        const testFirebase = async () => {
+            console.log('🔥 === TEST FIREBASE ===');
+            
+            try {
+                const { auth } = await import('../../firebaseConfig');
+                console.log('✅ Firebase initialisé');
+                
+                const user = auth.currentUser;
+                if (user) {
+                    console.log('✅ Utilisateur connecté:');
+                    console.log('   📧 Email:', user.email);
+                    console.log('   🆔 UID:', user.uid);
+                    
+                    // Charger le profil
+                    const profile = await getUserProfile();
+                    if (profile) {
+                        console.log('✅ Profil chargé:', profile);
+                        setUsername(profile.profil?.username || profile.username || '@sophiedubois');
+                        setBio(profile.profil?.bio || profile.bio || '');
+                        setProfileEmoji(profile.profil?.profileEmoji || profile.profileEmoji || '👩‍🎓');
+                        setProfileImage(profile.photoProfile || null);
+                    }
+                } else {
+                    console.log('❌ AUCUN utilisateur connecté');
+                    console.log('   → Vous devez vous connecter d\'abord !');
+                }
+            } catch (error) {
+                console.error('❌ Erreur Firebase:', error);
+            }
+            
+            console.log('🔥 === FIN TEST ===');
+        };
+        
+        testFirebase();
+    }, []);
 
     const history: VideoItem[] = [
         { id: 'h1', title: 'Vidéo regardée: Growth Hacking', subtitle: 'vu il y a 2 jours' },
@@ -72,10 +108,16 @@ export default function UserProfileLearner() {
         setOpenedTab(prev => (prev === newTab ? null : newTab));
     }
 
-    // ✅ Fonction pour supprimer un favori (VERSION SIMPLE)
-    const removeFavorite = (id: string) => {
-        setFavorites(prevFavorites => prevFavorites.filter(item => item.id !== id));
-        Alert.alert('✅ Succès', 'Vidéo retirée des favoris');
+    // Fonction pour supprimer un favori
+    const removeFavorite = async (id: string) => {
+        try {
+            await removeFromFavorites(id);
+            setFavorites(prevFavorites => prevFavorites.filter(item => item.id !== id));
+            Alert.alert('✅ Succès', 'Vidéo retirée des favoris');
+        } catch (error) {
+            console.error('Erreur suppression:', error);
+            Alert.alert('❌ Erreur', 'Impossible de retirer des favoris');
+        }
     };
 
     // Fonction pour ouvrir le modal
@@ -87,15 +129,30 @@ export default function UserProfileLearner() {
         setIsModalVisible(true);
     };
 
-    // ✅ Fonction pour sauvegarder les modifications (VERSION SIMPLE)
-    const saveProfile = () => {
-        console.log('💾 Sauvegarde du profil...', { tempUsername, tempBio });
-        setUsername(tempUsername);
-        setBio(tempBio);
-        setProfileEmoji(tempEmoji);
-        setProfileImage(tempImage);
-        setIsModalVisible(false);
-        Alert.alert('✅ Succès', 'Profil mis à jour !');
+    // 🔥 Fonction pour sauvegarder les modifications (avec Firebase)
+    const saveProfile = async () => {
+        try {
+            console.log('💾 Sauvegarde du profil...');
+            
+            await saveUserProfile({
+                username: tempUsername,
+                bio: tempBio,
+                profileEmoji: tempEmoji,
+                profileImage: tempImage,
+            });
+
+            setUsername(tempUsername);
+            setBio(tempBio);
+            setProfileEmoji(tempEmoji);
+            setProfileImage(tempImage);
+            setIsModalVisible(false);
+
+            Alert.alert('✅ Succès', 'Profil mis à jour !');
+            console.log('✅ Profil sauvegardé dans Firebase');
+        } catch (error) {
+            console.error('❌ Erreur sauvegarde:', error);
+            Alert.alert('❌ Erreur', 'Impossible de sauvegarder le profil');
+        }
     };
 
     // Fonction pour annuler les modifications
