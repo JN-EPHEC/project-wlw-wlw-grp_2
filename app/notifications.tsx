@@ -13,7 +13,6 @@ import {
   View,
 } from 'react-native';
 
-// 🎨 Palette SwipeSkills
 const COLORS = {
   violetPrincipal: '#7459F0',    // Actions principales, CTA, navigation
   orangeSecondaire: '#FBA31A',   // Actions secondaires, feedback positif, badges
