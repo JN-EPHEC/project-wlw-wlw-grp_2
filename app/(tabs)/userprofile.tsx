@@ -5,7 +5,6 @@ import { Alert, Dimensions, FlatList, Image, Modal, Platform, Pressable, ScrollV
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
 import { useProgress } from '../ProgressContext';
-import { saveUserProfile, getUserProfile, removeFromFavorites, getFavorites } from '../_firebase-profile-functions';
 
 function Avatar({ emoji, imageUri }: { emoji: string; imageUri: string | null }) {
     return (
@@ -52,42 +51,50 @@ export default function UserProfileLearner() {
     const [tempEmoji, setTempEmoji] = useState(profileEmoji);
     const [tempImage, setTempImage] = useState<string | null>(profileImage);
 
-    // États pour les vidéos
-    const [favorites, setFavorites] = useState<VideoItem[]>([]);
+    // États pour les vidéos avec données par défaut
+    const [favorites, setFavorites] = useState<VideoItem[]>([
+        { id: 'f1', title: 'Vidéo favorite: Marketing Digital', subtitle: '5 min' },
+        { id: 'f2', title: 'Cours: React Native', subtitle: '12 min' },
+        { id: 'f3', title: 'Tutorial: Firebase', subtitle: '8 min' },
+    ]);
 
     // 🔥 TEST Firebase au démarrage
     useEffect(() => {
+        console.log('========================================');
+        console.log('🚀 USERPROFILE MOUNTED');
+        console.log('========================================');
+        
         const testFirebase = async () => {
             console.log('🔥 === TEST FIREBASE ===');
             
             try {
-                const { auth } = await import('../../firebaseConfig');
+                console.log('1️⃣ Import firebaseConfig...');
+                const firebaseModule = await import('../../firebaseConfig');
+                const auth = firebaseModule.auth;
                 console.log('✅ Firebase initialisé');
                 
+                console.log('2️⃣ Vérification utilisateur...');
                 const user = auth.currentUser;
+                
                 if (user) {
-                    console.log('✅ Utilisateur connecté:');
-                    console.log('   📧 Email:', user.email);
-                    console.log('   🆔 UID:', user.uid);
+                    console.log('✅ ✅ ✅ UTILISATEUR CONNECTÉ ✅ ✅ ✅');
+                    console.log('📧 Email:', user.email);
+                    console.log('🆔 UID:', user.uid);
+                    console.log('📛 Display Name:', user.displayName);
                     
-                    // Charger le profil
-                    const profile = await getUserProfile();
-                    if (profile) {
-                        console.log('✅ Profil chargé:', profile);
-                        setUsername(profile.profil?.username || profile.username || '@sophiedubois');
-                        setBio(profile.profil?.bio || profile.bio || '');
-                        setProfileEmoji(profile.profil?.profileEmoji || profile.profileEmoji || '👩‍🎓');
-                        setProfileImage(profile.photoProfile || null);
-                    }
+                    // TODO: Charger le profil depuis Firebase
+                    // const profile = await getUserProfile();
                 } else {
-                    console.log('❌ AUCUN utilisateur connecté');
-                    console.log('   → Vous devez vous connecter d\'abord !');
+                    console.log('❌ ❌ ❌ AUCUN UTILISATEUR CONNECTÉ ❌ ❌ ❌');
+                    console.log('→ Vous devez vous connecter d\'abord !');
+                    console.log('→ Allez dans Firebase Console → Authentication');
                 }
             } catch (error) {
                 console.error('❌ Erreur Firebase:', error);
             }
             
             console.log('🔥 === FIN TEST ===');
+            console.log('========================================');
         };
         
         testFirebase();
@@ -104,24 +111,21 @@ export default function UserProfileLearner() {
     ];
 
     function handleTabPress(newTab: 'favorites' | 'history' | 'saved') {
+        console.log('📱 Tab cliqué:', newTab);
         setTab(newTab);
         setOpenedTab(prev => (prev === newTab ? null : newTab));
     }
 
-    // Fonction pour supprimer un favori
-    const removeFavorite = async (id: string) => {
-        try {
-            await removeFromFavorites(id);
-            setFavorites(prevFavorites => prevFavorites.filter(item => item.id !== id));
-            Alert.alert('✅ Succès', 'Vidéo retirée des favoris');
-        } catch (error) {
-            console.error('Erreur suppression:', error);
-            Alert.alert('❌ Erreur', 'Impossible de retirer des favoris');
-        }
+    // Fonction pour supprimer un favori (VERSION SIMPLE LOCALE)
+    const removeFavorite = (id: string) => {
+        console.log('🗑️ Suppression favori:', id);
+        setFavorites(prevFavorites => prevFavorites.filter(item => item.id !== id));
+        Alert.alert('✅ Succès', 'Vidéo retirée des favoris');
     };
 
     // Fonction pour ouvrir le modal
     const openEditModal = () => {
+        console.log('✏️ Ouverture modal édition');
         setTempUsername(username);
         setTempBio(bio);
         setTempEmoji(profileEmoji);
@@ -129,39 +133,29 @@ export default function UserProfileLearner() {
         setIsModalVisible(true);
     };
 
-    // 🔥 Fonction pour sauvegarder les modifications (avec Firebase)
-    const saveProfile = async () => {
-        try {
-            console.log('💾 Sauvegarde du profil...');
-            
-            await saveUserProfile({
-                username: tempUsername,
-                bio: tempBio,
-                profileEmoji: tempEmoji,
-                profileImage: tempImage,
-            });
+    // Fonction pour sauvegarder les modifications (VERSION SIMPLE LOCALE)
+    const saveProfile = () => {
+        console.log('💾 Sauvegarde du profil (mode local)...');
+        
+        setUsername(tempUsername);
+        setBio(tempBio);
+        setProfileEmoji(tempEmoji);
+        setProfileImage(tempImage);
+        setIsModalVisible(false);
 
-            setUsername(tempUsername);
-            setBio(tempBio);
-            setProfileEmoji(tempEmoji);
-            setProfileImage(tempImage);
-            setIsModalVisible(false);
-
-            Alert.alert('✅ Succès', 'Profil mis à jour !');
-            console.log('✅ Profil sauvegardé dans Firebase');
-        } catch (error) {
-            console.error('❌ Erreur sauvegarde:', error);
-            Alert.alert('❌ Erreur', 'Impossible de sauvegarder le profil');
-        }
+        Alert.alert('✅ Succès', 'Profil mis à jour (local) !');
+        console.log('✅ Profil sauvegardé localement');
     };
 
     // Fonction pour annuler les modifications
     const cancelEdit = () => {
+        console.log('❌ Annulation édition');
         setIsModalVisible(false);
     };
 
     // Fonction pour choisir une image depuis la galerie
     const pickImage = async () => {
+        console.log('📸 Sélection image galerie...');
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         
         if (status !== 'granted') {
@@ -180,12 +174,14 @@ export default function UserProfileLearner() {
         });
 
         if (!result.canceled) {
+            console.log('✅ Image sélectionnée');
             setTempImage(result.assets[0].uri);
         }
     };
 
     // Fonction pour prendre une photo avec la caméra
     const takePhoto = async () => {
+        console.log('📷 Ouverture caméra...');
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         
         if (status !== 'granted') {
@@ -203,12 +199,14 @@ export default function UserProfileLearner() {
         });
 
         if (!result.canceled) {
+            console.log('✅ Photo prise');
             setTempImage(result.assets[0].uri);
         }
     };
 
     // Fonction pour supprimer la photo
     const removeImage = () => {
+        console.log('🗑️ Suppression image');
         setTempImage(null);
     };
 
