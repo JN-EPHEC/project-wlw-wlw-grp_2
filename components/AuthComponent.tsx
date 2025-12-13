@@ -1,228 +1,324 @@
-import { auth, db } from '@/firebaseConfig';
-import { makeRedirectUri } from 'expo-auth-session';
-import * as Google from 'expo-auth-session/providers/google';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from "expo-router";
-import * as WebBrowser from 'expo-web-browser';
 import {
-  GoogleAuthProvider,
   onAuthStateChanged,
-  signInWithCredential,
   signInWithEmailAndPassword,
-  signInWithPopup,
   User
 } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
 import React, { useEffect, useState } from "react";
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from "react-native";
+import { auth } from '@/firebaseConfig';
 
+// On reprend tes couleurs du projet pour rester cohérent
+const COLORS = {
+  orange: '#FBA31A',
+  bleuNuit: '#242A65',
+  gris: '#6B7280',
+  grisClair: '#E5E7EB',
+  blanc: '#FFFFFF',
+  text: '#000000',
+  linkBlue: '#4A90E2', // Bleu standard pour les liens
+};
 
 export default function AuthComponent() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-   const [passwordControle, setPasswordControle] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // Pour l'icône oeil
+  
   const [user, setUser] = useState<User | null>(null);
-  const [errorMessage, setErrorMessage] = useState ("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-   const [emailError, setEmailError] = useState(false);
+  
+  const [emailError, setEmailError] = useState(false);
   const [passwordError, setPasswordError] = useState(false);
-  const [passwordControleError, setPasswordControleError] = useState(false);
 
-WebBrowser.maybeCompleteAuthSession();
-
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    webClientId: '30195503547-tq811qi0j6sa8bd3p1214ah2tf3p48u7.apps.googleusercontent.com',
-    scopes: ['profile', 'email'],
-    redirectUri: makeRedirectUri({
-      scheme: "SwipeSkills",
-    }),
-  });
-
+  // Vérification de l'état de connexion
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      setIsLoggedIn(!!currentUser);
       if (currentUser) {
         router.replace("/(tabs)/home");
       }
     });
-    
     return () => unsubscribe();
   }, []);
 
   const handleSignIn = async () => {
-  setErrorMessage("");
-  setEmailError(false);
-  setPasswordError(false);
+    setErrorMessage("");
+    setEmailError(false);
+    setPasswordError(false);
 
-  let hasError = false;
-  if (!email) {
-    setEmailError(true);
-    hasError = true;
-  }
-
-  if (hasError) return;
-
-  setLoading(true);
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const uid = userCredential.user.uid;
-
-    await setDoc(doc(db, "users", uid), {
-      email: userCredential.user.email,
-      createdAt: new Date(),
-      familyId: null,
-    }, { merge: true });
-
-  } catch (error: any) {
-    if (error.code == 'auth/invalid-email') {
-      setErrorMessage("Email ou mot de passe incorrect");
-    } else {
-      setErrorMessage("Une erreur est survenue. Veuillez réessayer.");
+    let hasError = false;
+    if (!email) {
+      setEmailError(true);
+      hasError = true;
     }
-  } finally {
-    setLoading(false);
-  }
-};
-
-  useEffect(() => {
-  if (response?.type === 'success') {
-    const { authentication } = response;
-    const idToken = authentication?.idToken;
-
-    if (idToken) {
-      const credential = GoogleAuthProvider.credential(idToken);
-      (async () => {
-
-        const result = await signInWithCredential(auth, credential);
-        const user = result.user; 
-        const uid = user.uid;
-
-        const displayName = user.displayName || '';
-        const nameParts = displayName.split(' ');
-        const firstName = nameParts[0] || '';
-        const lastName = nameParts.slice(1).join(' ') || '';
-
-        await setDoc(doc(db, "users", uid), {
-          email: user.email,
-          firstName: firstName,
-          lastName: lastName,
-          birthDate: '', 
-          createdAt: new Date(),
-          familyId: null,
-        }, { merge: true });
-
-        console.log("Connexion Google réussie");
-      })();
+    if (!password) {
+      setPasswordError(true);
+      hasError = true;
     }
-  } else if (response?.type === 'error') {
-    Alert.alert('Erreur', 'Échec de la connexion Google. Veuillez réessayer.');
-  }
-}, [response]);
 
-  const handleGoogleSignIn = async () => {
+    if (hasError) return;
+
+    setLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-      const uid = user.uid;
-
-      // Extraire le prénom et nom du displayName
-      const displayName = user.displayName || '';
-      const nameParts = displayName.split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-
-      await setDoc(doc(db, "users", uid), {
-        email: user.email,
-        firstName: firstName,
-        lastName: lastName,
-        birthDate: '', 
-        createdAt: new Date(),
-      }, { merge: true });
-
-      console.log("Connexion Google réussie");
-    } catch (err: any) {
-      console.warn('Google sign-in error', err);
-      Alert.alert('Erreur', err.message || String(err));
+      await signInWithEmailAndPassword(auth, email, password);
+      // La redirection est gérée par le useEffect onAuthStateChanged
+    } catch (error: any) {
+      if (error.code === 'auth/invalid-email' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        setErrorMessage("Email ou mot de passe incorrect");
+      } else if (error.code === 'auth/too-many-requests') {
+        setErrorMessage("Trop de tentatives. Veuillez réessayer plus tard.");
+      } else {
+        setErrorMessage("Une erreur est survenue. Veuillez réessayer.");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Bienvenue sur SwipeSkills !</Text>
-      <TextInput
-        style={[styles.input, emailError && { borderColor: "red" }]}
-        placeholder="Email"
-        value={email}
-        onChangeText={(text) => {
-          setEmail(text); 
-          setEmailError(false);
-        }}
-        autoCapitalize="none"
-      />
-      {emailError && (
-        <Text style={styles.fieldError}>Cette case doit être remplie</Text>
-      )}
-      <TextInput
-        style={[styles.input, passwordError && { borderColor: "red" }]}
-        placeholder="Mot de passe"
-        value={password}
-        onChangeText={(text) => {
-          setPassword(text); 
-          setPasswordError(false);
-        }}
-        secureTextEntry
-      />
-      {passwordError && (
-        <Text style={styles.fieldError}>Le mot de passe doit contenir au moins 6 caractères</Text>
-      )}
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <View style={styles.container}>
+          
+          {/* Titre */}
+          <Text style={styles.title}>Connexion</Text>
 
-      {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
+          {/* Champ Email */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Adresse mail</Text>
+            <TextInput
+              style={[
+                styles.input, 
+                emailError && styles.inputError
+              ]}
+              value={email}
+              onChangeText={(text) => {
+                setEmail(text);
+                setEmailError(false);
+              }}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+          </View>
 
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity onPress={handleSignIn} style={styles.signUpButton}>
-          <Text style={styles.signUpText}>Se connecter</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push("/inscription")} style={styles.signUpButton}>
-          <Text style={styles.signUpText}>S'inscrire</Text>
-          </TouchableOpacity> 
-      </View>
-    </View>
+          {/* Champ Mot de passe avec oeil */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Mot de passe</Text>
+            <View style={[
+                styles.passwordContainer,
+                passwordError && styles.inputError
+              ]}>
+              <TextInput
+                style={styles.passwordInput}
+                value={password}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  setPasswordError(false);
+                }}
+                secureTextEntry={!showPassword}
+              />
+              <Pressable 
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeIcon}
+              >
+                <Ionicons 
+                  name={showPassword ? "eye-off" : "eye"} 
+                  size={20} 
+                  color="#666" 
+                />
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Message d'erreur global */}
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
+          {/* Bouton Se connecter */}
+          <TouchableOpacity 
+            onPress={handleSignIn} 
+            style={styles.signInButton}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={COLORS.bleuNuit} />
+            ) : (
+              <Text style={styles.signInText}>Se connecter</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Mot de passe oublié */}
+          <TouchableOpacity onPress={() => console.log("Mot de passe oublié - À implémenter")}>
+            <Text style={styles.forgotPassword}>Mot de passe oublié?</Text>
+          </TouchableOpacity>
+
+          {/* Section d'espacement (remplace les boutons sociaux) */}
+          <View style={styles.spacer} />
+
+          {/* Inscription */}
+          <View style={styles.registerContainer}>
+            <Text style={styles.registerText}>Pas encore de compte ?</Text>
+            <TouchableOpacity onPress={() => router.push("/inscription")}>
+              <Text style={styles.registerLink}>S'inscrire</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Footer légal */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Politiques de confidentialité</Text>
+            <View style={styles.footerDivider} />
+            <Text style={styles.footerText}>Besoin d'aide ?</Text>
+          </View>
+
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 20, borderRadius: 20},
-  title: { fontSize: 24, fontWeight: "bold", textAlign: "center", marginBottom: 20 },
- 
-   input: {
-  height: 40,
-  borderColor: "gray",
-  borderWidth: 1,
-  marginBottom: 10,
-  paddingHorizontal: 10,
-  fontStyle: "italic", 
-  color: "rgba(100, 100, 100, 0.7)",
-  borderRadius: 15
-
-},
-
-  buttonContainer: { flexDirection: "row", justifyContent: "space-around", marginTop: 20, alignItems: "center"},
-  signUpText: { color: "white", fontWeight: "bold" },
-  signUpButton: { backgroundColor: "#00b7ff9a", padding: 10, borderRadius: 5 },
-  error: {
-    color: "red",
-    textAlign: "center",
-    marginBottom: 10,
-    
+  scrollContainer: {
+    flexGrow: 1,
+    backgroundColor: '#fff',
   },
-  fieldError: {
-    color: "red",
-    marginTop: -5,
+  container: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 60, // Espace pour la status bar et le titre
+    paddingBottom: 20,
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 40,
+    textAlign: 'left',
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    color: '#333',
     marginBottom: 8,
-    textAlign: "left",
-    fontSize: 13,
+    fontWeight: '400',
+  },
+  input: {
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#E5E7EB', // Gris clair
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    backgroundColor: '#fff',
+    color: '#000',
+  },
+  passwordContainer: {
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+  },
+  passwordInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 16,
+    color: '#000',
+  },
+  eyeIcon: {
+    padding: 4,
+  },
+  inputError: {
+    borderColor: 'red',
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 15,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  signInButton: {
+    backgroundColor: COLORS.orange,
+    height: 55,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  signInText: {
+    color: COLORS.bleuNuit, // Texte bleu/violet comme sur ta maquette (souvent le texte est blanc, mais ici je respecte l'image qui semble avoir un contraste)
+    fontSize: 18,
+    fontWeight: '500',
+  },
+  forgotPassword: {
+    color: COLORS.linkBlue,
+    fontSize: 14,
+    textAlign: 'left',
+    textDecorationLine: 'underline',
+  },
+  spacer: {
+    flex: 1,
+    minHeight: 50,
+  },
+  registerContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  registerText: {
+    color: '#000',
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  registerLink: {
+    color: COLORS.linkBlue,
+    fontSize: 16,
+    textDecorationLine: 'underline',
+    fontWeight: '500',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  footerText: {
+    color: '#666',
+    fontSize: 12,
+  },
+  footerDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: '#666',
+    marginHorizontal: 10,
   },
 });

@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
+import { getAuth, signOut } from 'firebase/auth';
 
 import Explore from '../(tabs)/explore';
 import HomeUser from '../(tabs)/homeuser';
@@ -14,11 +16,13 @@ export type TabMenuParamList = {
   Explore: undefined;
   Notifications: undefined;
   Profile: undefined;
+  Logout: undefined;
 };
 
 const Tab = createBottomTabNavigator<TabMenuParamList>();
 
 export default function CreatorTabs() {
+  const router = useRouter();
   return (
     <Tab.Navigator
       initialRouteName="Home"
@@ -65,6 +69,29 @@ export default function CreatorTabs() {
   <Tab.Screen name="Explore" component={Explore} />
   <Tab.Screen name="Notifications" component={Notifications} />
   <Tab.Screen name="Profile" component={UserProfileContentCreator} />
+  {/* Logout tab: intercept press and navigate to the Auth page */}
+  <Tab.Screen
+    name="Logout"
+    component={() => null}
+    options={{ tabBarLabel: 'Sortir' }}
+    listeners={() => ({
+      tabPress: (e) => {
+        e.preventDefault();
+
+        (async () => {
+          try {
+            const auth = getAuth();
+            await signOut(auth);
+            // After successful sign out, go to the auth page
+            router.replace('/auth');
+          } catch (err) {
+            console.log('Erreur lors de la déconnexion :', err);
+            Alert.alert('Erreur', 'Impossible de se déconnecter. Réessayez.');
+          }
+        })();
+      },
+    })}
+  />
     </Tab.Navigator>
   );
 }
