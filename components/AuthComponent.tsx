@@ -164,7 +164,7 @@ export default function AuthComponent() {
           </TouchableOpacity>
 
           {/* Mot de passe oublié */}
-          <TouchableOpacity onPress={() => console.log("Mot de passe oublié - À implémenter")}>
+          <TouchableOpacity onPress={() => router.push("/mdpoublie")}>
             <Text style={styles.forgotPassword}>Mot de passe oublié?</Text>
           </TouchableOpacity>
 
