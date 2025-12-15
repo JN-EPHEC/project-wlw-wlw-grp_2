@@ -18,7 +18,7 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import { auth } from '../firebaseConfig'; // Vérifie que ce chemin est bon selon où se trouve ton fichier config
+import { auth } from '../firebaseConfig'; 
 
 const COLORS = {
   orange: '#FBA31A',
@@ -169,7 +169,7 @@ export default function AuthComponent() {
             </TouchableOpacity>
           </View>
 
-          {/* CORRECTION ICI : Lien vers Privacy Policy (Absolu) */}
+          {/* FOOTER */}
           <View style={styles.footer}>
             <Pressable onPress={() => router.push("/pdc")}> 
               {({ pressed, hovered }) => (
