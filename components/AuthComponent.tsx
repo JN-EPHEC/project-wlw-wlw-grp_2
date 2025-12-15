@@ -18,9 +18,8 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
-import { auth } from '@/firebaseConfig';
+import { auth } from '../firebaseConfig'; // Vérifie que ce chemin est bon selon où se trouve ton fichier config
 
-// On reprend tes couleurs du projet pour rester cohérent
 const COLORS = {
   orange: '#FBA31A',
   bleuNuit: '#242A65',
@@ -28,14 +27,14 @@ const COLORS = {
   grisClair: '#E5E7EB',
   blanc: '#FFFFFF',
   text: '#000000',
-  linkBlue: '#4A90E2', // Bleu standard pour les liens
+  linkBlue: '#4A90E2',
 };
 
 export default function AuthComponent() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false); // Pour l'icône oeil
+  const [showPassword, setShowPassword] = useState(false);
   
   const [user, setUser] = useState<User | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -44,7 +43,6 @@ export default function AuthComponent() {
   const [emailError, setEmailError] = useState(false);
   const [passwordError, setPasswordError] = useState(false);
 
-  // Vérification de l'état de connexion
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -75,7 +73,6 @@ export default function AuthComponent() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // La redirection est gérée par le useEffect onAuthStateChanged
     } catch (error: any) {
       if (error.code === 'auth/invalid-email' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
         setErrorMessage("Email ou mot de passe incorrect");
@@ -97,10 +94,8 @@ export default function AuthComponent() {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.container}>
           
-          {/* Titre */}
           <Text style={styles.title}>Connexion</Text>
 
-          {/* Champ Email */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Adresse mail</Text>
             <TextInput
@@ -118,7 +113,6 @@ export default function AuthComponent() {
             />
           </View>
 
-          {/* Champ Mot de passe avec oeil */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Mot de passe</Text>
             <View style={[
@@ -139,7 +133,7 @@ export default function AuthComponent() {
                 style={styles.eyeIcon}
               >
                 <Ionicons 
-                  name={showPassword ? "eye-off" : "eye"} 
+                  name={showPassword ? "eye" : "eye-off"} 
                   size={20} 
                   color="#666" 
                 />
@@ -147,10 +141,8 @@ export default function AuthComponent() {
             </View>
           </View>
 
-          {/* Message d'erreur global */}
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-          {/* Bouton Se connecter */}
           <TouchableOpacity 
             onPress={handleSignIn} 
             style={styles.signInButton}
@@ -168,10 +160,8 @@ export default function AuthComponent() {
             <Text style={styles.forgotPassword}>Mot de passe oublié?</Text>
           </TouchableOpacity>
 
-          {/* Section d'espacement (remplace les boutons sociaux) */}
           <View style={styles.spacer} />
 
-          {/* Inscription */}
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>Pas encore de compte ?</Text>
             <TouchableOpacity onPress={() => router.push("/inscription")}>
@@ -179,13 +169,28 @@ export default function AuthComponent() {
             </TouchableOpacity>
           </View>
 
-          {/* Footer légal */}
+          {/* CORRECTION ICI : Lien vers Privacy Policy (Absolu) */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Politiques de confidentialité</Text>
+            <Pressable onPress={() => router.push("/pdc")}> 
+              {({ pressed, hovered }) => (
+                <Text 
+                  style={[
+                    styles.footerText, 
+                    { textDecorationLine: 'underline' },
+                    (pressed || hovered) && { color: COLORS.orange }
+                  ]}
+                >
+                  Politiques de confidentialité
+                </Text>
+              )}
+            </Pressable>
+          
             <View style={styles.footerDivider} />
-            <Text style={styles.footerText}>Besoin d'aide ?</Text>
+    
+            <TouchableOpacity onPress={() => console.log("Aide - À faire")}>
+              <Text style={styles.footerText}>Besoin d'aide ?</Text>
+            </TouchableOpacity>
           </View>
-
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -200,7 +205,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 60, // Espace pour la status bar et le titre
+    paddingTop: 60,
     paddingBottom: 20,
     justifyContent: 'center',
   },
@@ -223,7 +228,7 @@ const styles = StyleSheet.create({
   input: {
     height: 50,
     borderWidth: 1,
-    borderColor: '#E5E7EB', // Gris clair
+    borderColor: '#E5E7EB',
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
@@ -276,7 +281,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   signInText: {
-    color: COLORS.bleuNuit, // Texte bleu/violet comme sur ta maquette (souvent le texte est blanc, mais ici je respecte l'image qui semble avoir un contraste)
+    color: COLORS.bleuNuit,
     fontSize: 18,
     fontWeight: '500',
   },

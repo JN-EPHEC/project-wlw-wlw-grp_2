@@ -6,7 +6,7 @@ import {
 } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import React, { useState } from "react";
-import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View, Pressable } from "react-native";
 import { auth, db } from "../firebaseConfig";
 
 export default function SignUp() {
@@ -208,7 +208,7 @@ export default function SignUp() {
         />
         {birthDateFormatError && <Text style={styles.fieldError}>Format attendu: JJ/MM/AAAA</Text>}
 
-        {/* Conditions */}
+        {/* Conditions - CODE MODIFIÉ ICI */}
         <View style={styles.termsContainer}>
           <TouchableOpacity
             onPress={() => {
@@ -219,8 +219,16 @@ export default function SignUp() {
           >
             <Ionicons name={termsAccepted ? "checkbox" : "square-outline"} size={24} color={termsError ? "red" : "#00b7ff9a"} />
           </TouchableOpacity>
+          
           <Text style={[styles.termsText, termsError && { color: "red" }]}>
-            J'accepte la Politique de confidentialité, les Conditions générales d'utilisation et les Conditions générales de vente
+            J'accepte la{' '}
+            <Text 
+              style={{textDecorationLine: 'underline', fontWeight: 'bold'}}
+              onPress={() => router.push("/pdc")}
+            >
+              Politique de confidentialité
+            </Text>
+            , les CGU et les CGV.
           </Text>
         </View>
         {termsError && <Text style={styles.fieldError}>Vous devez accepter les conditions pour continuer</Text>}
