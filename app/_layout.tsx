@@ -11,7 +11,7 @@ export default function RootLayout() {
             if (user) {
                 try {
                     // @ts-ignore: dynamic import (path resolved at runtime)
-                    const profileFuncs = await import('./firebase-profile-functions');
+                     const profileFuncs = await import('./_firebase-profile-functions');
                     const { saveUserProfile, addGoal } = profileFuncs;
                     // @ts-ignore
                     const AsyncStorageModule = await import('@react-native-async-storage/async-storage');

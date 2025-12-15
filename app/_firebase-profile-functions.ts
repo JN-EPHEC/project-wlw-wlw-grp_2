@@ -1,6 +1,6 @@
 import { getAuth } from 'firebase/auth';
 import { addDoc, collection, deleteDoc, doc, getDoc, getFirestore, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-
+import '../firebaseConfig';
 // ==========================================
 // 🔥 FONCTIONS PROFIL UTILISATEUR
 // ==========================================
