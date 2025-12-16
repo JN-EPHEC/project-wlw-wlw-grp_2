@@ -14,17 +14,7 @@ async function loadFromPackage(): Promise<AsyncStorageLike | null> {
         return null;
     }
 
-    const asyncStorage = module.default || module;
-
-// Puis validation des méthodes
-if (
-  asyncStorage &&
-  typeof asyncStorage.getItem === 'function' &&
-  typeof asyncStorage.setItem === 'function' &&
-  typeof asyncStorage.removeItem === 'function'
-) {
-  return asyncStorage as AsyncStorageLike;
-}
+    const asyncStorage: any = module.default || module;
     return asyncStorage;
 }
 
