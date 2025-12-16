@@ -4,100 +4,110 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import React, { useState } from "react";
-import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { auth, db } from "../firebaseConfig";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from "react-native";
+import { auth } from "../firebaseConfig";
 import { createUserProfile } from "./utils/userProfile";
+
+// Couleurs extraites de ta charte
+const COLORS = {
+  orange: '#FBA31A',
+  bleuNuit: '#242A65',
+  violet: '#7459F0', // Couleur pour "apprenant"
+  gris: '#6B7280',
+  grisClair: '#E5E7EB',
+  blanc: '#FFFFFF',
+  text: '#000000',
+  error: '#FF3B30'
+};
 
 export default function SignUp() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showWelcome, setShowWelcome] = useState(false);
-  const [firstName, setFirstName] = useState("");
+  
+  // États du formulaire
   const [lastName, setLastName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
   const [birthDate, setBirthDate] = useState("");
+  
+  // États de validation / UI
+  const [showWelcome, setShowWelcome] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [emailError, setEmailError] = useState(false);
-  const [passwordError, setPasswordError] = useState(false);
-  const [nameError, setNameError] = useState(false);
-  const [lastNameError, setLastNameError] = useState(false);
-  const [nameFormatError, setNameFormatError] = useState(false);
-  const [lastNameFormatError, setLastNameFormatError] = useState(false);
-  const [emailFormatError, setEmailFormatError] = useState(false);
-  const [birthDateFormatError, setBirthDateFormatError] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsError, setTermsError] = useState(false);
-  const [passwordFormatError, setPasswordFormatError] = useState(false);
 
+  // Gestion de l'inscription
   const handleSignUp = async () => {
     setErrorMessage("");
-    setEmailError(false);
-    setPasswordError(false);
-    setNameError(false);
-    setLastNameError(false);
+    setTermsError(false);
 
-    let hasError = false;
-    if (!email.trim()) {
-      setEmailError(true);
-      hasError = true;
+    // Validation basique
+    if (!lastName || !firstName || !username || !email || !password) {
+      setErrorMessage("Veuillez remplir tous les champs obligatoires.");
+      return;
     }
 
+    if (!termsAccepted) {
+      setTermsError(true);
+      return;
+    }
+
+    // Validation mot de passe
     const hasNumber = /\d/.test(password);
     const hasUpperCase = /[A-Z]/.test(password);
     if (password.length < 6 || !hasNumber || !hasUpperCase) {
-      setPasswordError(true);
-      hasError = true;
+      setErrorMessage("Le mot de passe doit contenir 6 caractères, 1 majuscule et 1 chiffre.");
+      return;
     }
-
-    if (!firstName.trim()) {
-      setNameError(true);
-      hasError = true;
-    }
-    if (!lastName.trim()) {
-      setLastNameError(true);
-      hasError = true;
-    }
-    if (!termsAccepted) {
-      setTermsError(true);
-      hasError = true;
-    }
-    if (hasError) return;
 
     setLoading(true);
     try {
+      // 1. Création Auth Firebase
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const newUser = userCredential.user;
 
-      // Envoi d'email de vérification
+      // 2. Envoi email vérification
       try {
         await sendEmailVerification(newUser);
       } catch (emailErr) {
         console.warn("Envoi email de vérification échoué:", emailErr);
       }
 
-      // Création du profil utilisateur complet
-try {
-  await createUserProfile({
-    username: `${firstName.trim()} ${lastName.trim()}`,
-    bio: '',
-    interests: [], // Vous pourrez ajouter une sélection d'intérêts plus tard
-    profileEmoji: '👤',
-  });
-  
-  console.log("✅ Profil utilisateur créé avec succès !");
-} catch (firestoreErr) {
-  console.error("❌ Erreur lors de la création du profil :", firestoreErr);
-}
+      // 3. Création du profil Firestore
+      try {
+        await createUserProfile({
+          username: username.trim(),
+          bio: '',
+          interests: [],
+          profileEmoji: '👤',
+        });
+        console.log("✅ Profil utilisateur créé avec succès !");
+      } catch (firestoreErr) {
+        console.error("❌ Erreur lors de la création du profil :", firestoreErr);
+      }
 
       setShowWelcome(true);
     } catch (error: any) {
       if (error.code === "auth/invalid-email") {
-        setErrorMessage("Email ou mot de passe incorrect");
+        setErrorMessage("Format d'email invalide.");
       } else if (error.code === "auth/email-already-in-use") {
-        setErrorMessage("Cet email est déjà utilisé");
+        setErrorMessage("Cet email est déjà utilisé.");
+      } else if (error.code === "auth/weak-password") {
+        setErrorMessage("Mot de passe trop faible.");
       } else {
         setErrorMessage("Une erreur est survenue. Veuillez réessayer.");
       }
@@ -108,207 +118,310 @@ try {
 
   const handleCloseModal = () => {
     setShowWelcome(false);
-    router.replace("/home");
+    router.replace("/(tabs)/home");
   };
 
   return (
-    <View style={{ flex: 1, padding: 20 }}>
-      <TouchableOpacity onPress={() => router.back()} style={{ marginBottom: 20 }}>
-        <Ionicons name="arrow-back" size={24} color="#00b7ff9a" />
-      </TouchableOpacity>
-
-      <View style={styles.container}>
-        <Text style={styles.title}>Création de compte</Text>
-
-                {errorMessage ? <Text style={styles.generalError}>{errorMessage}</Text> : null}
-
-{/* Prénom */}
-        <TextInput
-          style={[styles.input, (nameError || nameFormatError) && { borderColor: "red" }]}
-          placeholder="Prénom*"
-          value={firstName}
-          maxLength={50}
-          onChangeText={(text) => {
-            const filteredText = text.replace(/[^a-zA-ZÀ-ÿ\s-]/g, "");
-            setNameFormatError(text !== filteredText);
-            setFirstName(filteredText);
-            setNameError(false);
-          }}
-        />
-        {nameError && <Text style={styles.fieldError}>Cette case doit être remplie</Text>}
-        {nameFormatError && <Text style={styles.fieldError}>Seules les lettres et accents sont autorisés</Text>}
-
-        {/* Nom */}
-        <TextInput
-          style={[styles.input, (lastNameError || lastNameFormatError) && { borderColor: "red" }]}
-          placeholder="Nom*"
-          value={lastName}
-          maxLength={50}
-          onChangeText={(text) => {
-            const filteredText = text.replace(/[^a-zA-ZÀ-ÿ\s-]/g, "");
-            setLastNameFormatError(text !== filteredText);
-            setLastName(filteredText);
-            setLastNameError(false);
-          }}
-        />
-        {lastNameError && <Text style={styles.fieldError}>Cette case doit être remplie</Text>}
-        {lastNameFormatError && <Text style={styles.fieldError}>Seules les lettres et accents sont autorisés</Text>}
-
-        {/* Email */}
-        <TextInput
-          style={[styles.input, (emailError || emailFormatError) && { borderColor: "red" }]}
-          placeholder="Email*"
-          value={email}
-          onChangeText={(text) => {
-            setEmail(text);
-            setEmailError(false);
-            setEmailFormatError(text.length > 0 && !text.includes("@"));
-          }}
-          autoCapitalize="none"
-        />{emailFormatError && <Text style={styles.fieldError}>L’email doit contenir un @xxx.xx</Text>}
-
-        {/* Mot de passe */}
-        <TextInput
-          style={[styles.input, (passwordError || passwordFormatError) && { borderColor: "red" }]}
-          placeholder="Mot de passe*"
-          value={password}
-          onChangeText={(text) => {
-            setPassword(text);
-            setPasswordError(false);
-            const hasNumber = /\d/.test(text);
-            const hasUpperCase = /[A-Z]/.test(text);
-            setPasswordFormatError(text.length > 0 && (text.length < 6 || !hasNumber || !hasUpperCase));
-          }}
-          secureTextEntry
-        />
-        {passwordError && (
-          <Text style={styles.fieldError}>Le mot de passe doit contenir au moins 6 caractères, 1 chiffre et 1 majuscule</Text>
-        )}
-        {passwordFormatError && (
-          <Text style={styles.fieldError}>Min 6 caractères, 1 chiffre et 1 majuscule requis</Text>
-        )}
-
-        {/* Date de naissance */}
-        <TextInput
-          style={[styles.input, birthDateFormatError && { borderColor: "red" }]}
-          placeholder="Date de naissance (JJ/MM/AAAA)"
-          value={birthDate}
-          keyboardType="numeric"
-          maxLength={10}
-          onChangeText={(text) => {
-            const digits = text.replace(/\D/g, "");
-            let formatted = digits;
-            if (digits.length > 2 && digits.length <= 4) formatted = digits.slice(0, 2) + "/" + digits.slice(2);
-            else if (digits.length > 4)
-              formatted = digits.slice(0, 2) + "/" + digits.slice(2, 4) + "/" + digits.slice(4, 8);
-            setBirthDate(formatted);
-            const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
-            setBirthDateFormatError(formatted.length > 0 && (formatted.length < 10 || (formatted.length === 10 && !dateRegex.test(formatted))));
-          }}
-        />
-        {birthDateFormatError && <Text style={styles.fieldError}>Format attendu: JJ/MM/AAAA</Text>}
-
-        {/* Conditions - CODE MODIFIÉ ICI */}
-        <View style={styles.termsContainer}>
-          <TouchableOpacity
-            onPress={() => {
-              setTermsAccepted(!termsAccepted);
-              setTermsError(false);
-            }}
-            style={styles.checkboxContainer}
-          >
-            <Ionicons name={termsAccepted ? "checkbox" : "square-outline"} size={24} color={termsError ? "red" : "#00b7ff9a"} />
+    <KeyboardAvoidingView 
+      style={{ flex: 1, backgroundColor: '#FFFFFF' }} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* Header avec Flèche retour et Titre personnalisé */}
+        <View style={styles.headerContainer}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={32} color="black" />
           </TouchableOpacity>
           
-          <Text style={[styles.termsText, termsError && { color: "red" }]}>
-             J’accepte la{' '}
-            <Text 
-              style={{textDecorationLine: 'underline', fontWeight: 'bold'}}
-              onPress={() => router.push("/pdc")}
-            >
-              Politique de confidentialité
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>S’inscrire en</Text>
+            <Text style={styles.headerTitle}>tant</Text>
+            <Text style={styles.headerTitle}>
+              qu’<Text style={styles.headerTitleHighlight}>apprenant</Text>
             </Text>
-            , les CGU et les CGV.
-          </Text>
-        </View>
-        {termsError && <Text style={styles.fieldError}>Vous devez accepter les conditions pour continuer</Text>}
-
-        {/* Bouton inscription */}
-        <View style={{ alignItems: "center", marginTop: 20 }}>
-          {(() => {
-            const hasNumber = /\d/.test(password);
-            const hasUpperCase = /[A-Z]/.test(password);
-            const isPasswordValid = password.length >= 6 && hasNumber && hasUpperCase;
-            const isFormValid =
-              firstName.trim() !== "" &&
-              lastName.trim() !== "" &&
-              email.trim() !== "" &&
-              email.includes("@") &&
-              isPasswordValid &&
-              termsAccepted &&
-              !nameFormatError &&
-              !lastNameFormatError &&
-              !emailFormatError &&
-              !birthDateFormatError;
-            return (
-              <TouchableOpacity
-                onPress={handleSignUp}
-                style={[styles.signUpButton, !isFormValid && styles.signUpButtonDisabled]}
-                disabled={loading || !isFormValid}
-              >
-                <Text style={styles.signUpText}>S’inscrire</Text>
-              </TouchableOpacity>
-            );
-          })()}
-        </View>
-
-        {/* Lien login */}
-        <View style={{ alignItems: "center", marginTop: 10 }}>
-          <TouchableOpacity onPress={() => router.push("/auth")}>
-            <Text style={{ color: "navy", textDecorationLine: "underline", fontSize: 12 }}>Vous avez déjà un compte ?</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Modal bienvenue */}
-        <Modal visible={showWelcome} transparent animationType="slide">
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalText}>Bienvenue ! Votre compte a été créé avec succès.</Text>
-              <TouchableOpacity style={styles.closeButton} onPress={handleCloseModal}>
-                <Text style={styles.closeText}>x</Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        </Modal>
-      </View>
-    </View>
+        </View>
+
+        {/* Formulaire */}
+        <View style={styles.formContainer}>
+          
+          {/* Nom */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nom</Text>
+            <TextInput
+              style={styles.input}
+              value={lastName}
+              onChangeText={setLastName}
+              placeholderTextColor="#C4C4C4"
+            />
+          </View>
+
+          {/* Prénom */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Prénom</Text>
+            <TextInput
+              style={styles.input}
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholderTextColor="#C4C4C4"
+            />
+          </View>
+
+          {/* Nom d'utilisateur */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Nom d’utilisateur</Text>
+            <TextInput
+              style={styles.input}
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              placeholderTextColor="#C4C4C4"
+            />
+          </View>
+
+          {/* Mot de passe */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Mot de passe</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              placeholderTextColor="#C4C4C4"
+            />
+          </View>
+
+          {/* Email */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Adresse mail</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholderTextColor="#C4C4C4"
+            />
+          </View>
+
+          {/* Message d'erreur global */}
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+
+          {/* Checkbox Conditions */}
+          <View style={styles.checkboxContainer}>
+            <TouchableOpacity
+              onPress={() => {
+                setTermsAccepted(!termsAccepted);
+                setTermsError(false);
+              }}
+              style={styles.checkbox}
+            >
+              <Ionicons 
+                name={termsAccepted ? "checkbox" : "square-outline"} 
+                size={24} 
+                color={termsError ? COLORS.error : "#333"} 
+              />
+            </TouchableOpacity>
+            
+            <Text style={[styles.termsText, termsError && { color: COLORS.error }]}>
+              J’accepte la{' '}
+              <Text 
+                style={styles.linkText}
+                onPress={() => router.push("/pdc")}
+              >
+                Politique de confidentialité
+              </Text>
+              , les CGU et les CGV.
+            </Text>
+          </View>
+
+          {/* Bouton Inscription */}
+          <TouchableOpacity
+            onPress={handleSignUp}
+            style={styles.signUpButton}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={COLORS.bleuNuit} />
+            ) : (
+              <Text style={styles.signUpButtonText}>S’inscrire</Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Lien Login */}
+          <View style={styles.loginLinkContainer}>
+            <TouchableOpacity onPress={() => router.push("/auth")}>
+              <Text style={styles.loginLinkText}>Vous avez déjà un compte ?</Text>
+            </TouchableOpacity>
+          </View>
+
+        </View>
+      </ScrollView>
+
+      {/* Modal Bienvenue */}
+      <Modal visible={showWelcome} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Bienvenue ! 🎉</Text>
+            <Text style={styles.modalText}>Votre compte a été créé avec succès.</Text>
+            <TouchableOpacity style={styles.modalButton} onPress={handleCloseModal}>
+              <Text style={styles.modalButtonText}>Commencer</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 20, borderRadius: 20 },
-  title: { fontSize: 24, fontWeight: "bold", textAlign: "center", marginBottom: 20, borderRadius: 20 },
-  input: {
-    height: 40,
-    borderColor: "gray",
-    borderWidth: 1,
-    marginBottom: 10,
-    paddingHorizontal: 10,
-    fontStyle: "italic",
-    color: "rgba(100, 100, 100, 0.7)",
-    borderRadius: 15,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingTop: 60, // Espace pour la status bar
+    paddingBottom: 40,
+    backgroundColor: '#FFFFFF',
   },
-  modalContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
-  modalContent: { width: 250, padding: 20, backgroundColor: "white", borderRadius: 10, alignItems: "center" },
-  modalText: { fontSize: 20, fontWeight: "bold", marginBottom: 10 },
-  closeButton: { marginTop: 10, padding: 5 },
-  closeText: { fontSize: 18, fontWeight: "bold" },
-  signUpButton: { backgroundColor: "#00b7ff9a", paddingVertical: 10, paddingHorizontal: 25, borderRadius: 5, alignItems: "center", marginTop: 10 },
-  signUpButtonDisabled: { backgroundColor: "rgba(0, 183, 255, 0.3)", opacity: 0.5 },
-  signUpText: { color: "white", fontSize: 16, fontWeight: "bold" },
-  fieldError: { color: "red", marginTop: -5, marginBottom: 8, textAlign: "left", fontSize: 13 },
-  generalError: { color: "red", textAlign: "center", marginBottom: 10 },
-  termsContainer: { flexDirection: "row", alignItems: "center", marginTop: 15, marginBottom: 5, paddingHorizontal: 5 },
-  checkboxContainer: { marginRight: 10 },
-  termsText: { flex: 1, fontSize: 12, color: "#666", lineHeight: 16 },
+  // --- Header Styles ---
+  headerContainer: {
+    marginBottom: 40,
+  },
+  backButton: {
+    marginBottom: 20,
+    alignSelf: 'flex-start',
+  },
+  titleContainer: {
+    alignItems: 'flex-start',
+  },
+  headerTitle: {
+    fontSize: 42,
+    fontWeight: 'bold',
+    color: '#000',
+    lineHeight: 50, // Ajustement pour l'espacement entre les lignes
+  },
+  headerTitleHighlight: {
+    color: COLORS.violet, // Couleur violette pour "apprenant"
+  },
+  // --- Form Styles ---
+  formContainer: {
+    width: '100%',
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '400',
+    color: '#333333',
+    marginBottom: 8,
+    marginLeft: 2,
+  },
+  input: {
+    height: 52,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E5E5',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: '#000',
+  },
+  errorText: {
+    color: COLORS.error,
+    textAlign: 'center',
+    marginBottom: 10,
+    fontSize: 14,
+  },
+  // --- Checkbox & Links ---
+  checkboxContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 30,
+  },
+  checkbox: {
+    marginRight: 10,
+  },
+  termsText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#333",
+    lineHeight: 20,
+  },
+  linkText: {
+    textDecorationLine: 'underline',
+    color: '#000',
+  },
+  // --- Buttons ---
+  signUpButton: {
+    backgroundColor: COLORS.orange,
+    height: 56,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  signUpButtonText: {
+    color: COLORS.bleuNuit,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  loginLinkContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  loginLinkText: {
+    color: COLORS.bleuNuit,
+    fontSize: 16,
+    textDecorationLine: 'underline',
+    fontWeight: '500',
+  },
+  // --- Modal ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '80%',
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 12,
+    color: COLORS.bleuNuit,
+  },
+  modalText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 24,
+    color: '#666',
+  },
+  modalButton: {
+    backgroundColor: COLORS.orange,
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+  },
+  modalButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
 });
