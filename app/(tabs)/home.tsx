@@ -549,63 +549,69 @@ export default function VideoFeedApp() {
     loadVideosFromFirebase();
   }, []);
 
-  const loadVideosFromFirebase = async () => {
-    try {
-      setLoading(true);
-      const firebaseVideos = await getPublicVideos(20);
-      
-      // Convertir les vidéos Firebase en format local
-      const formattedVideos: Video[] = await Promise.all(
-        firebaseVideos.map(async (fbVideo: any) => {
-          const isLikedByUser = auth.currentUser 
-            ? await hasLiked(fbVideo.id) 
-            : false;
+ const loadVideosFromFirebase = async () => {
+  try {
+    setLoading(true);
+    
+    // VIDÉOS DE DÉMO (en attendant d'avoir des vraies vidéos Firebase)
+    const demoVideos: Video[] = [
+      {
+        id: 1,
+        creatorUsername: 'SophieMartin',
+        creatorAvatar: '👩‍💼',
+        creatorLevel: 'expert',
+        videoUrl: 'https://via.placeholder.com/400x800/FF6B35/FFFFFF?text=Video+1',
+        title: '5 STRATÉGIES DE MARKETING DIGITAL POUR 2025',
+        description: 'Découvrez les meilleures stratégies de marketing digitales pour booster votre présence en ligne.',
+        hashtags: ['MarketingDigital', 'Business', 'Stratégie', '2025'],
+        likes: 4445,
+        comments: 579,
+        publishDate: '1-28',
+        isLiked: false,
+        duration: 60,
+        progress: 0,
+      },
+      {
+        id: 2,
+        creatorUsername: 'TechWithMarie',
+        creatorAvatar: '👨‍💻',
+        creatorLevel: 'diplome',
+        videoUrl: 'https://via.placeholder.com/400x800/7C3AED/FFFFFF?text=Video+2',
+        title: 'APPRENDRE PYTHON EN 60 SECONDES',
+        description: 'Les bases essentielles de Python expliquées simplement pour les débutants.',
+        hashtags: ['Python', 'Coding', 'Tech', 'Tutorial'],
+        likes: 2340,
+        comments: 187,
+        publishDate: '2-15',
+        isLiked: false,
+        duration: 45,
+        progress: 0,
+      },
+      {
+        id: 3,
+        creatorUsername: 'DesignByAlex',
+        creatorAvatar: '🎨',
+        creatorLevel: 'amateur',
+        videoUrl: 'https://via.placeholder.com/400x800/F97316/FFFFFF?text=Video+3',
+        title: 'ASTUCE DESIGN UI : UTILISER LES OMBRES',
+        description: 'Comment créer de la profondeur dans vos designs avec des ombres subtiles.',
+        hashtags: ['Design', 'UI', 'UX', 'Tips'],
+        likes: 1820,
+        comments: 94,
+        publishDate: '3-02',
+        isLiked: false,
+        duration: 30,
+        progress: 0,
+      },
+    ];
 
-          return {
-            id: fbVideo.id,
-            creatorUsername: fbVideo.userId || 'Utilisateur',
-            creatorAvatar: '👤',
-            creatorLevel: 'amateur' as const,
-            videoUrl: fbVideo.videoUrl || fbVideo.thumbnailUrl || 'https://via.placeholder.com/400x800',
-            title: fbVideo.titre || 'Sans titre',
-            description: fbVideo.description || '',
-            hashtags: fbVideo.tags || [],
-            likes: fbVideo.nombreDeLikes || 0,
-            comments: fbVideo.nombreDeCommentaires || 0,
-            publishDate: formatDate(fbVideo.datePublication || fbVideo.createdAt),
-            isLiked: isLikedByUser,
-            duration: fbVideo.duree || 60,
-            progress: 0,
-          };
-        })
-      );
-
-      setVideos(formattedVideos);
-    } catch (error) {
-      console.error('Erreur chargement vidéos:', error);
-      // En cas d'erreur, utiliser les vidéos de démo
-      setVideos([
-        {
-          id: 1,
-          creatorUsername: 'Demo',
-          creatorAvatar: '👤',
-          creatorLevel: 'amateur',
-          videoUrl: 'https://via.placeholder.com/400x800',
-          title: 'Vidéo de démo',
-          description: 'Créez des vidéos dans Firebase pour les voir ici',
-          hashtags: ['demo'],
-          likes: 0,
-          comments: 0,
-          publishDate: '1j',
-          isLiked: false,
-          duration: 60,
-          progress: 0,
-        }
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setVideos(demoVideos);
+    setLoading(false);
+  } catch (error) {
+    console.error('Erreur:', error);
+    setLoading(false);
+  }
+};
 
   // Fonction helper pour formater la date
   const formatDate = (timestamp: any) => {
