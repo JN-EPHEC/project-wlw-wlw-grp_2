@@ -34,7 +34,7 @@ interface ProgressContextType {
     decrementGoal: (id: string) => void;
     
     // Badges
-    badges: Array<{ title: string; emoji: string }>;
+    badges: { title: string; emoji: string }[];
     badgesCount: { earned: number; total: number };
 }
 

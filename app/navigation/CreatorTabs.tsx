@@ -3,8 +3,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import React from 'react';
 import { Platform, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { getAuth, signOut } from 'firebase/auth';
-
+import { signOut } from 'firebase/auth';
+import { auth } from '../../firebaseConfig';
 import Explore from '../(tabs)/explore';
 import HomeUser from '../(tabs)/home';
 import Notifications from '../(tabs)/notifications';
@@ -80,7 +80,6 @@ export default function CreatorTabs() {
 
         (async () => {
           try {
-            const auth = getAuth();
             await signOut(auth);
             // After successful sign out, go to the auth page
             router.replace('/auth');
