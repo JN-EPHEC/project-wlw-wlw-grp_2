@@ -8,6 +8,7 @@ import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import React, { useState } from "react";
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { auth, db } from "../firebaseConfig";
+import { createUserProfile } from "./utils/userProfile";
 
 export default function SignUp() {
   const router = useRouter();
@@ -77,20 +78,19 @@ export default function SignUp() {
         console.warn("Envoi email de vérification échoué:", emailErr);
       }
 
-      // Firestore : création document avec try/catch pour sécurité
-      try {
-        await setDoc(doc(db, "users", newUser.uid), {
-          uid: newUser.uid,
-          email: newUser.email,
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          birthDate: birthDate || null,
-          createdAt: serverTimestamp(),
-        });
-        console.log("✅ Utilisateur créé dans Firestore avec UID:", newUser.uid);
-      } catch (firestoreErr) {
-        console.error("❌ Erreur lors de la création du document Firestore :", firestoreErr);
-      }
+      // Création du profil utilisateur complet
+try {
+  await createUserProfile({
+    username: `${firstName.trim()} ${lastName.trim()}`,
+    bio: '',
+    interests: [], // Vous pourrez ajouter une sélection d'intérêts plus tard
+    profileEmoji: '👤',
+  });
+  
+  console.log("✅ Profil utilisateur créé avec succès !");
+} catch (firestoreErr) {
+  console.error("❌ Erreur lors de la création du profil :", firestoreErr);
+}
 
       setShowWelcome(true);
     } catch (error: any) {
