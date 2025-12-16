@@ -1,44 +1,54 @@
 type AsyncStorageLike = {
-    getItem: (key: string) => Promise<string | null>;
-    setItem: (key: string, value: string) => Promise<void>;
-    removeItem: (key: string) => Promise<void>;
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
 };
 
 const memoryStore = new Map<string, string>();
 
-async function loadFromPackage(): Promise<AsyncStorageLike | null> {
-    // eslint-disable-next-line import/no-unresolved
-    const module = await import('@react-native-async-storage/async-storage').catch(() => null);
-
-    if (!module) {
-        return null;
-    }
-
-    const asyncStorage: any = module.default || module;
-    return asyncStorage;
-}
-
 function createMemoryFallback(): AsyncStorageLike {
-    return {
-        async getItem(key: string) {
-            return memoryStore.get(key) ?? null;
-        },
-        async setItem(key: string, value: string) {
-            memoryStore.set(key, value);
-        },
-        async removeItem(key: string) {
-            memoryStore.delete(key);
-        }
-    };
-}
-
-export default async function getAsyncStorage(): Promise<AsyncStorageLike> {
-    const asyncStorage = await loadFromPackage();
-
-    if (asyncStorage) {
-        return asyncStorage;
+  return {
+    async getItem(key: string) {
+      return memoryStore.get(key) ?? null;
+    },
+    async setItem(key: string, value: string) {
+      memoryStore.set(key, value);
+    },
+    async removeItem(key: string) {
+      memoryStore.delete(key);
     }
-
-    console.warn('AsyncStorage package missing; using in-memory fallback. Data will reset when the app reloads.');
-    return createMemoryFallback();
+  };
 }
+
+// ✅ EXPORT SYNCHRONE - Pas de async ici !
+let asyncStorageInstance: AsyncStorageLike | null = null;
+
+function getAsyncStorage(): AsyncStorageLike {
+  if (asyncStorageInstance) {
+    return asyncStorageInstance;
+  }
+
+  try {
+    // Essayer d'importer AsyncStorage de manière synchrone
+    const AsyncStorageModule = require('@react-native-async-storage/async-storage');
+    const AsyncStorage = AsyncStorageModule.default || AsyncStorageModule;
+    
+    if (
+      AsyncStorage &&
+      typeof AsyncStorage.getItem === 'function' &&
+      typeof AsyncStorage.setItem === 'function' &&
+      typeof AsyncStorage.removeItem === 'function'
+    ) {
+      asyncStorageInstance = AsyncStorage;
+      return AsyncStorage;
+    }
+  } catch (error) {
+    console.warn('AsyncStorage not available, using memory fallback:', error);
+  }
+
+  // Fallback vers mémoire
+  asyncStorageInstance = createMemoryFallback();
+  return asyncStorageInstance;
+}
+
+export default getAsyncStorage();
