@@ -1,7 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
 import { Dimensions, Image, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-
+import { 
+  likeContent, 
+  unlikeContent, 
+  hasLiked,
+  addComment, 
+  deleteComment,
+  getComments,
+  saveContent,
+  unsaveContent,
+  hasSaved,
+  shareContent 
+} from '../utils/index';
+import { getPublicVideos } from '../utils/videoManager';
+import { auth } from '../../firebaseConfig.js';
+import { useEffect } from 'react'; // Si pas déjà importé
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Types
@@ -525,182 +539,209 @@ export default function VideoFeedApp() {
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [showComments, setShowComments] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [loading, setLoading] = useState(true);
   
-  const [videos, setVideos] = useState<Video[]>([
-    {
-      id: 1,
-      creatorUsername: 'SophieMartin',
-      creatorAvatar: '👩‍💼',
-      creatorLevel: 'expert',
-      videoUrl: 'https://via.placeholder.com/400x800/FF6B35/FFFFFF?text=Video+1',
-      title: '5 STRATÉGIES DE MARKETING DIGITAL POUR 2025',
-      description: 'Découvrez les meilleures stratégies de marketing digitales pour booster votre présence en ligne et atteindre vos objectifs commerciaux.',
-      hashtags: ['MarketingDigital', 'Business', 'Stratégie', '2025'],
-      likes: 4445,
-      comments: 579, // Correspond au nombre de commentaires générés
-      publishDate: '1-28',
-      isLiked: false,
-      duration: 60, // 60 secondes
-      progress: 0,
-    },
-    {
-      id: 2,
-      creatorUsername: 'TechWithMarie',
-      creatorAvatar: '👨‍💻',
-      creatorLevel: 'diplome',
-      videoUrl: 'https://via.placeholder.com/400x800/7C3AED/FFFFFF?text=Video+2',
-      title: 'APPRENDRE PYTHON EN 60 SECONDES',
-      description: 'Les bases essentielles de Python expliquées simplement pour les débutants.',
-      hashtags: ['Python', 'Coding', 'Tech', 'Tutorial'],
-      likes: 2340,
-      comments: 187,
-      publishDate: '2-15',
-      isLiked: false,
-      duration: 45, // 45 secondes
-      progress: 0,
-    },
-    {
-      id: 3,
-      creatorUsername: 'DesignByAlex',
-      creatorAvatar: '🎨',
-      creatorLevel: 'amateur',
-      videoUrl: 'https://via.placeholder.com/400x800/F97316/FFFFFF?text=Video+3',
-      title: 'ASTUCE DESIGN UI : UTILISER LES OMBRES',
-      description: 'Comment créer de la profondeur dans vos designs avec des ombres subtiles.',
-      hashtags: ['Design', 'UI', 'UX', 'Tips'],
-      likes: 1820,
-      comments: 94,
-      publishDate: '3-02',
-      isLiked: false,
-      duration: 30, // 30 secondes
-      progress: 0,
-    },
-  ]);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
 
-  // Fonction pour générer des commentaires aléatoires
-  const generateComments = (): Comment[] => {
-    const usernames = [
-      'martini_rond', 'maxjacobson', 'zackjohn', 'kiero_d', 'karennne', 'sophie_martin',
-      'alex_dev', 'marie_design', 'paul_tech', 'emma_ui', 'lucas_web', 'clara_code',
-      'thomas_ux', 'julie_marketing', 'antoine_data', 'lea_product', 'maxime_dev',
-      'sarah_design', 'nicolas_tech', 'laura_ux', 'pierre_web', 'camille_app',
-      'david_mobile', 'alice_frontend', 'hugo_backend', 'chloe_fullstack', 'louis_devops',
-      'amelie_scrum', 'raphael_agile', 'manon_pm', 'theo_qa', 'jade_test'
-    ];
+  // ✅ CHARGER LES VIDÉOS DEPUIS FIREBASE
+  useEffect(() => {
+    loadVideosFromFirebase();
+  }, []);
 
-    const commentTexts = [
-      'Super contenu ! Très utile', 'Merci pour ces conseils', 'Exactement ce que je cherchais',
-      'Génial, hâte de tester ça', 'Des astuces en or !', 'Vraiment instructif !',
-      'J\'adore ce format', 'Enfin une explication claire', 'C\'est top !',
-      'Merci du partage', 'Excellent comme toujours', 'Très bien expliqué',
-      'Je vais essayer ça', 'Parfait pour mon projet', 'Trop cool !',
-      'C\'est exactement ça', 'Bravo pour le contenu', 'Continue comme ça !',
-      'Super vidéo', 'Merci beaucoup', 'Très intéressant', 'Top content',
-      'Bien vu !', 'J\'approuve totalement', 'À sauvegarder', 'Merci pour l\'info',
-      'C\'est clair et précis', 'Du très bon travail', 'Je recommande',
-      'Utile au quotidien', 'Ça m\'aide beaucoup', 'Merci de partager ton expertise',
-      'Super tips', 'J\'utilise déjà cette méthode', 'Ça fonctionne vraiment',
-      'Testé et approuvé', 'Merci pour ces astuces', 'J\'ai appris quelque chose',
-      'Très pédagogique', 'Bien détaillé', 'Complet et clair',
-      'Génial pour les débutants', 'Même les experts y trouvent leur compte',
-      'Content de voir ce genre de contenu', 'Qualité au rendez-vous',
-      'Toujours aussi pertinent', 'Merci de prendre le temps', 'Super boulot',
-      'Je partage avec mon équipe', 'On en a parlé au bureau', 'Parfait timing !',
-      'J\'attendais ça', 'Pile ce dont j\'avais besoin', 'Ça tombe bien',
-      'Tellement vrai', 'C\'est du vécu', 'Je confirme', 'Absolument',
-      'Pareil pour moi', 'J\'ai eu le même problème', 'Ça m\'a aidé',
-      'Solution efficace', 'Approche intéressante', 'Bonne technique',
-      'Merci de l\'explication', 'C\'est plus clair maintenant', 'Ah je comprends mieux',
-      'Ça fait sens', 'Logique et simple', 'Bien pensé', 'Stratégie intelligente'
-    ];
-
-    const timeOptions = [
-      '1min', '5min', '15min', '30min', '1h', '2h', '3h', '5h', '8h', '12h', 
-      '15h', '18h', '21h', '22h', '23h', '1j', '2j', '3j', '4j', '5j', '1sem', '2sem'
-    ];
-
-    const comments: Comment[] = [];
-
-    // Générer 579 commentaires comme dans l'image
-    for (let i = 1; i <= 579; i++) {
-      const hasReplies = Math.random() > 0.7; // 30% de chance d'avoir des réponses
-      const replyCount = hasReplies ? Math.floor(Math.random() * 5) + 1 : 0;
-      const isVerified = Math.random() > 0.95; // 5% de chance d'être vérifié
+  const loadVideosFromFirebase = async () => {
+    try {
+      setLoading(true);
+      const firebaseVideos = await getPublicVideos(20);
       
-      const repliesData: Reply[] = [];
-      if (hasReplies && replyCount > 0) {
-        for (let j = 0; j < replyCount; j++) {
-          repliesData.push({
-            id: i * 1000 + j,
-            username: usernames[Math.floor(Math.random() * usernames.length)],
-            text: commentTexts[Math.floor(Math.random() * commentTexts.length)],
-            time: timeOptions[Math.floor(Math.random() * timeOptions.length)],
-            likes: Math.floor(Math.random() * 30),
-            isLiked: false
-          });
-        }
-      }
+      // Convertir les vidéos Firebase en format local
+      const formattedVideos: Video[] = await Promise.all(
+        firebaseVideos.map(async (fbVideo: any) => {
+          const isLikedByUser = auth.currentUser 
+            ? await hasLiked(fbVideo.id) 
+            : false;
 
-      comments.push({
-        id: i,
-        username: usernames[Math.floor(Math.random() * usernames.length)],
-        text: commentTexts[Math.floor(Math.random() * commentTexts.length)],
-        time: timeOptions[Math.floor(Math.random() * timeOptions.length)],
-        likes: Math.floor(Math.random() * 100),
-        replies: replyCount,
-        verified: isVerified,
+          return {
+            id: fbVideo.id,
+            creatorUsername: fbVideo.userId || 'Utilisateur',
+            creatorAvatar: '👤',
+            creatorLevel: 'amateur' as const,
+            videoUrl: fbVideo.videoUrl || fbVideo.thumbnailUrl || 'https://via.placeholder.com/400x800',
+            title: fbVideo.titre || 'Sans titre',
+            description: fbVideo.description || '',
+            hashtags: fbVideo.tags || [],
+            likes: fbVideo.nombreDeLikes || 0,
+            comments: fbVideo.nombreDeCommentaires || 0,
+            publishDate: formatDate(fbVideo.datePublication || fbVideo.createdAt),
+            isLiked: isLikedByUser,
+            duration: fbVideo.duree || 60,
+            progress: 0,
+          };
+        })
+      );
+
+      setVideos(formattedVideos);
+    } catch (error) {
+      console.error('Erreur chargement vidéos:', error);
+      // En cas d'erreur, utiliser les vidéos de démo
+      setVideos([
+        {
+          id: 1,
+          creatorUsername: 'Demo',
+          creatorAvatar: '👤',
+          creatorLevel: 'amateur',
+          videoUrl: 'https://via.placeholder.com/400x800',
+          title: 'Vidéo de démo',
+          description: 'Créez des vidéos dans Firebase pour les voir ici',
+          hashtags: ['demo'],
+          likes: 0,
+          comments: 0,
+          publishDate: '1j',
+          isLiked: false,
+          duration: 60,
+          progress: 0,
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fonction helper pour formater la date
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return '1j';
+    try {
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      const now = new Date();
+      const diffInDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffInDays === 0) return "Aujourd'hui";
+      if (diffInDays === 1) return '1j';
+      if (diffInDays < 7) return `${diffInDays}j`;
+      if (diffInDays < 30) return `${Math.floor(diffInDays / 7)}sem`;
+      return `${Math.floor(diffInDays / 30)}m`;
+    } catch {
+      return '1j';
+    }
+  };
+
+  // ✅ CHARGER LES COMMENTAIRES DEPUIS FIREBASE
+  const loadCommentsFromFirebase = async (videoId: string) => {
+    try {
+      const firebaseComments = await getComments(videoId, 50);
+      
+      const formattedComments: Comment[] = firebaseComments.map((fbComment: any) => ({
+        id: fbComment.id,
+        username: fbComment.userId,
+        text: fbComment.text || fbComment.contenu,
+        time: formatDate(fbComment.createdAt),
+        likes: 0,
+        replies: 0,
+        verified: false,
         isLiked: false,
         showReplies: false,
-        repliesData: repliesData
-      });
+        repliesData: []
+      }));
+
+      setComments(formattedComments);
+    } catch (error) {
+      console.error('Erreur chargement commentaires:', error);
+      setComments([]);
+    }
+  };
+
+  // ✅ FONCTION LIKE CONNECTÉE À FIREBASE
+  const handleLike = async (videoId: number) => {
+    if (!auth.currentUser) {
+      alert('Vous devez être connecté pour liker');
+      return;
     }
 
-    return comments;
+    try {
+      const video = videos.find(v => v.id === videoId);
+      if (!video) return;
+
+      if (video.isLiked) {
+        await unlikeContent(videoId.toString(), 'video');
+      } else {
+        await likeContent(videoId.toString(), 'video');
+      }
+
+      // Mettre à jour l'état local
+      setVideos(videos.map(v => {
+        if (v.id === videoId) {
+          return {
+            ...v,
+            isLiked: !v.isLiked,
+            likes: v.isLiked ? v.likes - 1 : v.likes + 1
+          };
+        }
+        return v;
+      }));
+    } catch (error: any) {
+      console.error('Erreur like:', error);
+      if (error.message !== 'Déjà liké') {
+        alert('Erreur lors du like');
+      }
+    }
   };
 
-  const [comments, setComments] = useState<Comment[]>(generateComments());
+  // ✅ FONCTION AJOUTER COMMENTAIRE CONNECTÉE À FIREBASE
+  const handleAddComment = async (text: string) => {
+    if (!auth.currentUser) {
+      alert('Vous devez être connecté pour commenter');
+      return;
+    }
 
-  const handleLike = (videoId: number) => {
-    setVideos(videos.map(video => {
-      if (video.id === videoId) {
-        return {
-          ...video,
-          isLiked: !video.isLiked,
-          likes: video.isLiked ? video.likes - 1 : video.likes + 1
-        };
-      }
-      return video;
-    }));
+    try {
+      const currentVideo = videos[currentVideoIndex];
+      await addComment(currentVideo.id.toString(), text, 'video');
+      
+      // Recharger les commentaires
+      await loadCommentsFromFirebase(currentVideo.id.toString());
+      
+      // Incrémenter le compteur
+      setVideos(videos.map(video => {
+        if (video.id === currentVideo.id) {
+          return { ...video, comments: video.comments + 1 };
+        }
+        return video;
+      }));
+    } catch (error) {
+      console.error('Erreur ajout commentaire:', error);
+      alert('Erreur lors de l\'ajout du commentaire');
+    }
   };
 
-  const handleAddComment = (text: string) => {
-    // Créer un nouveau commentaire avec un ID unique
-    const newComment: Comment = {
-      id: Math.max(...comments.map(c => c.id)) + 1, // ID après le dernier commentaire
-      username: 'Vous', // Nom de l'utilisateur actuel
-      text: text,
-      time: 'À l\'instant',
-      likes: 0,
-      replies: 0,
-      verified: false,
-      isLiked: false,
-      showReplies: false,
-      repliesData: []
-    };
-    
-    // Ajouter le nouveau commentaire EN HAUT de la liste
-    setComments([newComment, ...comments]);
-    
-    // Incrémenter le compteur de commentaires de la vidéo actuelle
-    setVideos(videos.map(video => {
-      if (video.id === videos[currentVideoIndex].id) {
-        return {
-          ...video,
-          comments: video.comments + 1
-        };
-      }
-      return video;
-    }));
+  // ✅ FONCTION SUPPRIMER COMMENTAIRE CONNECTÉE À FIREBASE
+  const handleDeleteComment = async (commentId: number) => {
+    if (!auth.currentUser) return;
+
+    try {
+      await deleteComment(commentId.toString());
+      
+      setComments(comments.filter(c => c.id !== commentId));
+      
+      const currentVideo = videos[currentVideoIndex];
+      setVideos(videos.map(video => {
+        if (video.id === currentVideo.id) {
+          return { ...video, comments: video.comments - 1 };
+        }
+        return video;
+      }));
+    } catch (error) {
+      console.error('Erreur suppression commentaire:', error);
+      alert('Erreur lors de la suppression');
+    }
+  };
+
+  // Ouvrir les commentaires et charger depuis Firebase
+  const handleOpenComments = () => {
+    const currentVideo = videos[currentVideoIndex];
+    if (currentVideo) {
+      loadCommentsFromFirebase(currentVideo.id.toString());
+    }
+    setShowComments(true);
   };
 
   const handleCommentLike = (commentId: number) => {
@@ -749,26 +790,9 @@ export default function VideoFeedApp() {
     }));
   };
 
-  const handleDeleteComment = (commentId: number) => {
-    // Supprimer le commentaire de la liste
-    setComments(comments.filter(comment => comment.id !== commentId));
-    
-    // Décrémenter le compteur de commentaires de la vidéo actuelle
-    setVideos(videos.map(video => {
-      if (video.id === videos[currentVideoIndex].id) {
-        return {
-          ...video,
-          comments: video.comments - 1
-        };
-      }
-      return video;
-    }));
-  };
-
   const handleReplyToComment = (commentId: number, replyText: string) => {
-    // Créer une nouvelle réponse
     const newReply: Reply = {
-      id: Date.now(), // ID unique basé sur le timestamp
+      id: Date.now(),
       username: 'Vous',
       text: replyText,
       time: 'À l\'instant',
@@ -776,15 +800,14 @@ export default function VideoFeedApp() {
       isLiked: false
     };
     
-    // Ajouter la réponse au commentaire
     setComments(comments.map(comment => {
       if (comment.id === commentId) {
         return {
           ...comment,
           replies: comment.replies + 1,
-          showReplies: true, // Afficher automatiquement les réponses
+          showReplies: true,
           repliesData: comment.repliesData 
-            ? [newReply, ...comment.repliesData] // Ajouter en premier
+            ? [newReply, ...comment.repliesData]
             : [newReply]
         };
       }
@@ -807,11 +830,18 @@ export default function VideoFeedApp() {
     }));
   };
 
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#FFF', fontSize: 16 }}>Chargement des vidéos...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Video Feed */}
       <ScrollView
         ref={scrollViewRef}
         pagingEnabled
@@ -833,7 +863,7 @@ export default function VideoFeedApp() {
             key={video.id}
             video={video}
             onLike={() => handleLike(video.id)}
-            onComment={() => setShowComments(true)}
+            onComment={handleOpenComments}
             onShare={() => setShowShare(true)}
             onProfilePress={() => console.log('Navigate to profile:', video.creatorUsername)}
             isActive={index === currentVideoIndex}
@@ -842,7 +872,6 @@ export default function VideoFeedApp() {
         ))}
       </ScrollView>
 
-      {/* Modals */}
       <CommentsModal
         visible={showComments}
         onClose={() => setShowComments(false)}

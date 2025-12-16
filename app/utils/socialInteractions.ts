@@ -132,7 +132,7 @@ export async function addComment(
     throw new Error('Le commentaire ne peut pas être vide');
   }
 
-  const commentRef = doc(collection(db, 'comments'));
+  const commentRef = doc(collection(db, 'commentaires'));
   const batch = writeBatch(db);
 
   // Créer le commentaire
@@ -173,7 +173,7 @@ export async function updateComment(commentId: string, newText: string) {
   const user = auth.currentUser;
   if (!user) throw new Error('Non connecté');
 
-  const commentRef = doc(db, 'comments', commentId);
+  const commentRef = doc(db, 'commentaires', commentId);
   const commentSnap = await getDoc(commentRef);
 
   if (!commentSnap.exists()) {
@@ -200,7 +200,7 @@ export async function deleteComment(commentId: string) {
   const user = auth.currentUser;
   if (!user) throw new Error('Non connecté');
 
-  const commentRef = doc(db, 'comments', commentId);
+  const commentRef = doc(db, 'commentaires', commentId);
   const commentSnap = await getDoc(commentRef);
 
   if (!commentSnap.exists()) {
@@ -244,7 +244,7 @@ export async function deleteComment(commentId: string) {
  * 📚 RÉCUPÉRER les commentaires d'un contenu
  */
 export async function getComments(contentId: string, limitCount: number = 50) {
-  const commentsRef = collection(db, 'comments');
+  const commentsRef = collection(db, 'commentaires');
   const q = query(
     commentsRef,
     where('contentId', '==', contentId),
@@ -271,7 +271,7 @@ export async function saveContent(
   const user = auth.currentUser;
   if (!user) throw new Error('Non connecté');
 
-  const saveRef = doc(db, 'users', user.uid, 'saved', contentId);
+  const saveRef = doc(db, 'sauvegardes', `${user.uid}_${contentId}`);
 
   // Vérifier si déjà sauvegardé
   const saveSnap = await getDoc(saveRef);
@@ -283,6 +283,7 @@ export async function saveContent(
 
   // Créer la sauvegarde
   batch.set(saveRef, {
+    userId: user.uid,
     contentId: contentId,
     contentType: contentType,
     savedAt: serverTimestamp(),
@@ -306,7 +307,7 @@ export async function unsaveContent(contentId: string) {
   const user = auth.currentUser;
   if (!user) throw new Error('Non connecté');
 
-  const saveRef = doc(db, 'users', user.uid, 'saved', contentId);
+  const saveRef = doc(db, 'sauvegardes', `${user.uid}_${contentId}`);
 
   // Vérifier si existe
   const saveSnap = await getDoc(saveRef);
@@ -337,7 +338,7 @@ export async function hasSaved(contentId: string): Promise<boolean> {
   const user = auth.currentUser;
   if (!user) return false;
 
-  const saveRef = doc(db, 'users', user.uid, 'saved', contentId);
+  const saveRef = doc(db, 'sauvegardes', `${user.uid}_${contentId}`);
   const saveSnap = await getDoc(saveRef);
 
   return saveSnap.exists();
@@ -350,8 +351,12 @@ export async function getSavedContent() {
   const user = auth.currentUser;
   if (!user) throw new Error('Non connecté');
 
-  const savedRef = collection(db, 'users', user.uid, 'saved');
-  const q = query(savedRef, orderBy('savedAt', 'desc'));
+  const savedRef = collection(db, 'sauvegardes');
+  const q = query(
+    savedRef,
+    where('userId', '==', user.uid),
+    orderBy('savedAt', 'desc')
+  );
 
   const querySnapshot = await getDocs(q);
   const saved = querySnapshot.docs.map(doc => ({
@@ -373,7 +378,7 @@ export async function shareContent(
   const user = auth.currentUser;
   if (!user) throw new Error('Non connecté');
 
-  const shareRef = doc(collection(db, 'shares'));
+  const shareRef = doc(collection(db, 'partages'));
   const batch = writeBatch(db);
 
   // Enregistrer le partage
@@ -404,4 +409,3 @@ export async function shareContent(
     shareId: shareRef.id 
   };
 }
-
