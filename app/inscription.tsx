@@ -52,6 +52,7 @@ export default function SignUp() {
 
   // Gestion de l'inscription
   const handleSignUp = async () => {
+    console.log("=== DÉBUT INSCRIPTION ===");
     setErrorMessage("");
     setTermsError(false);
 
@@ -79,12 +80,17 @@ export default function SignUp() {
       // 1. Création Auth Firebase
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const newUser = userCredential.user;
+      
+      console.log("✅ Utilisateur Authentication créé !");
+      console.log("UID:", newUser.uid);
+      console.log("Email:", newUser.email);
 
       // 2. Envoi email vérification
       try {
         await sendEmailVerification(newUser);
-      } catch (emailErr) {
-        console.warn("Envoi email de vérification échoué:", emailErr);
+        console.log("✅ Email de vérification envoyé");
+      } catch (emailErr: any) {
+        console.warn("⚠️ Envoi email de vérification échoué:", emailErr.message);
       }
 
       // 3. Création du profil Firestore
@@ -102,6 +108,10 @@ export default function SignUp() {
 
       setShowWelcome(true);
     } catch (error: any) {
+      console.error("❌ ERREUR AUTHENTICATION !");
+      console.error("Code:", error.code);
+      console.error("Message:", error.message);
+      
       if (error.code === "auth/invalid-email") {
         setErrorMessage("Format d'email invalide.");
       } else if (error.code === "auth/email-already-in-use") {
@@ -109,10 +119,11 @@ export default function SignUp() {
       } else if (error.code === "auth/weak-password") {
         setErrorMessage("Mot de passe trop faible.");
       } else {
-        setErrorMessage("Une erreur est survenue. Veuillez réessayer.");
+        setErrorMessage(`Une erreur est survenue: ${error.message}`);
       }
     } finally {
       setLoading(false);
+      console.log("=== FIN PROCESSUS INSCRIPTION ===");
     }
   };
 
