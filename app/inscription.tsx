@@ -33,78 +33,97 @@ export default function SignUp() {
   const [passwordFormatError, setPasswordFormatError] = useState(false);
 
   const handleSignUp = async () => {
-    setErrorMessage("");
-    setEmailError(false);
-    setPasswordError(false);
-    setNameError(false);
-    setLastNameError(false);
+  setErrorMessage("");
+  setEmailError(false);
+  setPasswordError(false);
+  setNameError(false);
+  setLastNameError(false);
 
-    let hasError = false;
-    if (!email.trim()) {
-      setEmailError(true);
-      hasError = true;
-    }
+  let hasError = false;
+  if (!email.trim()) {
+    setEmailError(true);
+    hasError = true;
+  }
 
-    const hasNumber = /\d/.test(password);
-    const hasUpperCase = /[A-Z]/.test(password);
-    if (password.length < 6 || !hasNumber || !hasUpperCase) {
-      setPasswordError(true);
-      hasError = true;
-    }
+  const hasNumber = /\d/.test(password);
+  const hasUpperCase = /[A-Z]/.test(password);
+  if (password.length < 6 || !hasNumber || !hasUpperCase) {
+    setPasswordError(true);
+    hasError = true;
+  }
 
-    if (!firstName.trim()) {
-      setNameError(true);
-      hasError = true;
-    }
-    if (!lastName.trim()) {
-      setLastNameError(true);
-      hasError = true;
-    }
-    if (!termsAccepted) {
-      setTermsError(true);
-      hasError = true;
-    }
-    if (hasError) return;
+  if (!firstName.trim()) {
+    setNameError(true);
+    hasError = true;
+  }
+  if (!lastName.trim()) {
+    setLastNameError(true);
+    hasError = true;
+  }
+  if (!termsAccepted) {
+    setTermsError(true);
+    hasError = true;
+  }
+  if (hasError) return;
 
-    setLoading(true);
+  setLoading(true);
+  try {
+    console.log("🔄 Création du compte...");
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const newUser = userCredential.user;
+    console.log("✅ Utilisateur Auth créé:", newUser.uid);
+
+    // Envoi d'email de vérification
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const newUser = userCredential.user;
-
-      // Envoi d'email de vérification
-      try {
-        await sendEmailVerification(newUser);
-      } catch (emailErr) {
-        console.warn("Envoi email de vérification échoué:", emailErr);
-      }
-
-      // Création du profil utilisateur complet
-try {
-  await createUserProfile({
-    username: `${firstName.trim()} ${lastName.trim()}`,
-    bio: '',
-    interests: [], // Vous pourrez ajouter une sélection d'intérêts plus tard
-    profileEmoji: '👤',
-  });
-  
-  console.log("✅ Profil utilisateur créé avec succès !");
-} catch (firestoreErr) {
-  console.error("❌ Erreur lors de la création du profil :", firestoreErr);
-}
-
-      setShowWelcome(true);
-    } catch (error: any) {
-      if (error.code === "auth/invalid-email") {
-        setErrorMessage("Email ou mot de passe incorrect");
-      } else if (error.code === "auth/email-already-in-use") {
-        setErrorMessage("Cet email est déjà utilisé");
-      } else {
-        setErrorMessage("Une erreur est survenue. Veuillez réessayer.");
-      }
-    } finally {
-      setLoading(false);
+      await sendEmailVerification(newUser);
+      console.log("✅ Email de vérification envoyé");
+    } catch (emailErr) {
+      console.warn("⚠️ Envoi email de vérification échoué:", emailErr);
     }
-  };
+
+    // Création du profil utilisateur complet
+    try {
+      console.log("🔄 Création du profil Firestore...");
+      
+      await createUserProfile({
+        username: `${firstName.trim()} ${lastName.trim()}`,
+        bio: '',
+        interests: [],
+        profileEmoji: '👤',
+      });
+      
+      console.log("✅ Profil utilisateur créé avec succès !");
+      setShowWelcome(true);
+      
+    } catch (firestoreErr: any) {
+      console.error("❌ Erreur Firestore complète :", firestoreErr);
+      console.error("Message:", firestoreErr.message);
+      console.error("Code:", firestoreErr.code);
+      
+      setErrorMessage(`Erreur: ${firestoreErr.message}`);
+      
+      // Supprimer l'utilisateur d'Auth si le profil Firestore échoue
+      try {
+        await newUser.delete();
+        console.log("🗑️ Compte supprimé - erreur profil");
+      } catch (deleteErr) {
+        console.error("❌ Impossible de supprimer:", deleteErr);
+      }
+    }
+    
+  } catch (error: any) {
+    console.error("❌ Erreur inscription:", error);
+    if (error.code === "auth/invalid-email") {
+      setErrorMessage("Email ou mot de passe incorrect");
+    } else if (error.code === "auth/email-already-in-use") {
+      setErrorMessage("Cet email est déjà utilisé");
+    } else {
+      setErrorMessage("Une erreur est survenue. Veuillez réessayer.");
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleCloseModal = () => {
     setShowWelcome(false);
