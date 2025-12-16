@@ -4,10 +4,9 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
 } from "firebase/auth";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import React, { useState } from "react";
 import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { auth, db } from "../firebaseConfig";
+import { auth } from "../firebaseConfig";
 import { createUserProfile } from "./utils/userProfile";
 
 export default function SignUp() {
@@ -33,97 +32,116 @@ export default function SignUp() {
   const [passwordFormatError, setPasswordFormatError] = useState(false);
 
   const handleSignUp = async () => {
-  setErrorMessage("");
-  setEmailError(false);
-  setPasswordError(false);
-  setNameError(false);
-  setLastNameError(false);
+    console.log("=== DÉBUT INSCRIPTION ===");
+    setErrorMessage("");
+    setEmailError(false);
+    setPasswordError(false);
+    setNameError(false);
+    setLastNameError(false);
 
-  let hasError = false;
-  if (!email.trim()) {
-    setEmailError(true);
-    hasError = true;
-  }
-
-  const hasNumber = /\d/.test(password);
-  const hasUpperCase = /[A-Z]/.test(password);
-  if (password.length < 6 || !hasNumber || !hasUpperCase) {
-    setPasswordError(true);
-    hasError = true;
-  }
-
-  if (!firstName.trim()) {
-    setNameError(true);
-    hasError = true;
-  }
-  if (!lastName.trim()) {
-    setLastNameError(true);
-    hasError = true;
-  }
-  if (!termsAccepted) {
-    setTermsError(true);
-    hasError = true;
-  }
-  if (hasError) return;
-
-  setLoading(true);
-  try {
-    console.log("🔄 Création du compte...");
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const newUser = userCredential.user;
-    console.log("✅ Utilisateur Auth créé:", newUser.uid);
-
-    // Envoi d'email de vérification
-    try {
-      await sendEmailVerification(newUser);
-      console.log("✅ Email de vérification envoyé");
-    } catch (emailErr) {
-      console.warn("⚠️ Envoi email de vérification échoué:", emailErr);
+    let hasError = false;
+    if (!email.trim()) {
+      setEmailError(true);
+      hasError = true;
     }
 
-    // Création du profil utilisateur complet
+    const hasNumber = /\d/.test(password);
+    const hasUpperCase = /[A-Z]/.test(password);
+    if (password.length < 6 || !hasNumber || !hasUpperCase) {
+      setPasswordError(true);
+      hasError = true;
+    }
+
+    if (!firstName.trim()) {
+      setNameError(true);
+      hasError = true;
+    }
+    if (!lastName.trim()) {
+      setLastNameError(true);
+      hasError = true;
+    }
+    if (!termsAccepted) {
+      setTermsError(true);
+      hasError = true;
+    }
+    if (hasError) {
+      console.log("❌ Erreurs de validation du formulaire");
+      return;
+    }
+
+    setLoading(true);
     try {
-      console.log("🔄 Création du profil Firestore...");
+      console.log("🔄 Tentative de création du compte...");
+      console.log("Email:", email);
       
-      await createUserProfile({
-        username: `${firstName.trim()} ${lastName.trim()}`,
-        bio: '',
-        interests: [],
-        profileEmoji: '👤',
-      });
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const newUser = userCredential.user;
       
-      console.log("✅ Profil utilisateur créé avec succès !");
-      setShowWelcome(true);
-      
-    } catch (firestoreErr: any) {
-      console.error("❌ Erreur Firestore complète :", firestoreErr);
-      console.error("Message:", firestoreErr.message);
-      console.error("Code:", firestoreErr.code);
-      
-      setErrorMessage(`Erreur: ${firestoreErr.message}`);
-      
-      // Supprimer l'utilisateur d'Auth si le profil Firestore échoue
+      console.log("✅ Utilisateur Authentication créé !");
+      console.log("UID:", newUser.uid);
+      console.log("Email:", newUser.email);
+
+      // Envoi d'email de vérification
       try {
-        await newUser.delete();
-        console.log("🗑️ Compte supprimé - erreur profil");
-      } catch (deleteErr) {
-        console.error("❌ Impossible de supprimer:", deleteErr);
+        await sendEmailVerification(newUser);
+        console.log("✅ Email de vérification envoyé");
+      } catch (emailErr: any) {
+        console.warn("⚠️ Envoi email de vérification échoué:", emailErr.message);
       }
+
+      // Création du profil utilisateur complet dans Firestore
+      try {
+        console.log("🔄 Création du profil Firestore...");
+        console.log("Username:", `${firstName.trim()} ${lastName.trim()}`);
+        
+        await createUserProfile({
+          username: `${firstName.trim()} ${lastName.trim()}`,
+          bio: '',
+          interests: [],
+          profileEmoji: '👤',
+        });
+        
+        console.log("✅ Profil Firestore créé avec succès !");
+        console.log("=== INSCRIPTION TERMINÉE AVEC SUCCÈS ===");
+        
+        setShowWelcome(true);
+        
+      } catch (firestoreErr: any) {
+        console.error("❌ ERREUR FIRESTORE !");
+        console.error("Message:", firestoreErr.message);
+        console.error("Code:", firestoreErr.code);
+        console.error("Stack:", firestoreErr.stack);
+        
+        setErrorMessage(`Erreur lors de la création du profil: ${firestoreErr.message}`);
+        
+        // Supprimer l'utilisateur d'Auth si le profil Firestore échoue
+        try {
+          await newUser.delete();
+          console.log("🗑️ Utilisateur Auth supprimé (rollback)");
+        } catch (deleteErr: any) {
+          console.error("❌ Impossible de supprimer l'utilisateur:", deleteErr.message);
+        }
+      }
+      
+    } catch (error: any) {
+      console.error("❌ ERREUR AUTHENTICATION !");
+      console.error("Code:", error.code);
+      console.error("Message:", error.message);
+      
+      if (error.code === "auth/invalid-email") {
+        setErrorMessage("Email ou mot de passe incorrect");
+      } else if (error.code === "auth/email-already-in-use") {
+        setErrorMessage("Cet email est déjà utilisé");
+      } else if (error.code === "auth/weak-password") {
+        setErrorMessage("Le mot de passe est trop faible");
+      } else {
+        setErrorMessage(`Une erreur est survenue: ${error.message}`);
+      }
+    } finally {
+      setLoading(false);
+      console.log("=== FIN PROCESSUS INSCRIPTION ===");
     }
-    
-  } catch (error: any) {
-    console.error("❌ Erreur inscription:", error);
-    if (error.code === "auth/invalid-email") {
-      setErrorMessage("Email ou mot de passe incorrect");
-    } else if (error.code === "auth/email-already-in-use") {
-      setErrorMessage("Cet email est déjà utilisé");
-    } else {
-      setErrorMessage("Une erreur est survenue. Veuillez réessayer.");
-    }
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleCloseModal = () => {
     setShowWelcome(false);
@@ -139,9 +157,9 @@ export default function SignUp() {
       <View style={styles.container}>
         <Text style={styles.title}>Création de compte</Text>
 
-                {errorMessage ? <Text style={styles.generalError}>{errorMessage}</Text> : null}
+        {errorMessage ? <Text style={styles.generalError}>{errorMessage}</Text> : null}
 
-{/* Prénom */}
+        {/* Prénom */}
         <TextInput
           style={[styles.input, (nameError || nameFormatError) && { borderColor: "red" }]}
           placeholder="Prénom*"
@@ -184,7 +202,8 @@ export default function SignUp() {
             setEmailFormatError(text.length > 0 && !text.includes("@"));
           }}
           autoCapitalize="none"
-        />{emailFormatError && <Text style={styles.fieldError}>L’email doit contenir un @xxx.xx</Text>}
+        />
+        {emailFormatError && <Text style={styles.fieldError}>L'email doit contenir un @xxx.xx</Text>}
 
         {/* Mot de passe */}
         <TextInput
@@ -227,7 +246,7 @@ export default function SignUp() {
         />
         {birthDateFormatError && <Text style={styles.fieldError}>Format attendu: JJ/MM/AAAA</Text>}
 
-        {/* Conditions - CODE MODIFIÉ ICI */}
+        {/* Conditions */}
         <View style={styles.termsContainer}>
           <TouchableOpacity
             onPress={() => {
@@ -240,7 +259,7 @@ export default function SignUp() {
           </TouchableOpacity>
           
           <Text style={[styles.termsText, termsError && { color: "red" }]}>
-             J’accepte la{' '}
+            J'accepte la{' '}
             <Text 
               style={{textDecorationLine: 'underline', fontWeight: 'bold'}}
               onPress={() => router.push("/pdc")}
@@ -275,7 +294,7 @@ export default function SignUp() {
                 style={[styles.signUpButton, !isFormValid && styles.signUpButtonDisabled]}
                 disabled={loading || !isFormValid}
               >
-                <Text style={styles.signUpText}>S’inscrire</Text>
+                <Text style={styles.signUpText}>{loading ? "Inscription..." : "S'inscrire"}</Text>
               </TouchableOpacity>
             );
           })()}
@@ -317,7 +336,7 @@ const styles = StyleSheet.create({
     color: "rgba(100, 100, 100, 0.7)",
     borderRadius: 15,
   },
-  modalContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  modalContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
   modalContent: { width: 250, padding: 20, backgroundColor: "white", borderRadius: 10, alignItems: "center" },
   modalText: { fontSize: 20, fontWeight: "bold", marginBottom: 10 },
   closeButton: { marginTop: 10, padding: 5 },
