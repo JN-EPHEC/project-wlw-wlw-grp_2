@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ProgressProvider } from './_ProgressContext';
-import '../firebaseConfig'; // initialise Firebase (side-effect)
+import getAsyncStorage from './utils/asyncStorage';
 import { auth } from '../firebaseConfig';
 
 export default function RootLayout() {
@@ -13,13 +13,9 @@ export default function RootLayout() {
                     // @ts-ignore: dynamic import (path resolved at runtime)
                      const profileFuncs = await import('./_firebase-profile-functions');
                     const { saveUserProfile, addGoal } = profileFuncs;
-                    // @ts-ignore
-                    const AsyncStorageModule = await import('@react-native-async-storage/async-storage');
-                    const AsyncStorage = AsyncStorageModule.default;
-
-                    // Sync local profile draft if present
+                     const AsyncStorage = await getAsyncStorage();
                     const localProfile = await AsyncStorage.getItem('local_profile_draft');
-                    if (localProfile) {
+if (localProfile) { 
                         try {
                             const profile = JSON.parse(localProfile);
                             await saveUserProfile({

@@ -36,7 +36,7 @@ export default function AuthComponent() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   
-  const [user, setUser] = useState<User | null>(null);
+  
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
   
@@ -45,13 +45,12 @@ export default function AuthComponent() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
       if (currentUser) {
         router.replace("/(tabs)/home");
       }
     });
     return () => unsubscribe();
-  }, []);
+ }, [router]);
 
   const handleSignIn = async () => {
     setErrorMessage("");
@@ -163,9 +162,9 @@ export default function AuthComponent() {
           <View style={styles.spacer} />
 
           <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>Pas encore de compte ?</Text>
+             <Text style={styles.registerLink}>S’inscrire</Text>
             <TouchableOpacity onPress={() => router.push("/inscription")}>
-              <Text style={styles.registerLink}>S'inscrire</Text>
+              <Text style={styles.registerLink}>S’inscrire</Text>
             </TouchableOpacity>
           </View>
 
@@ -188,7 +187,7 @@ export default function AuthComponent() {
             <View style={styles.footerDivider} />
     
             <TouchableOpacity onPress={() => console.log("Aide - À faire")}>
-              <Text style={styles.footerText}>Besoin d'aide ?</Text>
+              <Text style={styles.footerText}>Besoin d’aide ?</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -139,7 +139,7 @@ export default function ForgotPasswordPage() {
         <View style={styles.footerDivider} />
 
         <TouchableOpacity onPress={() => console.log("Aide - À faire")}>
-          <Text style={styles.footerText}>Besoin d'aide ?</Text>
+          <Text style={styles.footerText}>Besoin d’aide ?</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

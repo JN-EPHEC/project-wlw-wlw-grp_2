@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
 import React, { useState, useEffect } from 'react';
-import { Alert, Dimensions, FlatList, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Image, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import { Link } from 'expo-router';
@@ -458,12 +458,12 @@ export default function UserProfileLearner() {
                             </ScrollView>
 
                             {/* Nom d'utilisateur */}
-                            <Text style={styles.sectionLabel}>Nom d'utilisateur</Text>
+                            <Text style={styles.sectionLabel}>Nom d’utilisateur</Text>
                             <TextInput
                                 style={styles.input}
                                 value={tempUsername}
                                 onChangeText={setTempUsername}
-                                placeholder="@nom d'utilisateur"
+                                    placeholder="@nom d’utilisateur"
                                 placeholderTextColor="#B0B0B0"
                             />
 
@@ -499,7 +499,6 @@ export default function UserProfileLearner() {
     );
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
     screen: { 

@@ -34,7 +34,7 @@ export default function PrivacyPolicyPage() {
         <Text style={styles.paragraph}>
           Bienvenue sur SwipeSkills. 
           Nous accordons une grande importance à la protection de vos données personnelles. 
-          Cette politique explique comment nous collectons, utilisons et protégeons vos informations lorsque vous utilisez notre application mobile d'apprentissage vidéo.
+            Cette politique explique comment nous collectons, utilisons et protégeons vos informations lorsque vous utilisez notre application mobile d’apprentissage vidéo.
         </Text>
 
         <Text style={styles.sectionTitle}>2. Les données que nous collectons</Text>
@@ -42,11 +42,11 @@ export default function PrivacyPolicyPage() {
           Pour fournir nos services, nous collectons les informations suivantes :
         </Text>
         <View style={styles.bulletList}>
-          <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Identité :</Text> Nom, prénom, date de naissance (via le formulaire d'inscription).</Text>
-          <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Contact :</Text> Adresse email (pour l'authentification et la récupération de mot de passe).</Text>
+          <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Identité :</Text> Nom, prénom, date de naissance (via le formulaire d’inscription).</Text>
+          <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Contact :</Text> Adresse email (pour l’authentification et la récupération de mot de passe).</Text>
           <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Contenu utilisateur :</Text> Photo de profil, biographie, commentaires postés, messages envoyés dans le chat.</Text>
-          <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Données techniques :</Text> Images ou vidéos que vous choisissez de télécharger via l'accès à votre caméra ou galerie.</Text>
-          <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Progression :</Text> Vidéos vues, favoris, objectifs d'apprentissage et badges obtenus.</Text>
+          <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Données techniques :</Text> Images ou vidéos que vous choisissez de télécharger via l’accès à votre caméra ou galerie.</Text>
+          <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Progression :</Text> Vidéos vues, favoris, objectifs d’apprentissage et badges obtenus.</Text>
         </View>
 
         <Text style={styles.sectionTitle}>3. Utilisation des données</Text>
@@ -55,14 +55,14 @@ export default function PrivacyPolicyPage() {
         </Text>
         <View style={styles.bulletList}>
           <Text style={styles.bulletPoint}>• Créer et gérer votre compte utilisateur.</Text>
-          <Text style={styles.bulletPoint}>• Vous permettre d'interagir avec d'autres apprenants (chat, commentaires).</Text>
-          <Text style={styles.bulletPoint}>• Personnaliser votre fil d'actualité vidéo.</Text>
+          <Text style={styles.bulletPoint}>• Vous permettre d’interagir avec d’autres apprenants (chat, commentaires).</Text>
+          <Text style={styles.bulletPoint}>• Personnaliser votre fil d’actualité vidéo.</Text>
           <Text style={styles.bulletPoint}>• Suivre votre progression pédagogique (XP, Niveaux).</Text>
         </View>
 
         <Text style={styles.sectionTitle}>4. Permissions Appareil</Text>
         <Text style={styles.paragraph}>
-          L'application peut demander l'accès à certaines fonctionnalités de votre téléphone :
+              L’application peut demander l’accès à certaines fonctionnalités de votre téléphone :
         </Text>
         <View style={styles.bulletList}>
           <Text style={styles.bulletPoint}>• <Text style={styles.bold}>Caméra et Photos :</Text> Pour modifier votre photo de profil ou envoyer des images dans le chat.</Text>
@@ -80,8 +80,8 @@ export default function PrivacyPolicyPage() {
 
         <Text style={styles.sectionTitle}>6. Vos Droits</Text>
         <Text style={styles.paragraph}>
-          Conformément au RGPD, vous disposez d'un droit d'accès, de rectification et de suppression de vos données. 
-          Vous pouvez modifier votre profil directement dans l'application ou supprimer votre compte en nous contactant.
+          Conformément au RGPD, vous disposez d’un droit d’accès, de rectification et de suppression de vos données. 
+          Vous pouvez modifier votre profil directement dans l’application ou supprimer votre compte en nous contactant.
         </Text>
 
         <Text style={styles.sectionTitle}>7. Contact</Text>

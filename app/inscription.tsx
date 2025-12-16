@@ -6,7 +6,7 @@ import {
 } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import React, { useState } from "react";
-import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View, Pressable } from "react-native";
+import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { auth, db } from "../firebaseConfig";
 
 export default function SignUp() {
@@ -94,9 +94,9 @@ export default function SignUp() {
 
       setShowWelcome(true);
     } catch (error: any) {
-      if (error.code == "auth/invalid-email") {
+      if (error.code === "auth/invalid-email") {
         setErrorMessage("Email ou mot de passe incorrect");
-      } else if (error.code == "auth/email-already-in-use") {
+      } else if (error.code === "auth/email-already-in-use") {
         setErrorMessage("Cet email est déjà utilisé");
       } else {
         setErrorMessage("Une erreur est survenue. Veuillez réessayer.");
@@ -120,7 +120,9 @@ export default function SignUp() {
       <View style={styles.container}>
         <Text style={styles.title}>Création de compte</Text>
 
-        {/* Prénom */}
+                {errorMessage ? <Text style={styles.generalError}>{errorMessage}</Text> : null}
+
+{/* Prénom */}
         <TextInput
           style={[styles.input, (nameError || nameFormatError) && { borderColor: "red" }]}
           placeholder="Prénom*"
@@ -163,9 +165,7 @@ export default function SignUp() {
             setEmailFormatError(text.length > 0 && !text.includes("@"));
           }}
           autoCapitalize="none"
-        />
-        {emailError && <Text style={styles.fieldError}>Cette case doit être remplie</Text>}
-        {emailFormatError && <Text style={styles.fieldError}>L'email doit contenir un @xxx.xx</Text>}
+        />{emailFormatError && <Text style={styles.fieldError}>L’email doit contenir un @xxx.xx</Text>}
 
         {/* Mot de passe */}
         <TextInput
@@ -221,7 +221,7 @@ export default function SignUp() {
           </TouchableOpacity>
           
           <Text style={[styles.termsText, termsError && { color: "red" }]}>
-            J'accepte la{' '}
+             J’accepte la{' '}
             <Text 
               style={{textDecorationLine: 'underline', fontWeight: 'bold'}}
               onPress={() => router.push("/pdc")}
@@ -256,7 +256,7 @@ export default function SignUp() {
                 style={[styles.signUpButton, !isFormValid && styles.signUpButtonDisabled]}
                 disabled={loading || !isFormValid}
               >
-                <Text style={styles.signUpText}>S'inscrire</Text>
+                <Text style={styles.signUpText}>S’inscrire</Text>
               </TouchableOpacity>
             );
           })()}
@@ -307,6 +307,7 @@ const styles = StyleSheet.create({
   signUpButtonDisabled: { backgroundColor: "rgba(0, 183, 255, 0.3)", opacity: 0.5 },
   signUpText: { color: "white", fontSize: 16, fontWeight: "bold" },
   fieldError: { color: "red", marginTop: -5, marginBottom: 8, textAlign: "left", fontSize: 13 },
+  generalError: { color: "red", textAlign: "center", marginBottom: 10 },
   termsContainer: { flexDirection: "row", alignItems: "center", marginTop: 15, marginBottom: 5, paddingHorizontal: 5 },
   checkboxContainer: { marginRight: 10 },
   termsText: { flex: 1, fontSize: 12, color: "#666", lineHeight: 16 },

@@ -262,7 +262,7 @@ export default function ProgressionPage() {
                             activeTab === 'progression' && styles.tabTextActive,
                         ]}
                     >
-                        Vue d'ensemble
+                        Vue d’ensemble
                     </Text>
                 </Pressable>
                 <Pressable
@@ -353,7 +353,7 @@ export default function ProgressionPage() {
                                 <Text style={styles.statNumber}>
                                     {progressData.totalHours}h
                                 </Text>
-                                <Text style={styles.statLabel}>D'étude</Text>
+                                <Text style={styles.statLabel}>D’étude</Text>
                             </View>
                             <View style={[styles.statCard, { backgroundColor: '#4CAF50' }]}>
                                 <Text style={styles.statEmoji}>🔥</Text>
@@ -578,7 +578,7 @@ export default function ProgressionPage() {
                                             {challenge.description}
                                         </Text>
                                         <Text style={styles.challengeDueDate}>
-                                            Jusqu'au {new Date(challenge.dueDate).toLocaleDateString('fr-FR')}
+                                            Jusqu’au {new Date(challenge.dueDate).toLocaleDateString('fr-FR')}
                                         </Text>
                                     </View>
                                 </View>
@@ -762,7 +762,7 @@ export default function ProgressionPage() {
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>
-                                {editingGoal ? 'Modifier l\'objectif' : 'Nouvel objectif'}
+                                {editingGoal ? 'Modifier l’objectif' : 'Nouvel objectif'}
                             </Text>
                             <Pressable onPress={() => setIsModalVisible(false)}>
                                 <Ionicons name="close" size={28} color="#6b6b6b" />
@@ -770,7 +770,7 @@ export default function ProgressionPage() {
                         </View>
 
                         <ScrollView>
-                            <Text style={styles.inputLabel}>Titre de l'objectif</Text>
+                           <Text style={styles.inputLabel}>Titre de l’objectif</Text>
                             <TextInput
                                 style={styles.input}
                                 value={tempTitle}
@@ -1058,7 +1058,7 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
 
-    // Goal Preview (in Vue d'ensemble tab)
+     // Goal Preview (in Vue d’ensemble tab)
     goalPreviewCard: {
         backgroundColor: '#F8F6FF',
         borderRadius: 12,

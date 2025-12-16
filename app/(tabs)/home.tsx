@@ -106,7 +106,7 @@ const VideoItem: React.FC<{
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isActive, video.id, video.duration]);
+  }, [isActive, onProgressUpdate, video.duration, video.id]);
 
   const formatCount = (count: number) => {
     if (count >= 1000) {
