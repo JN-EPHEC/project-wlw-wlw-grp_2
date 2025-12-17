@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
@@ -18,23 +18,28 @@ import {
   View
 } from "react-native";
 import { auth } from "../firebaseConfig";
-// On importe le type UserRegistrationData pour s'assurer que les données correspondent
+// On importe la fonction de création de profil
 import { createUserProfile, UserRegistrationData } from "./utils/userProfile";
 
 const COLORS = {
   orange: '#FBA31A',
   bleuNuit: '#242A65',
   violet: '#7459F0',
-  gris: '#6B7280',
-  grisClair: '#E5E7EB',
-  blanc: '#FFFFFF',
-  text: '#000000',
   error: '#FF3B30'
 };
 
 export default function SignUp() {
   const router = useRouter();
   
+  // 1. RÉCUPÉRATION DU RÔLE (envoyé depuis choixprofile.tsx)
+  const params = useLocalSearchParams();
+  // Si le paramètre est 'creator', c'est un formateur, sinon par défaut c'est un apprenant
+  const role = params.role === 'creator' ? 'creator' : 'learner';
+  
+  // 2. DÉFINITION DE LA COLLECTION CIBLE
+  const targetCollection = role === 'creator' ? 'formateurs' : 'users';
+  const roleDisplay = role === 'creator' ? 'Formateur' : 'Apprenant';
+
   const [lastName, setLastName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [username, setUsername] = useState("");
@@ -48,11 +53,10 @@ export default function SignUp() {
   const [termsError, setTermsError] = useState(false);
 
   const handleSignUp = async () => {
-    console.log("=== DÉBUT INSCRIPTION ===");
+    console.log(`=== DÉBUT INSCRIPTION (${roleDisplay}) ===`);
     setErrorMessage("");
     setTermsError(false);
 
-    // Validation basique
     if (!lastName || !firstName || !username || !email || !password) {
       setErrorMessage("Veuillez remplir tous les champs obligatoires.");
       return;
@@ -63,57 +67,57 @@ export default function SignUp() {
       return;
     }
 
-    // Validation mot de passe
-    const hasNumber = /\d/.test(password);
-    const hasUpperCase = /[A-Z]/.test(password);
-    if (password.length < 6 || !hasNumber || !hasUpperCase) {
-      setErrorMessage("Le mot de passe doit contenir 6 caractères, 1 majuscule et 1 chiffre.");
+    if (password.length < 6) {
+      setErrorMessage("Le mot de passe doit contenir au moins 6 caractères.");
       return;
     }
 
     setLoading(true);
     try {
-      // 1. Création Auth Firebase
+      // A. Création du compte d'authentification (Email/Mdp)
+      // Cela crée l'utilisateur dans "Authentication" (commun à tous)
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const newUser = userCredential.user;
       
       console.log("✅ Auth créé:", newUser.uid);
 
-      // 2. Envoi email vérification
+      // B. Envoi email de vérification (optionnel)
       try {
         await sendEmailVerification(newUser);
       } catch (emailErr: any) {
         console.warn("⚠️ Email verif failed:", emailErr.message);
       }
 
-      // 3. Création du profil Firestore
+      // C. Création du document Firestore DANS LA BONNE COLLECTION
       try {
-        
         const profileData: UserRegistrationData = {
           username: username.trim(),
           firstName: firstName.trim(),
           lastName: lastName.trim(),
           bio: '',
-          
-          interests: [] as string[], 
+          interests: [], 
           profileEmoji: '👤',
-          
         };
 
-        await createUserProfile(profileData);
-        console.log("✅ Profil créé !");
+        // 🔥 IMPORTANT : On passe 'targetCollection' à la fonction
+        // Si c'est un formateur, ça ira dans "formateurs"
+        // Si c'est un apprenant, ça ira dans "users"
+        await createUserProfile(profileData, targetCollection);
+        
+        console.log(`✅ Profil créé avec succès dans la collection : ${targetCollection}`);
       } catch (firestoreErr) {
-        console.error("❌ Erreur profil:", firestoreErr);
+        console.error("❌ Erreur création profil Firestore:", firestoreErr);
+        setErrorMessage("Compte créé mais erreur lors de l'enregistrement du profil.");
+        setLoading(false);
+        return;
       }
 
       setShowWelcome(true);
 
     } catch (error: any) {
       console.error("❌ ERREUR INSCRIPTION:", error.code);
-      
-      // Gestion spécifique des erreurs Firebase
       if (error.code === "auth/email-already-in-use") {
-        setErrorMessage("Cet email est déjà utilisé. Connectez-vous.");
+        setErrorMessage("Cet email est déjà utilisé.");
       } else if (error.code === "auth/invalid-email") {
         setErrorMessage("L'adresse email n'est pas valide.");
       } else if (error.code === "auth/weak-password") {
@@ -128,6 +132,7 @@ export default function SignUp() {
 
   const handleCloseModal = () => {
     setShowWelcome(false);
+    // Redirection vers l'accueil une fois fini
     router.replace("/(tabs)/home");
   };
 
@@ -143,7 +148,9 @@ export default function SignUp() {
             <Ionicons name="chevron-back" size={32} color="black" />
           </TouchableOpacity>
           <View style={styles.titleContainer}>
-            <Text style={styles.headerTitle}>S’inscrire en tant qu’<Text style={styles.headerTitleHighlight}>apprenant</Text></Text>
+            <Text style={styles.headerTitle}>
+              S’inscrire en tant que <Text style={styles.headerTitleHighlight}>{roleDisplay}</Text>
+            </Text>
           </View>
         </View>
 
@@ -164,13 +171,13 @@ export default function SignUp() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Mot de passe</Text>
-            <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry placeholderTextColor="#C4C4C4" />
+            <Text style={styles.label}>Adresse mail</Text>
+            <TextInput style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#C4C4C4" />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Adresse mail</Text>
-            <TextInput style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholderTextColor="#C4C4C4" />
+            <Text style={styles.label}>Mot de passe</Text>
+            <TextInput style={styles.input} value={password} onChangeText={setPassword} secureTextEntry placeholderTextColor="#C4C4C4" />
           </View>
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -200,7 +207,7 @@ export default function SignUp() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Bienvenue ! 🎉</Text>
-            <Text style={styles.modalText}>Votre compte a été créé avec succès.</Text>
+            <Text style={styles.modalText}>Votre compte {roleDisplay} a été créé avec succès.</Text>
             <TouchableOpacity style={styles.modalButton} onPress={handleCloseModal}>
               <Text style={styles.modalButtonText}>Commencer</Text>
             </TouchableOpacity>
@@ -213,11 +220,11 @@ export default function SignUp() {
 
 const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40, backgroundColor: '#FFFFFF' },
-  headerContainer: { marginBottom: 40 },
+  headerContainer: { marginBottom: 30 },
   backButton: { marginBottom: 20, alignSelf: 'flex-start' },
   titleContainer: { alignItems: 'flex-start' },
-  headerTitle: { fontSize: 42, fontWeight: 'bold', color: '#000', lineHeight: 50 },
-  headerTitleHighlight: { color: COLORS.violet },
+  headerTitle: { fontSize: 36, fontWeight: 'bold', color: '#000', lineHeight: 44 },
+  headerTitleHighlight: { color: COLORS.violet, textTransform: 'capitalize' },
   formContainer: { width: '100%' },
   inputGroup: { marginBottom: 16 },
   label: { fontSize: 16, fontWeight: '400', color: '#333333', marginBottom: 8, marginLeft: 2 },
