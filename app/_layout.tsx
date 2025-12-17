@@ -1,70 +1,57 @@
-import React, { useEffect } from 'react';
-import { Stack } from 'expo-router';
-import { onAuthStateChanged } from 'firebase/auth';
-import { ProgressProvider } from './_ProgressContext';
-import AsyncStorage from './utils/asyncStorage';  // ✅ Import direct, plus de getAsyncStorage()
-import { auth } from '../firebaseConfig';
+import { useEffect, useState } from 'react';
+import { View, ActivityIndicator } from 'react-native';
+import { Slot, useRouter, useSegments } from 'expo-router';
+import { onAuthStateChanged, User } from 'firebase/auth';
+
+// 👇 REMPLACE '../firebaseConfig' PAR LE VRAI CHEMIN QUE TU AS TROUVÉ
+import { auth } from '../firebaseConfig'; 
 
 export default function RootLayout() {
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        try {
-          // @ts-ignore: dynamic import (path resolved at runtime)
-          const profileFuncs = await import('./_firebase-profile-functions');
-          const { saveUserProfile, addGoal } = profileFuncs;
-          
-          // ✅ Plus besoin de await getAsyncStorage()
-          const localProfile = await AsyncStorage.getItem('local_profile_draft');
-          
-          if (localProfile) { 
-            try {
-              const profile = JSON.parse(localProfile);
-              await saveUserProfile({
-                username: profile.username || '',
-                bio: profile.bio || '',
-                profileEmoji: profile.profileEmoji || '👩‍🎓',
-                profileImage: profile.profileImage || null,
-              });
-              await AsyncStorage.removeItem('local_profile_draft');
-              console.log('Local profile synchronized');
-            } catch (e) {
-              console.error('Failed to sync local profile:', e);
-            }
-          }
+  const [initializing, setInitializing] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const router = useRouter();
 
-          const localGoals = await AsyncStorage.getItem('local_goals');
-          if (localGoals) {
-            try {
-              const goals = JSON.parse(localGoals);
-              for (const g of goals) {
-                try {
-                  await addGoal({ title: g.title, emoji: g.emoji, color: g.color, target: g.target });
-                } catch (e) {
-                  console.error('Failed to upload local goal:', e);
-                }
-              }
-              await AsyncStorage.removeItem('local_goals');
-              console.log('Local goals synchronized');
-            } catch (e) {
-              console.error('Failed to parse/sync local goals:', e);
-            }
-          }
-        } catch (err) {
-          console.error('Error during post-login sync:', err);
-        }
-      }
+  // On récupère les segments sans forcer le type ici pour éviter l'erreur Expo
+  const segments = useSegments();
+
+  useEffect(() => {
+    // Écoute les changements de connexion (Login/Logout)
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (initializing) setInitializing(false);
     });
-    
-    return () => unsubscribe();
+    return unsubscribe;
   }, []);
 
-  return (
-    <ProgressProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="progression" />
-      </Stack>
-    </ProgressProvider>
-  );
+  useEffect(() => {
+    if (initializing) return;
+
+    // L'ASTUCE : On dit à TypeScript "T'inquiète, c'est bien une liste de textes"
+    // Cela débloque l'utilisation de .includes()
+    const navSegments = segments as string[];
+
+    const inAuthGroup = navSegments[0] === '(auth)';
+    const inTabsGroup = navSegments[0] === '(tabs)';
+    
+    // Vérifie si "inscription" est quelque part dans l'URL
+    const onSignupPage = navSegments.includes('inscription');
+
+    if (user && !inTabsGroup && !onSignupPage) {
+      // Si connecté -> direction l'accueil
+      router.replace('/(tabs)/home');
+    } else if (!user && inTabsGroup) {
+      // Si pas connecté mais dans l'app -> retour login
+      router.replace('/auth');
+    }
+  }, [user, initializing, segments]);
+
+  if (initializing) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  return <Slot />;
 }

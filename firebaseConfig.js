@@ -1,18 +1,14 @@
+// Votre fichier principal (ex: firebase.js)
+
 // Import the functions you need from the SDKs you need
 import { getApp, getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyACJHNHMMIp7sB2bx1QtWLPcH9QQqOAYv4",
-  authDomain: "swipeskills-cf784.firebaseapp.com",
-  projectId: "swipeskills-cf784",
-   storageBucket: "swipeskills-cf784.appspot.com",
-  messagingSenderId: "30195503547",
-  appId: "1:30195503547:web:8a06855de559e2b08c749e"
-};
+// --- CHANGEMENT ICI ---
+// On importe la configuration depuis le fichier firebase_env
+import { firebaseConfig } from "./firebase_env"; 
 
 // Initialize Firebase
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
