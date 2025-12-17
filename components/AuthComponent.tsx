@@ -163,9 +163,9 @@ export default function AuthComponent() {
 
           <View style={styles.registerContainer}>
              <Text style={styles.registerText}>Pas encore de compte ?</Text>
-            <TouchableOpacity onPress={() => router.push("/inscription")}>
-              <Text style={styles.registerLink}>S’inscrire</Text>
-            </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push("/choixprofile")}>
+                <Text style={styles.registerLink}>S’inscrire</Text>
+              </TouchableOpacity>
           </View>
 
           {/* FOOTER */}
