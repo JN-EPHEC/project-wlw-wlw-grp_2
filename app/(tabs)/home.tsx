@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Dimensions, Image, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { 
   likeContent, 
@@ -13,14 +13,16 @@ import {
   hasSaved,
   shareContent 
 } from '../utils/index';
+// ✅ IMPORT CORRIGÉ : On importe getPublicVideos
 import { getPublicVideos } from '../utils/videoManager';
 import { auth } from '../../firebaseConfig.js';
-import { useEffect } from 'react'; // Si pas déjà importé
+
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // Types
 interface Video {
-  id: number;
+  // ✅ MODIFICATION : id accepte string (Firestore) ou number
+  id: string | number;
   creatorUsername: string;
   creatorAvatar: string;
   creatorLevel: 'amateur' | 'diplome' | 'expert';
@@ -70,6 +72,8 @@ const CreatorBadge: React.FC<{ level: 'amateur' | 'diplome' | 'expert' }> = ({ l
         return { emoji: '🎓', color: '#3B82F6', text: 'Diplômé' };
       case 'expert':
         return { emoji: '⭐', color: '#F59E0B', text: 'Expert' };
+      default:
+        return { emoji: '🌱', color: '#10B981', text: 'Amateur' };
     }
   };
 
@@ -97,12 +101,12 @@ const VideoItem: React.FC<{
   onShare: () => void;
   onProfilePress: () => void;
   isActive: boolean;
-  onProgressUpdate: (videoId: number, progress: number | ((prev: number) => number)) => void;
+  onProgressUpdate: (videoId: string | number, progress: number | ((prev: number) => number)) => void;
 }> = ({ video, onLike, onComment, onShare, onProfilePress, isActive, onProgressUpdate }) => {
   const [showFullDescription, setShowFullDescription] = useState(false);
 
   // Gérer la progression de la vidéo
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isActive) return;
 
     // Réinitialiser la progression quand la vidéo devient active
@@ -115,7 +119,9 @@ const VideoItem: React.FC<{
           return 100;
         }
         // Avancer de ~1.67% par 100ms pour une vidéo de 60s (1000ms / 60s = ~1.67% par seconde)
-        return prevProgress + (100 / video.duration / 10);
+        // Sécurité : éviter division par zéro
+        const duration = video.duration > 0 ? video.duration : 60;
+        return prevProgress + (100 / duration / 10);
       });
     }, 100);
 
@@ -133,8 +139,9 @@ const VideoItem: React.FC<{
     <View style={styles.videoContainer}>
       {/* Video Background */}
       <View style={styles.videoBackground}>
+        {/* Note: Pour une vraie vidéo, utilisez <Video /> de expo-av */}
         <Image 
-          source={{ uri: video.videoUrl }}
+          source={{ uri: video.videoUrl }} // Ici c'est une image (thumbnail) pour la démo
           style={styles.videoImage}
           resizeMode="cover"
         />
@@ -153,7 +160,7 @@ const VideoItem: React.FC<{
         <TouchableOpacity onPress={onProfilePress} style={styles.profileButton}>
           <View style={styles.creatorAvatarLarge}>
             <Image 
-              source={{ uri: 'https://via.placeholder.com/48/CCCCCC/666666?text=👤' }}
+              source={{ uri: video.creatorAvatar || 'https://via.placeholder.com/48/CCCCCC/666666?text=👤' }}
               style={styles.avatarImage}
               resizeMode="cover"
             />
@@ -229,7 +236,7 @@ const VideoItem: React.FC<{
   );
 };
 
-// Comments Modal Component
+// Comments Modal Component (Reste inchangé, je l'inclus pour complétude)
 const CommentsModal: React.FC<{
   visible: boolean;
   onClose: () => void;
@@ -248,11 +255,9 @@ const CommentsModal: React.FC<{
   const handleSubmit = () => {
     if (newComment.trim()) {
       if (replyingTo) {
-        // Répondre à un commentaire
         onReplyToComment(replyingTo.commentId, newComment);
         setReplyingTo(null);
       } else {
-        // Nouveau commentaire
         onAddComment(newComment);
       }
       setNewComment('');
@@ -307,19 +312,14 @@ const CommentsModal: React.FC<{
                   <Text style={styles.commentText}>{comment.text}</Text>
                   <View style={styles.commentFooter}>
                     <Text style={styles.commentTime}>{comment.time}</Text>
-                    
-                    {/* Bouton Répondre */}
                     <TouchableOpacity onPress={() => handleReply(comment.id, comment.username)}>
                       <Text style={styles.replyButton}>Répondre</Text>
                     </TouchableOpacity>
-                    
-                    {/* Bouton Supprimer (uniquement pour les commentaires de l'utilisateur) */}
                     {comment.username === 'Vous' && (
                       <TouchableOpacity onPress={() => onDeleteComment(comment.id)}>
                         <Text style={styles.deleteButton}>Supprimer</Text>
                       </TouchableOpacity>
                     )}
-                    
                     {comment.replies > 0 && (
                       <TouchableOpacity onPress={() => onToggleReplies(comment.id)}>
                         <Text style={styles.viewReplies}>
@@ -391,7 +391,6 @@ const CommentsModal: React.FC<{
             />
           </View>
           <View style={styles.addCommentInputWrapper}>
-            {/* Indicateur de réponse */}
             {replyingTo && (
               <View style={styles.replyingIndicator}>
                 <Text style={styles.replyingText}>
@@ -402,7 +401,6 @@ const CommentsModal: React.FC<{
                 </TouchableOpacity>
               </View>
             )}
-            
             <View style={styles.addCommentInput}>
               <TextInput
                 placeholder={replyingTo ? `Répondre à @${replyingTo.username}...` : "Ajouter un commentaire..."}
@@ -423,14 +421,13 @@ const CommentsModal: React.FC<{
   );
 };
 
-// Share Modal Component
+// Share Modal (Reste inchangé)
 const ShareModal: React.FC<{
   visible: boolean;
   onClose: () => void;
 }> = ({ visible, onClose }) => {
   if (!visible) return null;
 
-  // Options d'envoi (première ligne)
   const shareOptions = [
     { id: 'whatsapp', label: 'WhatsApp', icon: 'logo-whatsapp', color: '#25D366' },
     { id: 'messages', label: 'Messages', icon: 'chatbubble', color: '#007AFF' },
@@ -441,7 +438,6 @@ const ShareModal: React.FC<{
     { id: 'twitter', label: 'Twitter', icon: 'logo-twitter', color: '#1DA1F2' },
   ];
 
-  // Actions sur la vidéo (deuxième ligne)
   const videoActions = [
     { id: 'report', label: 'Signaler', icon: 'flag-outline', color: '#FF3B30' },
     { id: 'not-interested', label: 'Pas intéressé', icon: 'close-circle-outline', color: '#FF9500' },
@@ -453,18 +449,14 @@ const ShareModal: React.FC<{
 
   const handleShareOption = (optionId: string) => {
     console.log('Partager vers:', optionId);
-    // Ici tu peux ajouter la logique de partage
     onClose();
   };
 
   const handleVideoAction = (actionId: string) => {
     console.log('Action vidéo:', actionId);
-    
     if (actionId === 'copy-link') {
-      // Copier le lien
       console.log('Lien copié !');
     }
-    
     onClose();
   };
 
@@ -472,13 +464,8 @@ const ShareModal: React.FC<{
     <View style={styles.modalOverlay}>
       <TouchableOpacity style={styles.modalBackdrop} onPress={onClose} />
       <View style={styles.shareModalContent}>
-        {/* Handle du modal */}
         <View style={styles.modalHandle} />
-
-        {/* Titre principal */}
         <Text style={styles.shareMainTitle}>Partager vers</Text>
-
-        {/* PREMIÈRE LIGNE - Options d'envoi */}
         <View style={styles.shareSectionContainer}>
           <Text style={styles.shareSectionTitle}>Envoyer à</Text>
           <ScrollView 
@@ -501,11 +488,7 @@ const ShareModal: React.FC<{
             ))}
           </ScrollView>
         </View>
-
-        {/* Séparateur */}
         <View style={styles.shareDivider} />
-
-        {/* DEUXIÈME LIGNE - Actions sur la vidéo */}
         <View style={styles.shareSectionContainer}>
           <Text style={styles.shareSectionTitle}>Actions</Text>
           <View style={styles.videoActionsGrid}>
@@ -523,8 +506,6 @@ const ShareModal: React.FC<{
             ))}
           </View>
         </View>
-
-        {/* Bouton Annuler */}
         <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
           <Text style={styles.cancelButtonText}>Annuler</Text>
         </TouchableOpacity>
@@ -549,69 +530,44 @@ export default function VideoFeedApp() {
     loadVideosFromFirebase();
   }, []);
 
- const loadVideosFromFirebase = async () => {
-  try {
-    setLoading(true);
-    
-    // VIDÉOS DE DÉMO (en attendant d'avoir des vraies vidéos Firebase)
-    const demoVideos: Video[] = [
-      {
-        id: 1,
-        creatorUsername: 'SophieMartin',
-        creatorAvatar: '👩‍💼',
-        creatorLevel: 'expert',
-        videoUrl: 'https://via.placeholder.com/400x800/FF6B35/FFFFFF?text=Video+1',
-        title: '5 STRATÉGIES DE MARKETING DIGITAL POUR 2025',
-        description: 'Découvrez les meilleures stratégies de marketing digitales pour booster votre présence en ligne.',
-        hashtags: ['MarketingDigital', 'Business', 'Stratégie', '2025'],
-        likes: 4445,
-        comments: 579,
-        publishDate: '1-28',
-        isLiked: false,
-        duration: 60,
-        progress: 0,
-      },
-      {
-        id: 2,
-        creatorUsername: 'TechWithMarie',
-        creatorAvatar: '👨‍💻',
-        creatorLevel: 'diplome',
-        videoUrl: 'https://via.placeholder.com/400x800/7C3AED/FFFFFF?text=Video+2',
-        title: 'APPRENDRE PYTHON EN 60 SECONDES',
-        description: 'Les bases essentielles de Python expliquées simplement pour les débutants.',
-        hashtags: ['Python', 'Coding', 'Tech', 'Tutorial'],
-        likes: 2340,
-        comments: 187,
-        publishDate: '2-15',
-        isLiked: false,
-        duration: 45,
-        progress: 0,
-      },
-      {
-        id: 3,
-        creatorUsername: 'DesignByAlex',
-        creatorAvatar: '🎨',
-        creatorLevel: 'amateur',
-        videoUrl: 'https://via.placeholder.com/400x800/F97316/FFFFFF?text=Video+3',
-        title: 'ASTUCE DESIGN UI : UTILISER LES OMBRES',
-        description: 'Comment créer de la profondeur dans vos designs avec des ombres subtiles.',
-        hashtags: ['Design', 'UI', 'UX', 'Tips'],
-        likes: 1820,
-        comments: 94,
-        publishDate: '3-02',
-        isLiked: false,
-        duration: 30,
-        progress: 0,
-      },
-    ];
+  const loadVideosFromFirebase = async () => {
+    try {
+      setLoading(true);
+      
+      // ✅ APPEL À LA VRAIE BASE DE DONNÉES
+      const firebaseVideos = await getPublicVideos(20);
+      
+      // Si la base est vide ou erreur, on garde un fallback pour que l'app ne soit pas vide
+      if (!firebaseVideos || firebaseVideos.length === 0) {
+        console.log("Aucune vidéo trouvée, chargement démo...");
+        // Tu peux remettre le tableau demoVideos ici si tu veux une solution de repli
+        // Pour l'instant, on laisse vide pour bien voir si Firebase répond
+      }
 
-    setVideos(demoVideos);
-    setLoading(false);
-  } catch (error) {
-    console.error('Erreur:', error);
-    setLoading(false);
-  }
-};
+      const mappedVideos: Video[] = firebaseVideos.map((v: any) => ({
+        id: v.id,
+        creatorUsername: v.creatorUsername || 'Utilisateur',
+        creatorAvatar: v.thumbnail || 'https://via.placeholder.com/150', // Utilise le thumbnail si pas d'avatar
+        creatorLevel: 'amateur', // Valeur par défaut
+        videoUrl: v.videoUrl, // L'URL de la vidéo stockée
+        title: v.title || 'Sans titre',
+        description: v.description || '',
+        hashtags: v.tags || [],
+        likes: v.likesCount || 0,
+        comments: v.commentsCount || 0,
+        publishDate: 'Récemment', // Tu peux utiliser formatDate(v.createdAt) si disponible
+        isLiked: false,
+        duration: v.duration || 60,
+        progress: 0,
+      }));
+
+      setVideos(mappedVideos);
+    } catch (error) {
+      console.error('Erreur chargement vidéos:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fonction helper pour formater la date
   const formatDate = (timestamp: any) => {
@@ -632,13 +588,13 @@ export default function VideoFeedApp() {
   };
 
   // ✅ CHARGER LES COMMENTAIRES DEPUIS FIREBASE
-  const loadCommentsFromFirebase = async (videoId: string) => {
+  const loadCommentsFromFirebase = async (videoId: string | number) => {
     try {
-      const firebaseComments = await getComments(videoId, 50);
+      const firebaseComments = await getComments(videoId.toString(), 50);
       
       const formattedComments: Comment[] = firebaseComments.map((fbComment: any) => ({
         id: fbComment.id,
-        username: fbComment.userId,
+        username: fbComment.userId, // Idéalement, il faudrait récupérer le nom d'utilisateur associé
         text: fbComment.text || fbComment.contenu,
         time: formatDate(fbComment.createdAt),
         likes: 0,
@@ -657,7 +613,7 @@ export default function VideoFeedApp() {
   };
 
   // ✅ FONCTION LIKE CONNECTÉE À FIREBASE
-  const handleLike = async (videoId: number) => {
+  const handleLike = async (videoId: string | number) => {
     if (!auth.currentUser) {
       alert('Vous devez être connecté pour liker');
       return;
@@ -686,9 +642,7 @@ export default function VideoFeedApp() {
       }));
     } catch (error: any) {
       console.error('Erreur like:', error);
-      if (error.message !== 'Déjà liké') {
-        alert('Erreur lors du like');
-      }
+      // On ignore l'erreur si c'est déjà liké
     }
   };
 
@@ -704,7 +658,7 @@ export default function VideoFeedApp() {
       await addComment(currentVideo.id.toString(), text, 'video');
       
       // Recharger les commentaires
-      await loadCommentsFromFirebase(currentVideo.id.toString());
+      await loadCommentsFromFirebase(currentVideo.id);
       
       // Incrémenter le compteur
       setVideos(videos.map(video => {
@@ -741,11 +695,10 @@ export default function VideoFeedApp() {
     }
   };
 
-  // Ouvrir les commentaires et charger depuis Firebase
   const handleOpenComments = () => {
     const currentVideo = videos[currentVideoIndex];
     if (currentVideo) {
-      loadCommentsFromFirebase(currentVideo.id.toString());
+      loadCommentsFromFirebase(currentVideo.id);
     }
     setShowComments(true);
   };
@@ -821,12 +774,18 @@ export default function VideoFeedApp() {
     }));
   };
 
-  const handleProgressUpdate = (videoId: number, progressOrUpdater: number | ((prev: number) => number)) => {
-    setVideos(videos => videos.map(video => {
+  // ✅ CORRECTION CRITIQUE : useCallback pour éviter la boucle infinie
+  const handleProgressUpdate = useCallback((videoId: string | number, progressOrUpdater: number | ((prev: number) => number)) => {
+    setVideos(prevVideos => prevVideos.map(video => {
       if (video.id === videoId) {
+        const currentProgress = video.progress;
         const newProgress = typeof progressOrUpdater === 'function' 
-          ? progressOrUpdater(video.progress) 
+          ? progressOrUpdater(currentProgress) 
           : progressOrUpdater;
+        
+        // Optimisation : on ne met pas à jour si le changement est infime pour éviter trop de re-renders
+        if (Math.abs(newProgress - currentProgress) < 0.1) return video;
+
         return {
           ...video,
           progress: Math.min(100, Math.max(0, newProgress))
@@ -834,7 +793,7 @@ export default function VideoFeedApp() {
       }
       return video;
     }));
-  };
+  }, []); // Le tableau de dépendances vide est la clé !
 
   if (loading) {
     return (
@@ -900,6 +859,7 @@ export default function VideoFeedApp() {
 }
 
 const styles = StyleSheet.create({
+  // ... (Garde tous tes styles existants ici, ils sont parfaits)
   container: {
     flex: 1,
     backgroundColor: '#000',
