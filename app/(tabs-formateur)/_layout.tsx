@@ -1,4 +1,3 @@
-
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet, Platform } from 'react-native';
@@ -8,71 +7,80 @@ export default function FormateurTabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#9333ea',
-        tabBarInactiveTintColor: '#71717a',
+        tabBarActiveTintColor: '#9333ea', // Violet quand actif
+        tabBarInactiveTintColor: '#71717a', // Gris quand inactif
+        tabBarShowLabel: true, // Afficher les textes
         tabBarStyle: {
           backgroundColor: '#fff',
           borderTopWidth: 1,
           borderTopColor: '#e4e4e7',
-          height: Platform.OS === 'ios' ? 88 : 65,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+          height: Platform.OS === 'ios' ? 85 : 65, // Hauteur ajustée
+          paddingBottom: Platform.OS === 'ios' ? 25 : 10,
           paddingTop: 8,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600',
+          marginTop: 2,
         },
       }}
     >
+      {/* 1. HOME */}
       <Tabs.Screen
         name="home"
         options={{
           title: 'Accueil',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "home" : "home-outline"} size={24} color={color} />
           ),
         }}
       />
+
+      {/* 2. RECHERCHE */}
       <Tabs.Screen
         name="recherche"
         options={{
           title: 'Recherche',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="search-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "search" : "search-outline"} size={24} color={color} />
           ),
         }}
       />
-      
-      {/* BOUTON CENTRAL ORANGE (+) IDENTIQUE FIGMA */}
+
+      {/* 3. UPLOAD (BOUTON CENTRAL ORANGE) */}
       <Tabs.Screen
         name="upload"
         options={{
-          title: '', // On retire le texte sous le bouton pour le design
+          title: '', // Pas de texte sous le bouton central
+          tabBarLabelStyle: { display: 'none' }, // Cache le label
           tabBarIcon: () => (
-            <View style={styles.orangeButtonContainer}>
-              <View style={styles.orangeButton}>
-                <Ionicons name="add" size={35} color="white" />
+            <View style={styles.uploadButtonWrapper}>
+              <View style={styles.uploadButton}>
+                <Ionicons name="add" size={32} color="#fff" />
               </View>
             </View>
           ),
         }}
       />
 
+      {/* 4. NOTIFICATIONS */}
       <Tabs.Screen
         name="notifications"
         options={{
-          title: 'Notifications',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="notifications-outline" size={size} color={color} />
+          title: 'Notifs',
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "notifications" : "notifications-outline"} size={24} color={color} />
           ),
         }}
       />
+
+      {/* 5. PROFILE */}
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profil',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
           ),
         }}
       />
@@ -81,24 +89,25 @@ export default function FormateurTabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  orangeButtonContainer: {
-    top: -15, // Permet au bouton de dépasser de la barre
+  uploadButtonWrapper: {
+    top: -20, // Fait remonter le bouton
     justifyContent: 'center',
     alignItems: 'center',
   },
-  orangeButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#F97316', // Orange exact du Figma
+  uploadButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F97316', // Orange Figma
     justifyContent: 'center',
     alignItems: 'center',
+    // Ombres pour l'effet flottant
     shadowColor: '#F97316',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 5,
-    elevation: 8, // Ombre portée pour Android
-    borderWidth: 4,
-    borderColor: '#fff', // Cercle blanc de séparation
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+    borderWidth: 3,
+    borderColor: '#ffffff', // Petit contour blanc
   },
 });
