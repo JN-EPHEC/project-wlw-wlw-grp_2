@@ -1,10 +1,23 @@
-
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform } from 'react-native';
 import { useAuth } from '../_ProgressContext';
 import { Ionicons } from '@expo/vector-icons';
+// 1. Import du router
+import { useRouter } from 'expo-router';
 
 export default function ProfileFormateurScreen() {
   const { userProfile, signOut } = useAuth();
+  // 2. Initialisation du router
+  const router = useRouter();
+
+  // 3. Fonction qui gère la déconnexion ET la redirection
+  const handleSignOut = async () => {
+    try {
+      await signOut(); // Déconnexion Firebase
+      router.replace('/auth'); // Redirection immédiate vers la page de connexion
+    } catch (error) {
+      console.error('Erreur lors de la déconnexion:', error);
+    }
+  };
 
   return (
     <ScrollView style={styles.container}>
@@ -73,7 +86,8 @@ export default function ProfileFormateurScreen() {
       </View>
 
       {/* Bouton déconnexion */}
-      <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
+      {/* 4. Utilisation de la nouvelle fonction handleSignOut */}
+      <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
         <Ionicons name="log-out-outline" size={20} color="#fff" />
         <Text style={styles.logoutText}>Se déconnecter</Text>
       </TouchableOpacity>
