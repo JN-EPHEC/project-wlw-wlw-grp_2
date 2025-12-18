@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  TextInput, Platform, Dimensions, ActivityIndicator 
+  TextInput, Dimensions, ActivityIndicator, Alert 
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { storage, db, auth } from '@/firebaseConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -26,6 +29,7 @@ export default function UploadScreen() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [videoUri, setVideoUri] = useState<string | null>(null);
 
   const pickVideo = async () => {
@@ -42,12 +46,80 @@ export default function UploadScreen() {
     }
   };
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
+    if (!videoUri || !title || !category) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    if (!auth.currentUser) {
+      Alert.alert('Erreur', 'Vous devez être connecté pour publier une vidéo');
+      return;
+    }
+
+    // Stocker currentUser dans une variable pour TypeScript
+    const currentUser = auth.currentUser;
+
     setIsProcessing(true);
-    setTimeout(() => {
+    setUploadProgress(0);
+
+    try {
+      // 1. Convertir l'URI en blob
+      const response = await fetch(videoUri);
+      const blob = await response.blob();
+
+      // 2. Créer référence Storage
+      const timestamp = Date.now();
+      const filename = `videos/${currentUser.uid}/${timestamp}.mp4`;
+      const storageRef = ref(storage, filename);
+
+      // 3. Upload avec progression
+      const uploadTask = uploadBytesResumable(storageRef, blob);
+
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+          console.log('Upload : ' + Math.round(progress) + '%');
+        },
+        (error) => {
+          console.error('Erreur upload:', error);
+          Alert.alert('Erreur', 'Impossible d\'uploader la vidéo : ' + error.message);
+          setIsProcessing(false);
+        },
+        async () => {
+          // 4. Récupérer l'URL de téléchargement
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          console.log('Vidéo disponible à:', downloadURL);
+
+          // 5. Sauvegarder dans Firestore
+          await addDoc(collection(db, 'videos'), {
+            title,
+            description,
+            category,
+            videoUrl: downloadURL,
+            thumbnailUrl: '',
+            creatorId: currentUser.uid,
+            creatorEmail: currentUser.email,
+            creatorName: currentUser.displayName || 'Formateur',
+            createdAt: serverTimestamp(),
+            views: 0,
+            likes: 0,
+            comments: 0,
+            duration: 0,
+          });
+
+          console.log('✅ Vidéo publiée avec succès !');
+          setIsProcessing(false);
+          setStep('success');
+        }
+      );
+    } catch (error: any) {
+      console.error('Erreur complète:', error);
+      Alert.alert('Erreur', error.message || 'Une erreur est survenue');
       setIsProcessing(false);
-      setStep('success');
-    }, 2000);
+    }
   };
 
   const resetForm = () => {
@@ -56,6 +128,7 @@ export default function UploadScreen() {
     setDescription('');
     setCategory('');
     setVideoUri(null);
+    setUploadProgress(0);
   };
 
   return (
@@ -144,7 +217,16 @@ export default function UploadScreen() {
               onPress={handlePublish}
               disabled={isProcessing || !title || !category}
             >
-              {isProcessing ? <ActivityIndicator color="white" /> : <Text style={styles.publishBtnText}>Publier la vidéo</Text>}
+              {isProcessing ? (
+                <View style={{ alignItems: 'center' }}>
+                  <ActivityIndicator color="white" />
+                  <Text style={{ color: 'white', marginTop: 8, fontSize: 14 }}>
+                    Upload : {Math.round(uploadProgress)}%
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.publishBtnText}>Publier la vidéo</Text>
+              )}
             </TouchableOpacity>
           </View>
         )}
@@ -153,7 +235,7 @@ export default function UploadScreen() {
           <View style={styles.successContainer}>
             <View style={styles.checkCircle}><Ionicons name="checkmark" size={50} color="white" /></View>
             <Text style={styles.successTitle}>Vidéo publiée ! 🎉</Text>
-            <TouchableOpacity style={styles.finishBtn} onPress={() => router.replace('/home')}>
+            <TouchableOpacity style={styles.finishBtn} onPress={() => router.push('/(tabs-formateur)' as any)}>
               <Text style={styles.finishBtnText}>Retour à l'accueil</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.againBtn} onPress={resetForm}>
