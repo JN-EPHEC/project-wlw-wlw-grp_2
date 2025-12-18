@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
-// 👇 SEUL CHANGEMENT : Le bon chemin vers votre config Firebase
-import { auth } from '../firebaseConfig';
+// Import de la config Firebase
+import { auth, db } from '../firebaseConfig';
 
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -28,10 +28,31 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      Alert.alert('Succès', 'Connexion réussie !');
-      // Navigation d'origine conservée
-      router.replace('/(tabs)');
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // 🔍 Récupérer le rôle de l'utilisateur dans Firestore
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const role = userData.role; // 'apprenant' ou 'formateur'
+
+        Alert.alert('Succès', 'Connexion réussie !');
+        
+        // 🔀 Redirection conditionnelle selon le rôle
+        if (role === 'formateur') {
+          router.replace('/(tabs-formateur)/home');
+        } else {
+          // Par défaut ou si apprenant
+          router.replace('/(tabs-apprenant)/home');
+        }
+      } else {
+        // Fallback si le document user n'existe pas (cas rare)
+        Alert.alert('Attention', 'Profil utilisateur introuvable, redirection vers l\'accueil apprenant.');
+        router.replace('/(tabs-apprenant)/home');
+      }
+
     } catch (error: any) {
       console.error('Login error:', error);
       if (
@@ -114,7 +135,7 @@ export default function LoginScreen() {
                 disabled={loading}
               >
                 <Ionicons 
-                  name={showPassword ? 'eye' : 'eye-off '} 
+                  name={showPassword ? 'eye' : 'eye-off'} 
                   size={20} 
                   color="#71717a" 
                 />
