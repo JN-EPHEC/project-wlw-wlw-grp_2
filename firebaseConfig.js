@@ -6,7 +6,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// --- CHANGEMENT ICI ---
+
 // On importe la configuration depuis le fichier firebase_env
 import { firebaseConfig } from "./firebase_env"; 
 
