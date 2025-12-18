@@ -7,17 +7,29 @@ export default function FormateurTabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#9333ea', // Violet (couleur active texte/icones standards)
-        tabBarInactiveTintColor: '#71717a', // Gris
+        tabBarActiveTintColor: '#9333ea',
+        tabBarInactiveTintColor: '#71717a',
         tabBarShowLabel: true,
         tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopWidth: 1,
-          borderTopColor: '#f3f4f6',
-          height: Platform.OS === 'ios' ? 85 : 60, // Hauteur suffisante pour le bouton
+          backgroundColor: '#ffffff',
+          // 👇 C'EST ICI QUE TOUT SE JOUE POUR LE DESIGN
+          position: 'absolute', // Indispensable pour l'effet flottant
+          bottom: 0,
+          left: 0,
+          right: 0,
+          borderTopLeftRadius: 30,  // Crée l'arrondi à gauche
+          borderTopRightRadius: 30, // Crée l'arrondi à droite
+          borderTopWidth: 0,        // Supprime la ligne grise du haut
+          height: Platform.OS === 'ios' ? 95 : 70, // Plus haut pour accommoder l'arrondi
           paddingBottom: Platform.OS === 'ios' ? 30 : 10,
           paddingTop: 10,
-          elevation: 0, // Retire l'ombre par défaut sur Android pour un look clean
+          
+          
+          elevation: 10, // Pour Android
+          shadowColor: '#000', // Pour iOS
+          shadowOffset: { width: 0, height: -5 }, // Ombre vers le haut
+          shadowOpacity: 0.1,
+          shadowRadius: 10,
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -31,31 +43,22 @@ export default function FormateurTabsLayout() {
         name="home"
         options={{
           title: 'Accueil',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "home" : "home-outline"} size={24} color={color} />
           ),
         }}
       />
 
-      {/* 2. RECHERCHE */}
-      <Tabs.Screen
-        name="recherche" // Assurez-vous que le fichier s'appelle bien recherche.tsx
-        options={{
-          title: 'Recherche',
-          tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "search" : "search-outline"} size={24} color={color} />
-          ),
-        }}
-      />
+      
 
       {/* 3. UPLOAD (BOUTON CENTRAL ORANGE) */}
       <Tabs.Screen
         name="upload"
         options={{
-          title: '', // Pas de texte
-          tabBarLabelStyle: { display: 'none' }, // Cache le label
+          title: '',
+          tabBarLabelStyle: { display: 'none' },
           tabBarIcon: () => (
-            <View style={styles.uploadButtonWrapper}>
+            <View style={styles.uploadButtonContainer}>
               <View style={styles.uploadButton}>
                 <Ionicons name="add" size={32} color="#fff" />
               </View>
@@ -69,7 +72,7 @@ export default function FormateurTabsLayout() {
         name="notifications"
         options={{
           title: 'Notifications',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "notifications" : "notifications-outline"} size={24} color={color} />
           ),
         }}
@@ -80,7 +83,7 @@ export default function FormateurTabsLayout() {
         name="profile"
         options={{
           title: 'Profil',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
           ),
         }}
@@ -90,25 +93,24 @@ export default function FormateurTabsLayout() {
 }
 
 const styles = StyleSheet.create({
-  uploadButtonWrapper: {
-    top: -20, // Fait remonter le bouton pour l'effet "flottant"
+  uploadButtonContainer: {
+    top: -25, // Fait remonter le bouton plus haut pour qu'il chevauche la barre
     justifyContent: 'center',
     alignItems: 'center',
-    // Important pour que le clic fonctionne sur la partie qui dépasse
-    zIndex: 10, 
+    zIndex: 10, // Assure que le bouton est cliquable
   },
   uploadButton: {
     width: 60,
     height: 60,
-    borderRadius: 30, // Cercle parfait
-    backgroundColor: '#F97316', // Orange exact de votre image
+    borderRadius: 30, // Rond parfait
+    backgroundColor: '#F97316', // Orange exact
     justifyContent: 'center',
     alignItems: 'center',
-    // Ombres pour donner du relief (comme sur l'image)
+    // Ombres spécifiques au bouton
     shadowColor: '#F97316',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowRadius: 5,
     elevation: 5,
   },
 });
