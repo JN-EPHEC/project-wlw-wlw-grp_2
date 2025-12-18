@@ -46,7 +46,7 @@ export default function AuthComponent() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
-        router.replace("/(tabs)/home");
+        router.replace("/");
       }
     });
     return () => unsubscribe();
@@ -155,7 +155,7 @@ export default function AuthComponent() {
           </TouchableOpacity>
 
           {/* Mot de passe oublié */}
-          <TouchableOpacity onPress={() => router.push("/mdpoublie")}>
+          <TouchableOpacity onPress={() => router.push("/forgot-password")}>
             <Text style={styles.forgotPassword}>Mot de passe oublié?</Text>
           </TouchableOpacity>
 
@@ -163,14 +163,14 @@ export default function AuthComponent() {
 
           <View style={styles.registerContainer}>
              <Text style={styles.registerText}>Pas encore de compte ?</Text>
-              <TouchableOpacity onPress={() => router.push("/choixprofile")}>
+              <TouchableOpacity onPress={() => router.push("/role-selection")}>
                 <Text style={styles.registerLink}>S’inscrire</Text>
               </TouchableOpacity>
           </View>
 
           {/* FOOTER */}
           <View style={styles.footer}>
-            <Pressable onPress={() => router.push("/pdc")}> 
+            <Pressable onPress={() => router.push("/privacy-policy")}> 
               {({ pressed, hovered }) => (
                 <Text 
                   style={[
