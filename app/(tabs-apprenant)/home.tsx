@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-// ✅ Import correct pour LinearGradient
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode } from 'expo-av';
 import { collection, getDocs, query, orderBy, limit, doc, updateDoc, increment, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
 
-// ✅ CORRECTION : Chemin vers la config (remonter de 2 niveaux) + import de 'auth'
-import { auth, db } from '../firebaseConfig';
+// ✅ CORRECTION 1 : On remonte de 2 niveaux pour trouver la config à la racine
+import { db, auth } from '../../firebaseConfig'; 
+
+// ❌ ON RETIRE : import { useAuth } from './context/AuthContext';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -36,9 +37,9 @@ interface UserProfile {
 }
 
 export default function HomeScreen() {
-  // ✅ CORRECTION : Utilisation directe de l'utilisateur Firebase
-  const user = auth.currentUser;
-  
+  // ✅ CORRECTION 2 : On récupère l'utilisateur directement depuis Firebase
+  const user = auth.currentUser; 
+
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedVideos, setLikedVideos] = useState<Set<string>>(new Set());
@@ -289,8 +290,8 @@ export default function HomeScreen() {
       >
         {videos.map((video, index) => {
           const isLiked = likedVideos.has(video.id);
-          const isFavorited = userProfile?.favorites?.includes(video.id) || false;
-          const isFollowing = userProfile?.following?.includes(video.creatorId) || false;
+          const isFavorited = userProfile?.favorites.includes(video.id) || false;
+          const isFollowing = userProfile?.following.includes(video.creatorId) || false;
           
           return (
             <View key={video.id} style={styles.videoContainer}>

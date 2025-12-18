@@ -1,13 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-// ✅ Import correct pour LinearGradient
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode } from 'expo-av';
 import { collection, getDocs, query, orderBy, limit, doc, updateDoc, increment, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
-
-// ✅ CORRECTION : Chemin vers la config (remonter de 2 niveaux) + import de 'auth'
-import { auth, db } from '../firebaseConfig';
+import { db, auth } from '../../firebaseConfig';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -36,9 +33,6 @@ interface UserProfile {
 }
 
 export default function HomeScreen() {
-  // ✅ CORRECTION : Utilisation directe de l'utilisateur Firebase
-  const user = auth.currentUser;
-  
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedVideos, setLikedVideos] = useState<Set<string>>(new Set());
@@ -54,6 +48,7 @@ export default function HomeScreen() {
 
   const loadUserProfile = async () => {
     try {
+      const user = auth.currentUser;
       if (!user) return;
       
       const userDoc = await getDoc(doc(db, 'users', user.uid));
@@ -113,6 +108,7 @@ export default function HomeScreen() {
 
   const handleMarkVideoAsWatched = async (video: VideoData) => {
     try {
+      const user = auth.currentUser;
       if (!user || !userProfile) return;
       if (userProfile.watchHistory.includes(video.id)) return;
 
@@ -172,6 +168,7 @@ export default function HomeScreen() {
 
   const handleFavorite = async (videoId: string) => {
     try {
+      const user = auth.currentUser;
       if (!user || !userProfile) return;
       
       const isFavorited = userProfile.favorites.includes(videoId);
@@ -206,6 +203,7 @@ export default function HomeScreen() {
 
   const handleFollow = async (creatorId: string, creatorName: string) => {
     try {
+      const user = auth.currentUser;
       if (!user || !userProfile) return;
       
       const isFollowing = userProfile.following.includes(creatorId);
@@ -289,8 +287,8 @@ export default function HomeScreen() {
       >
         {videos.map((video, index) => {
           const isLiked = likedVideos.has(video.id);
-          const isFavorited = userProfile?.favorites?.includes(video.id) || false;
-          const isFollowing = userProfile?.following?.includes(video.creatorId) || false;
+          const isFavorited = userProfile?.favorites.includes(video.id) || false;
+          const isFollowing = userProfile?.following.includes(video.creatorId) || false;
           
           return (
             <View key={video.id} style={styles.videoContainer}>
