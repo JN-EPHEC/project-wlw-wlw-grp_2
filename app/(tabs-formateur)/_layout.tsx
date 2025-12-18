@@ -7,25 +7,26 @@ export default function FormateurTabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#9333ea', // Violet quand actif
-        tabBarInactiveTintColor: '#71717a', // Gris quand inactif
-        tabBarShowLabel: true, // Afficher les textes
+        tabBarActiveTintColor: '#9333ea', // Violet (couleur active texte/icones standards)
+        tabBarInactiveTintColor: '#71717a', // Gris
+        tabBarShowLabel: true,
         tabBarStyle: {
           backgroundColor: '#fff',
           borderTopWidth: 1,
-          borderTopColor: '#e4e4e7',
-          height: Platform.OS === 'ios' ? 85 : 65, // Hauteur ajustée
-          paddingBottom: Platform.OS === 'ios' ? 25 : 10,
-          paddingTop: 8,
+          borderTopColor: '#f3f4f6',
+          height: Platform.OS === 'ios' ? 85 : 60, // Hauteur suffisante pour le bouton
+          paddingBottom: Platform.OS === 'ios' ? 30 : 10,
+          paddingTop: 10,
+          elevation: 0, // Retire l'ombre par défaut sur Android pour un look clean
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '600',
+          fontWeight: '500',
           marginTop: 2,
         },
       }}
     >
-      {/* 1. HOME */}
+      {/* 1. ACCUEIL */}
       <Tabs.Screen
         name="home"
         options={{
@@ -38,7 +39,7 @@ export default function FormateurTabsLayout() {
 
       {/* 2. RECHERCHE */}
       <Tabs.Screen
-        name="recherche"
+        name="recherche" // Assurez-vous que le fichier s'appelle bien recherche.tsx
         options={{
           title: 'Recherche',
           tabBarIcon: ({ color, size, focused }) => (
@@ -51,7 +52,7 @@ export default function FormateurTabsLayout() {
       <Tabs.Screen
         name="upload"
         options={{
-          title: '', // Pas de texte sous le bouton central
+          title: '', // Pas de texte
           tabBarLabelStyle: { display: 'none' }, // Cache le label
           tabBarIcon: () => (
             <View style={styles.uploadButtonWrapper}>
@@ -67,14 +68,14 @@ export default function FormateurTabsLayout() {
       <Tabs.Screen
         name="notifications"
         options={{
-          title: 'Notifs',
+          title: 'Notifications',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons name={focused ? "notifications" : "notifications-outline"} size={24} color={color} />
           ),
         }}
       />
 
-      {/* 5. PROFILE */}
+      {/* 5. PROFIL */}
       <Tabs.Screen
         name="profile"
         options={{
@@ -90,24 +91,24 @@ export default function FormateurTabsLayout() {
 
 const styles = StyleSheet.create({
   uploadButtonWrapper: {
-    top: -20, // Fait remonter le bouton
+    top: -20, // Fait remonter le bouton pour l'effet "flottant"
     justifyContent: 'center',
     alignItems: 'center',
+    // Important pour que le clic fonctionne sur la partie qui dépasse
+    zIndex: 10, 
   },
   uploadButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F97316', // Orange Figma
+    width: 60,
+    height: 60,
+    borderRadius: 30, // Cercle parfait
+    backgroundColor: '#F97316', // Orange exact de votre image
     justifyContent: 'center',
     alignItems: 'center',
-    // Ombres pour l'effet flottant
+    // Ombres pour donner du relief (comme sur l'image)
     shadowColor: '#F97316',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 5,
-    borderWidth: 3,
-    borderColor: '#ffffff', // Petit contour blanc
   },
 });

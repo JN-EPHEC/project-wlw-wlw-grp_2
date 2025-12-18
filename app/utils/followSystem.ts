@@ -1,89 +1,97 @@
-import { auth, db } from '../../firebaseConfig';
 import { 
   doc, 
-  writeBatch,
-  increment,
-  serverTimestamp 
+  updateDoc, 
+  arrayUnion, 
+  arrayRemove, 
+  increment, 
+  getDoc 
 } from 'firebase/firestore';
+import { db } from '../../firebaseConfig';
 
 /**
- * ➕ SUIVRE un utilisateur
+ * Permet à un utilisateur de suivre un créateur.
+ * Met à jour la liste 'following' de l'utilisateur et 'followers' du créateur.
+ * @param currentUserId - ID de l'utilisateur connecté (celui qui clique)
+ * @param targetUserId - ID du créateur à suivre
  */
-export async function followUser(targetUserId: string) {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Non connecté');
-
-  if (user.uid === targetUserId) {
-    throw new Error('Impossible de se suivre soi-même');
-  }
-
-  // Références
-  const userRef = doc(db, 'users', user.uid);
-  const targetRef = doc(db, 'users', targetUserId);
-  
-  // Sous-collections pour suivre les relations exactes
-  const currentUserFollowingRef = doc(db, 'users', user.uid, 'following', targetUserId);
-  const targetUserFollowersRef = doc(db, 'users', targetUserId, 'followers', user.uid);
-
+export const followUser = async (currentUserId: string, targetUserId: string) => {
   try {
-    const batch = writeBatch(db);
+    if (!currentUserId || !targetUserId) throw new Error("IDs invalides");
 
-    // 1. Ajouter à la liste "following" de l'utilisateur courant
-    batch.set(currentUserFollowingRef, {
-      followedAt: serverTimestamp(),
-      userId: targetUserId
+    const currentUserRef = doc(db, 'users', currentUserId);
+    const targetUserRef = doc(db, 'users', targetUserId);
+
+    // 1. Mettre à jour l'utilisateur courant (Ajout dans following)
+    const p1 = updateDoc(currentUserRef, {
+      following: arrayUnion(targetUserId),
+      'stats.followingCount': increment(1)
     });
 
-    // 2. Ajouter à la liste "followers" de la cible
-    batch.set(targetUserFollowersRef, {
-      followedAt: serverTimestamp(),
-      userId: user.uid
+    // 2. Mettre à jour la cible (Ajout dans followers)
+    const p2 = updateDoc(targetUserRef, {
+      followers: arrayUnion(currentUserId),
+      'stats.followersCount': increment(1)
     });
 
-    // 3. Mettre à jour les compteurs (stats)
-    batch.update(userRef, { 'stats.followingCount': increment(1) });
-    batch.update(targetRef, { 'stats.followersCount': increment(1) });
+    await Promise.all([p1, p2]);
 
-    await batch.commit();
-    console.log('✅ Follow réussi');
+    console.log(`✅ ${currentUserId} suit ${targetUserId}`);
     return { success: true };
 
   } catch (error) {
-    console.error('Erreur follow:', error);
-    throw error;
+    console.error("❌ Erreur followUser:", error);
+    return { success: false, error };
   }
-}
+};
 
 /**
- * ➖ NE PLUS SUIVRE un utilisateur
+ * Permet à un utilisateur de ne plus suivre un créateur.
+ * @param currentUserId - ID de l'utilisateur connecté
+ * @param targetUserId - ID du créateur
  */
-export async function unfollowUser(targetUserId: string) {
-  const user = auth.currentUser;
-  if (!user) throw new Error('Non connecté');
-
-  const userRef = doc(db, 'users', user.uid);
-  const targetRef = doc(db, 'users', targetUserId);
-  
-  const currentUserFollowingRef = doc(db, 'users', user.uid, 'following', targetUserId);
-  const targetUserFollowersRef = doc(db, 'users', targetUserId, 'followers', user.uid);
-
+export const unfollowUser = async (currentUserId: string, targetUserId: string) => {
   try {
-    const batch = writeBatch(db);
+    if (!currentUserId || !targetUserId) throw new Error("IDs invalides");
 
-    // Supprimer les documents de relation
-    batch.delete(currentUserFollowingRef);
-    batch.delete(targetUserFollowersRef);
+    const currentUserRef = doc(db, 'users', currentUserId);
+    const targetUserRef = doc(db, 'users', targetUserId);
 
-    // Mettre à jour les compteurs
-    batch.update(userRef, { 'stats.followingCount': increment(-1) });
-    batch.update(targetRef, { 'stats.followersCount': increment(-1) });
+    // 1. Retirer de following
+    const p1 = updateDoc(currentUserRef, {
+      following: arrayRemove(targetUserId),
+      'stats.followingCount': increment(-1)
+    });
 
-    await batch.commit();
-    console.log('✅ Unfollow réussi');
+    // 2. Retirer de followers
+    const p2 = updateDoc(targetUserRef, {
+      followers: arrayRemove(currentUserId),
+      'stats.followersCount': increment(-1)
+    });
+
+    await Promise.all([p1, p2]);
+
+    console.log(`✅ ${currentUserId} a unfollow ${targetUserId}`);
     return { success: true };
 
   } catch (error) {
-    console.error('Erreur unfollow:', error);
-    throw error;
+    console.error("❌ Erreur unfollowUser:", error);
+    return { success: false, error };
   }
-}
+};
+
+/**
+ * Vérifie si l'utilisateur suit déjà la cible (pour l'état initial du bouton)
+ */
+export const checkIsFollowing = async (currentUserId: string, targetUserId: string): Promise<boolean> => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', currentUserId));
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      return data.following?.includes(targetUserId) || false;
+    }
+    return false;
+  } catch (error) {
+    console.error("❌ Erreur checkIsFollowing:", error);
+    return false;
+  }
+};
