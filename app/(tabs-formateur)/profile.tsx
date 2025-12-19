@@ -7,9 +7,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
+// Vérifie tes chemins d'import ici
 import { auth, db, storage } from '../../firebaseConfig';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+// 1. AJOUT DE L'IMPORT SIGNOUT
+import { signOut } from 'firebase/auth';
 
 const { width } = Dimensions.get('window');
 
@@ -18,7 +21,7 @@ export default function ProfileFormateurScreen() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState('videos'); // Défaut sur "Vidéos"
+  const [activeTab, setActiveTab] = useState('videos'); 
   
   const [editedName, setEditedName] = useState('');
   const [editedBio, setEditedBio] = useState('');
@@ -43,6 +46,16 @@ export default function ProfileFormateurScreen() {
       console.error("Erreur Firebase:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 2. FONCTION DE DÉCONNEXION
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.replace('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
     }
   };
 
@@ -110,12 +123,21 @@ export default function ProfileFormateurScreen() {
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false} bounces={false}>
       
-      {/* 1. HEADER VIOLET CLOCHE */}
+      {/* 1. HEADER VIOLET */}
       <View style={styles.headerWrapper}>
         <LinearGradient colors={['#9333ea', '#7e22ce']} style={styles.headerGradient}>
           <View style={styles.topIcons}>
-            <TouchableOpacity style={styles.glassIcon}><Ionicons name="share-social-outline" size={20} color="white" /></TouchableOpacity>
-            <TouchableOpacity style={styles.glassIcon}><Ionicons name="settings-outline" size={20} color="white" /></TouchableOpacity>
+            <TouchableOpacity style={styles.glassIcon}>
+                <Ionicons name="share-social-outline" size={20} color="white" />
+            </TouchableOpacity>
+            
+            {/* 3. BOUTON DÉCONNEXION (Remplacement de Settings) */}
+            <TouchableOpacity 
+              style={[styles.glassIcon, { backgroundColor: 'rgba(239, 68, 68, 0.4)' }]} 
+              onPress={handleLogout}
+            >
+                <Ionicons name="log-out-outline" size={20} color="white" />
+            </TouchableOpacity>
           </View>
         </LinearGradient>
 
@@ -131,7 +153,6 @@ export default function ProfileFormateurScreen() {
               </View>
             )}
             
-            {/* BADGE FORMATEUR POSITIONNÉ SOUS L'AVATAR */}
             <View style={styles.roleBadge}>
               <Ionicons name="school" size={10} color="#9333ea" />
               <Text style={styles.roleText}>Formateur</Text>
@@ -161,7 +182,7 @@ export default function ProfileFormateurScreen() {
         )}
       </View>
 
-      {/* 3. STATS CRÉATEUR (Vues, Likes, Abonnés) */}
+      {/* 3. STATS CRÉATEUR */}
       <View style={styles.statsRow}>
         <View style={styles.statCard}><Text style={styles.statNum}>0</Text><Text style={styles.statLabel}>Vues totales</Text></View>
         <View style={styles.statCard}><Text style={styles.statNum}>0 💖</Text><Text style={styles.statLabel}>Mentions J'aime</Text></View>
@@ -179,7 +200,7 @@ export default function ProfileFormateurScreen() {
         <Text style={styles.progressSub}>Postez votre première vidéo pour voir vos statistiques</Text>
       </View>
 
-      {/* 5. TABS NAVIGATION FORMATEUR */}
+      {/* 5. TABS */}
       <View style={styles.tabBar}>
         <TouchableOpacity style={[styles.tab, activeTab === 'videos' && styles.activeTab]} onPress={() => setActiveTab('videos')}>
           <Text style={[styles.tabLabel, activeTab === 'videos' && styles.activeLabel]}>🎬 Mes Vidéos</Text>
@@ -189,7 +210,7 @@ export default function ProfileFormateurScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 6. CONTENU VIDE */}
+      {/* 6. CONTENU */}
       <View style={styles.contentSection}>
         <View style={styles.emptyCard}>
           <Ionicons name={activeTab === 'videos' ? "videocam-outline" : "stats-chart-outline"} size={40} color="#D1D1D6" />

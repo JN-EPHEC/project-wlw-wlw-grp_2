@@ -7,9 +7,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import { auth, db, storage } from '../../firebaseConfig';
+
+// Assure-toi que ces chemins correspondent à ton projet
+import { auth, db, storage } from '../../firebaseConfig'; 
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { signOut as firebaseSignOut } from 'firebase/auth'; // Renommé pour éviter les conflits
 
 const { width } = Dimensions.get('window');
 
@@ -46,9 +49,19 @@ export default function ProfileApprenantScreen() {
     }
   };
 
+  // --- FONCTION DE DÉCONNEXION SIMPLIFIÉE ---
+  const signOut = async () => {
+    try {
+      await firebaseSignOut(auth);
+      // Redirection immédiate vers le login sans possibilité de retour arrière
+      router.replace('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
   // --- FONCTION DE SÉLECTION D'IMAGE ---
   const pickImage = async () => {
-    // Demander la permission
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Désolé', 'Nous avons besoin des permissions pour accéder à vos photos.');
@@ -67,34 +80,24 @@ export default function ProfileApprenantScreen() {
     }
   };
 
-  // --- UPLOAD SUR FIREBASE STORAGE ET UPDATE FIRESTORE ---
+  // --- UPLOAD ---
   const uploadImage = async (uri: string) => {
     const user = auth.currentUser;
     if (!user) return;
 
     setIsUploading(true);
     try {
-      // 1. Transformer l'URI en Blob pour Firebase Storage
       const response = await fetch(uri);
       const blob = await response.blob();
-
-      // 2. Créer une référence dans Storage (dossier avatars/)
       const fileRef = ref(storage, `avatars/${user.uid}`);
-      
-      // 3. Upload du fichier
       await uploadBytes(fileRef, blob);
-
-      // 4. Récupérer l'URL de téléchargement
       const downloadURL = await getDownloadURL(fileRef);
 
-      // 5. Mettre à jour le document de l'utilisateur dans Firestore
       await updateDoc(doc(db, 'users', user.uid), {
         photoURL: downloadURL
       });
 
-      // 6. Mettre à jour l'état local pour rafraîchir l'UI immédiatement
       setUserProfile((prev: any) => ({ ...prev, photoURL: downloadURL }));
-      
       Alert.alert("Succès", "Photo de profil mise à jour !");
     } catch (e) { 
       console.error(e);
@@ -107,14 +110,23 @@ export default function ProfileApprenantScreen() {
   const saveProfile = async () => {
     setLoading(true);
     try {
+      const user = auth.currentUser;
+      if (!user) return;
+      
       const [prenom, ...nomArray] = editedName.split(' ');
-      await updateDoc(doc(db, 'users', auth.currentUser!.uid), {
-        prenom, nom: nomArray.join(' '), bio: editedBio
+      await updateDoc(doc(db, 'users', user.uid), {
+        prenom: prenom || '', 
+        nom: nomArray.join(' ') || '', 
+        bio: editedBio
       });
       setIsEditing(false);
       loadProfile();
-    } catch (e) { Alert.alert("Erreur", "Mise à jour impossible"); }
-    finally { setLoading(false); }
+    } catch (e) { 
+      console.error(e);
+      Alert.alert("Erreur", "Mise à jour impossible"); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   if (loading || !userProfile) {
@@ -131,14 +143,22 @@ export default function ProfileApprenantScreen() {
       <View style={styles.headerWrapper}>
         <LinearGradient colors={['#9333ea', '#7e22ce']} style={styles.headerGradient}>
           <View style={styles.topIcons}>
-            <TouchableOpacity style={styles.glassIcon}><Ionicons name="share-social-outline" size={20} color="white" /></TouchableOpacity>
-            <TouchableOpacity style={styles.glassIcon}><Ionicons name="ellipsis-vertical" size={20} color="white" /></TouchableOpacity>
+            <TouchableOpacity style={styles.glassIcon}>
+                <Ionicons name="share-social-outline" size={20} color="white" />
+            </TouchableOpacity>
+            
+            {/* BOUTON DÉCONNEXION (Haut Droite) */}
+            <TouchableOpacity 
+              style={[styles.glassIcon, { backgroundColor: 'rgba(239, 68, 68, 0.4)' }]} 
+              onPress={signOut}
+            >
+                <Ionicons name="log-out-outline" size={20} color="white" />
+            </TouchableOpacity>
           </View>
         </LinearGradient>
 
         <View style={styles.avatarSection}>
           <TouchableOpacity onPress={pickImage} style={styles.avatarBorder} disabled={isUploading}>
-            {/* AFFICHAGE CONDITIONNEL DE L'IMAGE */}
             {isUploading ? (
               <View style={styles.center}><ActivityIndicator color="white" /></View>
             ) : userProfile.photoURL ? (
