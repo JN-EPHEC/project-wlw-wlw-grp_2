@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { collection, getDocs, query, orderBy, limit, doc, updateDoc, increment, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
-import { db } from '../../firebaseConfig';
-import { auth } from '../../firebaseConfig';
+import { db, auth } from '../../firebaseConfig';
+import { useFocusEffect } from '@react-navigation/native';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -45,6 +45,31 @@ export default function HomeScreen() {
   
   const scrollViewRef = useRef<ScrollView>(null);
   const videoRefs = useRef<Record<string, Video | null>>({});
+
+  // Gérer la lecture/pause quand on entre/quitte la page
+  useFocusEffect(
+    useCallback(() => {
+      // Quand on arrive sur la page, relancer la vidéo courante
+      const playCurrentVideo = async () => {
+        const currentVideo = videoRefs.current[videos[currentIndex]?.id];
+        if (currentVideo) {
+          await currentVideo.playAsync();
+          setIsPlaying(true);
+        }
+      };
+      playCurrentVideo();
+
+      return () => {
+        // Quand on quitte la page, mettre en pause toutes les vidéos
+        Object.values(videoRefs.current).forEach(async (video) => {
+          if (video) {
+            await video.pauseAsync();
+          }
+        });
+        setIsPlaying(false);
+      };
+    }, [videos, currentIndex])
+  );
 
   useEffect(() => {
     loadUserProfile();
