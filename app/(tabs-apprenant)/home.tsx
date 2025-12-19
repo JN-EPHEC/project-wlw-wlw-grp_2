@@ -3,11 +3,12 @@ import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Alert
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { collection, getDocs, query, orderBy, limit, doc, updateDoc, increment, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, doc, updateDoc, increment, arrayUnion, arrayRemove, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface VideoData {
   id: string;
@@ -34,6 +35,7 @@ interface UserProfile {
 }
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedVideos, setLikedVideos] = useState<Set<string>>(new Set());
@@ -46,26 +48,60 @@ export default function HomeScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const videoRefs = useRef<Record<string, Video | null>>({});
 
-  // Arrêter la vidéo quand on quitte la page
+  // Gérer la lecture/pause des vidéos
   useFocusEffect(
     useCallback(() => {
       setIsPlaying(true);
+      
+      // Relancer la vidéo courante après un court délai
+      const timer = setTimeout(async () => {
+        const currentVideo = videoRefs.current[videos[currentIndex]?.id];
+        if (currentVideo) {
+          try {
+            await currentVideo.playAsync();
+          } catch (error) {
+            console.log('Error playing video:', error);
+          }
+        }
+      }, 100);
 
       return () => {
+        clearTimeout(timer);
+        // Mettre en pause toutes les vidéos
         Object.values(videoRefs.current).forEach(async (video) => {
           if (video) {
-            await video.pauseAsync();
+            try {
+              await video.pauseAsync();
+            } catch (error) {
+              console.log('Error pausing video:', error);
+            }
           }
         });
         setIsPlaying(false);
       };
-    }, [])
+    }, [videos, currentIndex])
   );
 
   useEffect(() => {
     loadUserProfile();
     loadVideos();
   }, []);
+
+  // Arrêter les autres vidéos quand on change d'index
+  useEffect(() => {
+    const pauseOtherVideos = async () => {
+      Object.keys(videoRefs.current).forEach(async (videoId, index) => {
+        if (index !== currentIndex && videoRefs.current[videoId]) {
+          try {
+            await videoRefs.current[videoId]?.pauseAsync();
+          } catch (error) {
+            console.log('Error pausing other videos:', error);
+          }
+        }
+      });
+    };
+    pauseOtherVideos();
+  }, [currentIndex]);
 
   const loadUserProfile = async () => {
     try {
@@ -147,10 +183,30 @@ export default function HomeScreen() {
     if (currentVideo) {
       if (isPlaying) {
         await currentVideo.pauseAsync();
+        setIsPlaying(false);
       } else {
         await currentVideo.playAsync();
+        setIsPlaying(true);
       }
-      setIsPlaying(!isPlaying);
+    }
+  };
+
+  const createNotification = async (type: string, videoId: string, creatorId: string) => {
+    try {
+      const user = auth.currentUser;
+      if (!user || user.uid === creatorId) return;
+
+      await addDoc(collection(db, 'notifications'), {
+        userId: creatorId,
+        fromUserId: user.uid,
+        fromUserName: userProfile?.uid || 'Un utilisateur',
+        type: type,
+        videoId: videoId,
+        read: false,
+        createdAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Error creating notification:', error);
     }
   };
 
@@ -178,7 +234,7 @@ export default function HomeScreen() {
     }
   };
 
-  const handleLike = async (videoId: string) => {
+  const handleLike = async (videoId: string, creatorId: string) => {
     try {
       const isLiked = likedVideos.has(videoId);
       
@@ -198,6 +254,8 @@ export default function HomeScreen() {
         await updateDoc(doc(db, 'videos', videoId), {
           likes: increment(1)
         });
+
+        await createNotification('like', videoId, creatorId);
       }
       
       setVideos(prev => prev.map(v => 
@@ -212,7 +270,7 @@ export default function HomeScreen() {
     }
   };
 
-  const handleFavorite = async (videoId: string) => {
+  const handleFavorite = async (videoId: string, creatorId: string) => {
     try {
       const user = auth.currentUser;
       if (!user || !userProfile) return;
@@ -239,6 +297,8 @@ export default function HomeScreen() {
           ...prev,
           favorites: [...(prev.favorites || []), videoId]
         } : null);
+
+        await createNotification('save', videoId, creatorId);
       }
       
     } catch (error) {
@@ -274,6 +334,8 @@ export default function HomeScreen() {
           ...prev,
           following: [...(prev.following || []), creatorId]
         } : null);
+
+        await createNotification('follow', '', creatorId);
       }
       
     } catch (error) {
@@ -282,7 +344,7 @@ export default function HomeScreen() {
     }
   };
 
-  const handleComment = () => {
+  const handleComment = (videoId: string, creatorId: string) => {
     Alert.alert('Commentaires', 'Fonctionnalité en cours de développement');
   };
 
@@ -291,8 +353,14 @@ export default function HomeScreen() {
   };
 
   const handleCreatorClick = (creatorId: string) => {
-    Alert.alert('Profil créateur', 'Navigation vers le profil en cours de développement');
-  };
+  try {
+    router.push(`/profile/${creatorId}` as any);
+  } catch (error) {
+    console.error('Navigation error:', error);
+    Alert.alert('Erreur', 'Impossible de charger le profil');
+  }
+};
+
 
   if (loading) {
     return (
@@ -329,7 +397,10 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        snapToInterval={SCREEN_HEIGHT}
+        decelerationRate="fast"
         style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
       >
         {videos.map((video, index) => {
           const isLiked = likedVideos.has(video.id);
@@ -433,7 +504,7 @@ export default function HomeScreen() {
                   )}
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(video.id)}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(video.id, video.creatorId)}>
                   <View style={[styles.actionIcon, isLiked && styles.actionIconActive]}>
                     <Ionicons 
                       name={isLiked ? "heart" : "heart-outline"} 
@@ -444,14 +515,14 @@ export default function HomeScreen() {
                   <Text style={styles.actionCount}>{video.likes + (isLiked ? 1 : 0)}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={handleComment}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleComment(video.id, video.creatorId)}>
                   <View style={styles.actionIcon}>
                     <Ionicons name="chatbubble-outline" size={28} color="#fff" />
                   </View>
                   <Text style={styles.actionCount}>{video.comments || 0}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleFavorite(video.id)}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleFavorite(video.id, video.creatorId)}>
                   <View style={[styles.actionIcon, isFavorited && styles.actionIconActiveFavorite]}>
                     <Ionicons 
                       name={isFavorited ? "bookmark" : "bookmark-outline"} 
@@ -543,25 +614,34 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollViewContent: {
+    flexGrow: 1,
+  },
   videoContainer: {
     height: SCREEN_HEIGHT,
-    width: '100%',
+    width: SCREEN_WIDTH,
     position: 'relative',
   },
   videoWrapper: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   video: {
-    width: '100%',
-    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   playPauseIcon: {
     position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
+    top: '50%',
+    left: '50%',
+    marginTop: -40,
+    marginLeft: -40,
   },
   progressBarContainer: {
     position: 'absolute',
@@ -572,15 +652,15 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   progressBarBackground: {
-    height: 3,
+    height: 2,
     backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 2,
+    borderRadius: 1,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: '#7459F0',
-    borderRadius: 2,
+    borderRadius: 1,
   },
   gradientOverlay: {
     position: 'absolute',
