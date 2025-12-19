@@ -71,7 +71,6 @@ export default function MessagesListScreen() {
     chat.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Marquer une conversation comme lue
   const markAsRead = (id: string) => {
     setDiscussions(prevDiscussions =>
       prevDiscussions.map(chat =>
@@ -80,13 +79,12 @@ export default function MessagesListScreen() {
     );
   };
 
-  // Ouvrir le chat et marquer comme lu
   const openChat = (chatId: string) => {
     markAsRead(chatId);
     router.push({
-      pathname: './conversation/[id]',
-      params: { id: chatId }
-    });
+      pathname: '/chat',
+      params: { userId: chatId }
+    } as any);
   };
 
   return (
@@ -97,7 +95,6 @@ export default function MessagesListScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Messages</Text>
         
-        {/* Bouton nouveau message */}
         <TouchableOpacity onPress={() => setShowNewMessageModal(true)}>
           <Ionicons name="create-outline" size={24} color="#9333EA" />
         </TouchableOpacity>
@@ -162,7 +159,6 @@ export default function MessagesListScreen() {
         )}
       </ScrollView>
 
-      {/* Modal Nouveau Message */}
       <Modal
         visible={showNewMessageModal}
         transparent
@@ -193,10 +189,7 @@ export default function MessagesListScreen() {
                   style={styles.userItem}
                   onPress={() => {
                     setShowNewMessageModal(false);
-                    router.push({
-                      pathname: './conversation/[id]',
-                      params: { id: user.id }
-                    });
+                    openChat(user.id);
                   }}
                 >
                   <Image source={{ uri: user.avatar }} style={styles.userAvatar} />
@@ -282,8 +275,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16 
   },
-  
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',

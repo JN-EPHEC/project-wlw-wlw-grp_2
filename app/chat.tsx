@@ -1,17 +1,119 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, StyleSheet, KeyboardAvoidingView, Platform, Alert, Modal, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 
+// Base de données des utilisateurs
+const USERS_DATABASE: Record<string, { id: string; name: string; avatar: string; status: string }> = {
+  '1': {
+    id: '1',
+    name: 'Marie Dupont',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+    status: 'En ligne'
+  },
+  '2': {
+    id: '2',
+    name: 'Thomas Bernard',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+    status: 'En ligne'
+  },
+  '3': {
+    id: '3',
+    name: 'Lucas Noel',
+    avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150',
+    status: 'Hors ligne'
+  },
+  '4': {
+    id: '4',
+    name: 'Sophie Martin',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
+    status: 'En ligne'
+  },
+  '5': {
+    id: '5',
+    name: 'Ahmed Khalil',
+    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
+    status: 'Hors ligne'
+  },
+  '6': {
+    id: '6',
+    name: 'Emma Wilson',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+    status: 'En ligne'
+  },
+  '7': {
+    id: '7',
+    name: 'Kevin Dubois',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+    status: 'Hors ligne'
+  },
+};
+
+interface Message {
+  id: string;
+  text: string;
+  isMine: boolean;
+  time: string;
+}
+
+// Messages initiaux pour chaque conversation
+const INITIAL_MESSAGES: Record<string, Message[]> = {
+  '1': [
+    { id: '1', text: "Salut ! J'ai adoré ta dernière vidéo", isMine: false, time: 'Il y a 2h' },
+    { id: '2', text: "Merci beaucoup ! 😊", isMine: true, time: 'Il y a 1h' },
+    { id: '3', text: "Tu peux en faire d'autres sur React Native ?", isMine: false, time: 'Il y a 30min' }
+  ],
+  '2': [
+    { id: '1', text: "Tu as des ressources sur l'IA ?", isMine: false, time: 'Il y a 3h' },
+    { id: '2', text: "Oui, je t'envoie ça tout de suite", isMine: true, time: 'Il y a 2h' },
+    { id: '3', text: "Regarde ce cours sur Coursera", isMine: true, time: 'Il y a 2h' }
+  ],
+  '3': [
+    { id: '1', text: "Le rendu est pour demain.", isMine: false, time: 'Hier' },
+    { id: '2', text: "Oui je sais, j'y travaille", isMine: true, time: 'Hier' },
+    { id: '3', text: "Tu veux qu'on se retrouve pour réviser ?", isMine: false, time: 'Hier' }
+  ],
+  '4': [
+    { id: '1', text: "Excellent cours aujourd'hui ! 👏", isMine: false, time: 'Hier' },
+    { id: '2', text: "Merci Sophie ! Content que ça t'ait plu", isMine: true, time: 'Hier' },
+    { id: '3', text: "La partie sur les hooks était super claire", isMine: false, time: 'Hier' }
+  ],
+  '5': [
+    { id: '1', text: "J'ai une question sur le projet...", isMine: false, time: 'Il y a 2j' },
+    { id: '2', text: "Bien sûr, vas-y", isMine: true, time: 'Il y a 2j' },
+    { id: '3', text: "Comment tu gères l'authentification ?", isMine: false, time: 'Il y a 2j' }
+  ],
+  '6': [
+    { id: '1', text: "Merci pour ton aide ! 😊", isMine: false, time: 'Il y a 3j' },
+    { id: '2', text: "De rien, n'hésite pas", isMine: true, time: 'Il y a 3j' },
+    { id: '3', text: "J'ai enfin compris les props !", isMine: false, time: 'Il y a 3j' }
+  ],
+  '7': [
+    { id: '1', text: "À quelle heure la prochaine session ?", isMine: false, time: 'Il y a 4j' },
+    { id: '2', text: "14h demain", isMine: true, time: 'Il y a 4j' },
+    { id: '3', text: "Ok parfait, merci !", isMine: false, time: 'Il y a 4j' }
+  ],
+};
+
 export default function ChatScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  
+  // Récupérer l'ID de l'utilisateur depuis les paramètres
+  const userId = (params.userId as string) || '1';
+  const currentUser = USERS_DATABASE[userId] || USERS_DATABASE['1'];
+  
   const [inputText, setInputText] = useState('');
   const [showMenu, setShowMenu] = useState(false);
-  const [chatMessages, setChatMessages] = useState([
-    { id: '1', text: "Salut ! J'ai adoré ta dernière vidéo", isMine: false, time: 'Il y a 2h' },
-    { id: '2', text: "Merci beaucoup ! 😊", isMine: true, time: 'Il y a 1h' }
-  ]);
+  const [chatMessages, setChatMessages] = useState<Message[]>(
+    INITIAL_MESSAGES[userId] || INITIAL_MESSAGES['1']
+  );
+
+  // Mettre à jour les messages quand l'utilisateur change
+  useEffect(() => {
+    setChatMessages(INITIAL_MESSAGES[userId] || INITIAL_MESSAGES['1']);
+  }, [userId]);
 
   const handleSendMessage = () => {
     if (!inputText.trim()) return;
@@ -35,9 +137,11 @@ export default function ChatScreen() {
     ]);
   };
 
-  // Fonction pour naviguer vers le profil
   const goToProfile = () => {
-    router.push('/profile'); // Vous pouvez passer l'userId si nécessaire
+    router.back();
+    setTimeout(() => {
+      router.push('/(tabs-formateur)/profile' as any);
+    }, 100);
   };
 
   return (
@@ -51,18 +155,22 @@ export default function ChatScreen() {
           <Ionicons name="arrow-back" size={24} color="#52525B" />
         </TouchableOpacity>
         
-        {/* Zone cliquable pour aller au profil */}
         <TouchableOpacity 
           onPress={goToProfile} 
           style={styles.userInfoContainer}
         >
           <Image 
-            source={{ uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150' }} 
+            source={{ uri: currentUser.avatar }} 
             style={styles.avatarSmall} 
           />
           <View style={{ flex: 1 }}>
-            <Text style={styles.userName}>Marie Dupont</Text>
-            <Text style={styles.onlineStatus}>En ligne</Text>
+            <Text style={styles.userName}>{currentUser.name}</Text>
+            <Text style={[
+              styles.onlineStatus,
+              { color: currentUser.status === 'En ligne' ? '#22C55E' : '#71717A' }
+            ]}>
+              {currentUser.status}
+            </Text>
           </View>
         </TouchableOpacity>
 
@@ -125,7 +233,7 @@ export default function ChatScreen() {
               style={styles.menuItem} 
               onPress={() => { 
                 setShowMenu(false); 
-                Alert.alert("Signalé"); 
+                Alert.alert("Signalé", `Vous avez signalé ${currentUser.name}`); 
               }}
             >
               <Ionicons name="alert-circle-outline" size={20} color="#EF4444" />
@@ -160,7 +268,7 @@ const styles = StyleSheet.create({
   },
   avatarSmall: { width: 36, height: 36, borderRadius: 18 },
   userName: { fontSize: 16, fontWeight: 'bold', color: '#18181B' },
-  onlineStatus: { fontSize: 12, color: '#22C55E' },
+  onlineStatus: { fontSize: 12 },
   chatContainer: { padding: 16, gap: 12, paddingBottom: 30 },
   theirMsg: { 
     alignSelf: 'flex-start', 
