@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { collection, getDocs, query, orderBy, limit, doc, updateDoc, increment, arrayUnion, arrayRemove, getDoc } from 'firebase/firestore';
-import { db, auth } from '../../firebaseConfig';
+import { db } from '../../firebaseConfig';
+import { auth } from '../../firebaseConfig';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -26,10 +27,10 @@ interface VideoData {
 
 interface UserProfile {
   uid: string;
-  favorites: string[];
-  following: string[];
-  watchHistory: string[];
-  interests: string[];
+  favorites?: string[];
+  following?: string[];
+  watchHistory?: string[];
+  interests?: string[];
 }
 
 export default function HomeScreen() {
@@ -38,8 +39,12 @@ export default function HomeScreen() {
   const [likedVideos, setLikedVideos] = useState<Set<string>>(new Set());
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
   
   const scrollViewRef = useRef<ScrollView>(null);
+  const videoRefs = useRef<Record<string, Video | null>>({});
 
   useEffect(() => {
     loadUserProfile();
@@ -53,7 +58,14 @@ export default function HomeScreen() {
       
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (userDoc.exists()) {
-        setUserProfile(userDoc.data() as UserProfile);
+        const data = userDoc.data();
+        setUserProfile({
+          uid: user.uid,
+          favorites: data.favorites || [],
+          following: data.following || [],
+          watchHistory: data.watchHistory || [],
+          interests: data.interests || [],
+        });
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
@@ -74,10 +86,9 @@ export default function HomeScreen() {
         ...doc.data()
       })) as VideoData[];
       
-      // Filtrer par intérêts si l'utilisateur en a
       if (userProfile?.interests && userProfile.interests.length > 0) {
         const filteredVideos = videosData.filter(video =>
-          userProfile.interests.includes(video.category)
+          userProfile.interests?.includes(video.category)
         );
         
         if (filteredVideos.length > 0) {
@@ -102,7 +113,28 @@ export default function HomeScreen() {
     
     if (index !== currentIndex && index >= 0 && index < videos.length) {
       setCurrentIndex(index);
+      setIsPlaying(true);
+      setProgress(0);
       handleMarkVideoAsWatched(videos[index]);
+    }
+  };
+
+  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      setProgress(status.positionMillis);
+      setDuration(status.durationMillis || 0);
+    }
+  };
+
+  const togglePlayPause = async () => {
+    const currentVideo = videoRefs.current[videos[currentIndex]?.id];
+    if (currentVideo) {
+      if (isPlaying) {
+        await currentVideo.pauseAsync();
+      } else {
+        await currentVideo.playAsync();
+      }
+      setIsPlaying(!isPlaying);
     }
   };
 
@@ -110,7 +142,7 @@ export default function HomeScreen() {
     try {
       const user = auth.currentUser;
       if (!user || !userProfile) return;
-      if (userProfile.watchHistory.includes(video.id)) return;
+      if (userProfile.watchHistory?.includes(video.id)) return;
 
       await updateDoc(doc(db, 'users', user.uid), {
         watchHistory: arrayUnion(video.id)
@@ -120,10 +152,9 @@ export default function HomeScreen() {
         views: increment(1)
       });
       
-      // Mettre à jour le profil local
       setUserProfile(prev => prev ? {
         ...prev,
-        watchHistory: [...prev.watchHistory, video.id]
+        watchHistory: [...(prev.watchHistory || []), video.id]
       } : null);
       
     } catch (error) {
@@ -153,7 +184,6 @@ export default function HomeScreen() {
         });
       }
       
-      // Mettre à jour localement
       setVideos(prev => prev.map(v => 
         v.id === videoId 
           ? { ...v, likes: isLiked ? v.likes - 1 : v.likes + 1 }
@@ -171,7 +201,7 @@ export default function HomeScreen() {
       const user = auth.currentUser;
       if (!user || !userProfile) return;
       
-      const isFavorited = userProfile.favorites.includes(videoId);
+      const isFavorited = userProfile.favorites?.includes(videoId) ?? false;
       
       if (isFavorited) {
         await updateDoc(doc(db, 'users', user.uid), {
@@ -181,7 +211,7 @@ export default function HomeScreen() {
         
         setUserProfile(prev => prev ? {
           ...prev,
-          favorites: prev.favorites.filter(id => id !== videoId)
+          favorites: (prev.favorites || []).filter(id => id !== videoId)
         } : null);
       } else {
         await updateDoc(doc(db, 'users', user.uid), {
@@ -191,7 +221,7 @@ export default function HomeScreen() {
         
         setUserProfile(prev => prev ? {
           ...prev,
-          favorites: [...prev.favorites, videoId]
+          favorites: [...(prev.favorites || []), videoId]
         } : null);
       }
       
@@ -206,7 +236,7 @@ export default function HomeScreen() {
       const user = auth.currentUser;
       if (!user || !userProfile) return;
       
-      const isFollowing = userProfile.following.includes(creatorId);
+      const isFollowing = userProfile.following?.includes(creatorId) ?? false;
       
       if (isFollowing) {
         await updateDoc(doc(db, 'users', user.uid), {
@@ -216,7 +246,7 @@ export default function HomeScreen() {
         
         setUserProfile(prev => prev ? {
           ...prev,
-          following: prev.following.filter(id => id !== creatorId)
+          following: (prev.following || []).filter(id => id !== creatorId)
         } : null);
       } else {
         await updateDoc(doc(db, 'users', user.uid), {
@@ -226,7 +256,7 @@ export default function HomeScreen() {
         
         setUserProfile(prev => prev ? {
           ...prev,
-          following: [...prev.following, creatorId]
+          following: [...(prev.following || []), creatorId]
         } : null);
       }
       
@@ -267,16 +297,16 @@ export default function HomeScreen() {
     );
   }
 
+  const progressPercentage = duration > 0 ? (progress / duration) * 100 : 0;
+
   return (
     <View style={styles.container}>
-      {/* Progress indicator */}
       <View style={styles.progressIndicator}>
         <Text style={styles.progressText}>
           {currentIndex + 1} / {videos.length}
         </Text>
       </View>
 
-      {/* Videos ScrollView */}
       <ScrollView
         ref={scrollViewRef}
         pagingEnabled
@@ -287,32 +317,52 @@ export default function HomeScreen() {
       >
         {videos.map((video, index) => {
           const isLiked = likedVideos.has(video.id);
-          const isFavorited = userProfile?.favorites.includes(video.id) || false;
-          const isFollowing = userProfile?.following.includes(video.creatorId) || false;
+          const isFavorited = userProfile?.favorites?.includes(video.id) ?? false;
+          const isFollowing = userProfile?.following?.includes(video.creatorId) ?? false;
           
           return (
             <View key={video.id} style={styles.videoContainer}>
-              {/* Video Player */}
-              <Video
-                source={{ uri: video.videoUrl }}
-                rate={1.0}
-                volume={1.0}
-                isMuted={false}
-                resizeMode={ResizeMode.COVER}
-                shouldPlay={index === currentIndex}
-                isLooping
-                style={styles.video}
-              />
+              <TouchableWithoutFeedback onPress={togglePlayPause}>
+                <View style={styles.videoWrapper}>
+                  <Video
+                    ref={(ref) => {
+                      if (ref) {
+                        videoRefs.current[video.id] = ref;
+                      }
+                    }}
+                    source={{ uri: video.videoUrl }}
+                    rate={1.0}
+                    volume={1.0}
+                    isMuted={false}
+                    resizeMode={ResizeMode.COVER}
+                    shouldPlay={index === currentIndex && isPlaying}
+                    isLooping
+                    style={styles.video}
+                    onPlaybackStatusUpdate={index === currentIndex ? handlePlaybackStatusUpdate : undefined}
+                  />
+                  
+                  {!isPlaying && index === currentIndex && (
+                    <View style={styles.playPauseIcon}>
+                      <Ionicons name="play" size={80} color="rgba(255,255,255,0.8)" />
+                    </View>
+                  )}
+                </View>
+              </TouchableWithoutFeedback>
 
-              {/* Gradient Overlay */}
               <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.8)']}
                 style={styles.gradientOverlay}
               />
 
-              {/* Left Side - Info */}
+              {index === currentIndex && (
+                <View style={styles.progressBarContainer}>
+                  <View style={styles.progressBarBackground}>
+                    <View style={[styles.progressBarFill, { width: `${progressPercentage}%` }]} />
+                  </View>
+                </View>
+              )}
+
               <View style={styles.leftSide}>
-                {/* Creator Info */}
                 <TouchableOpacity 
                   style={styles.creatorInfo}
                   onPress={() => handleCreatorClick(video.creatorId)}
@@ -335,17 +385,14 @@ export default function HomeScreen() {
                   </View>
                 </TouchableOpacity>
 
-                {/* Title */}
                 <Text style={styles.title} numberOfLines={1}>
                   {video.title}
                 </Text>
 
-                {/* Description */}
                 <Text style={styles.description} numberOfLines={2}>
                   {video.description}
                 </Text>
 
-                {/* Tags */}
                 <View style={styles.tagsContainer}>
                   {video.tags?.slice(0, 3).map((tag, idx) => (
                     <Text key={idx} style={styles.tag}>#{tag}</Text>
@@ -353,9 +400,7 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* Right Side - Actions */}
               <View style={styles.rightSide}>
-                {/* Creator Avatar (large) */}
                 <TouchableOpacity 
                   style={styles.avatarLarge}
                   onPress={() => handleCreatorClick(video.creatorId)}
@@ -372,7 +417,6 @@ export default function HomeScreen() {
                   )}
                 </TouchableOpacity>
 
-                {/* Like */}
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(video.id)}>
                   <View style={[styles.actionIcon, isLiked && styles.actionIconActive]}>
                     <Ionicons 
@@ -384,7 +428,6 @@ export default function HomeScreen() {
                   <Text style={styles.actionCount}>{video.likes + (isLiked ? 1 : 0)}</Text>
                 </TouchableOpacity>
 
-                {/* Comment */}
                 <TouchableOpacity style={styles.actionButton} onPress={handleComment}>
                   <View style={styles.actionIcon}>
                     <Ionicons name="chatbubble-outline" size={28} color="#fff" />
@@ -392,7 +435,6 @@ export default function HomeScreen() {
                   <Text style={styles.actionCount}>{video.comments || 0}</Text>
                 </TouchableOpacity>
 
-                {/* Favorite */}
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleFavorite(video.id)}>
                   <View style={[styles.actionIcon, isFavorited && styles.actionIconActiveFavorite]}>
                     <Ionicons 
@@ -404,7 +446,6 @@ export default function HomeScreen() {
                   <Text style={styles.actionCount}>Sauver</Text>
                 </TouchableOpacity>
 
-                {/* Share */}
                 <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
                   <View style={styles.actionIcon}>
                     <Ionicons name="share-social-outline" size={28} color="#fff" />
@@ -413,7 +454,6 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Swipe indicators */}
               {currentIndex > 0 && index === currentIndex && (
                 <View style={styles.swipeUpIndicator}>
                   <Ionicons name="chevron-up" size={32} color="rgba(255,255,255,0.5)" />
@@ -492,9 +532,39 @@ const styles = StyleSheet.create({
     width: '100%',
     position: 'relative',
   },
+  videoWrapper: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   video: {
     width: '100%',
     height: '100%',
+  },
+  playPauseIcon: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressBarContainer: {
+    position: 'absolute',
+    bottom: 80,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    zIndex: 40,
+  },
+  progressBarBackground: {
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#7459F0',
+    borderRadius: 2,
   },
   gradientOverlay: {
     position: 'absolute',
