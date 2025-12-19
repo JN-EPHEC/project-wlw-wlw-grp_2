@@ -83,7 +83,10 @@ export default function MessagesListScreen() {
   // Ouvrir le chat et marquer comme lu
   const openChat = (chatId: string) => {
     markAsRead(chatId);
-    router.push('/conversation/[id]' as any); // Ou simplement '/chat'
+    router.push({
+      pathname: './conversation/[id]',
+      params: { id: chatId }
+    });
   };
 
   return (
@@ -190,7 +193,10 @@ export default function MessagesListScreen() {
                   style={styles.userItem}
                   onPress={() => {
                     setShowNewMessageModal(false);
-                    router.push('/chat');
+                    router.push({
+                      pathname: './conversation/[id]',
+                      params: { id: user.id }
+                    });
                   }}
                 >
                   <Image source={{ uri: user.avatar }} style={styles.userAvatar} />
