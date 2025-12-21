@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     height: 48,
-    backgroundColor: '#f97316',
+    backgroundColor: '#9333ea', // Mis à jour avec le violet demandé
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   footerLink: {
-    color: '#2563eb',
+    color: '#9333ea', // Mis à jour pour s'accorder au bouton
     fontSize: 14,
     textDecorationLine: 'underline',
   },
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
   },
   backToLoginButton: {
     height: 48,
-    backgroundColor: '#f97316',
+    backgroundColor: '#9333ea',
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',

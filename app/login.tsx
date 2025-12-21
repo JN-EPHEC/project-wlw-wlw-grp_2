@@ -1,13 +1,19 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+// Ajout des imports pour Google Auth et Firestore
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
 
 // Import de la config Firebase
 import { auth, db } from '../firebaseConfig';
 
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
+// Nécessaire pour le fonctionnement web
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -16,6 +22,73 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+
+  // --- 1. CONFIGURATION GOOGLE ---
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId: 'VOTRE_WEB_CLIENT_ID.apps.googleusercontent.com',
+    iosClientId: 'VOTRE_IOS_CLIENT_ID.apps.googleusercontent.com',
+    androidClientId: 'VOTRE_ANDROID_CLIENT_ID.apps.googleusercontent.com',
+  });
+
+  // --- 2. GESTION DE LA RÉPONSE GOOGLE ---
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      const credential = GoogleAuthProvider.credential(id_token);
+      setLoading(true);
+      
+      signInWithCredential(auth, credential)
+        .then((userCredential) => {
+          handleUserRouting(userCredential.user);
+        })
+        .catch((err) => {
+          console.error("Erreur Google:", err);
+          setError("Échec de la connexion Google");
+          setLoading(false);
+        });
+    }
+  }, [response]);
+
+  // --- 3. LOGIQUE DE ROUTAGE ET CRÉATION DE PROFIL ---
+  const handleUserRouting = async (user: any) => {
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        Alert.alert('Succès', 'Connexion réussie !');
+        // Redirection selon le rôle existant
+        if (userData.role === 'formateur') {
+          router.replace('/(tabs-formateur)/home');
+        } else {
+          router.replace('/(tabs-apprenant)/home');
+        }
+      } else {
+        // Création d'un nouveau profil (Apprenant par défaut)
+        const [prenom, ...nomArray] = (user.displayName || '').split(' ');
+        await setDoc(userDocRef, {
+          uid: user.uid,
+          email: user.email,
+          prenom: prenom || '',
+          nom: nomArray.join(' ') || '',
+          photoURL: user.photoURL,
+          role: 'apprenant',
+          createdAt: serverTimestamp(),
+          onboardingCompleted: false,
+          stats: { videosWatched: 0, streak: 0 }
+        });
+        // Redirection vers l'onboarding
+        router.replace('/onboarding-apprenant');
+      }
+    } catch (err) {
+      console.error("Erreur routing:", err);
+      setError("Erreur lors de la récupération du profil");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setError('');
@@ -29,32 +102,12 @@ export default function LoginScreen() {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // 🔍 Récupérer le rôle de l'utilisateur dans Firestore
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const role = userData.role; // 'apprenant' ou 'formateur'
-
-        Alert.alert('Succès', 'Connexion réussie !');
-        
-        // 🔀 Redirection conditionnelle selon le rôle
-        if (role === 'formateur') {
-          router.replace('/(tabs-formateur)/home');
-        } else {
-          // Par défaut ou si apprenant
-          router.replace('/(tabs-apprenant)/home');
-        }
-      } else {
-        // Fallback si le document user n'existe pas (cas rare)
-        Alert.alert('Attention', 'Profil utilisateur introuvable, redirection vers l\'accueil apprenant.');
-        router.replace('/(tabs-apprenant)/home');
-      }
+      // On utilise la même logique de routage que Google pour être cohérent
+      await handleUserRouting(userCredential.user);
 
     } catch (error: any) {
       console.error('Login error:', error);
+      setLoading(false);
       if (
         error.code === 'auth/wrong-password' || 
         error.code === 'auth/user-not-found' || 
@@ -64,8 +117,6 @@ export default function LoginScreen() {
       } else {
         setError('Une erreur est survenue lors de la connexion');
       }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -80,9 +131,11 @@ export default function LoginScreen() {
       >
         {/* Header avec Logo */}
         <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>SS</Text>
-          </View>
+          <Image 
+            source={require('../assets/images/logo.png')} 
+            style={styles.logoImage} 
+            resizeMode="contain"
+          />
           <Text style={styles.title}>Connexion</Text>
         </View>
 
@@ -171,24 +224,14 @@ export default function LoginScreen() {
 
           {/* Social Login Buttons */}
           <View style={styles.socialButtons}>
-            {/* Apple Login */}
+            {/* Google Login */}
             <TouchableOpacity
               style={styles.socialButton}
-              onPress={() => Alert.alert('Info', 'La connexion avec Apple sera disponible dans l\'application mobile')}
-              disabled={loading}
+              disabled={!request || loading}
+              onPress={() => promptAsync()}
             >
-              <Ionicons name="logo-apple" size={20} color="#000" />
-              <Text style={styles.socialButtonText}>Continuer avec Apple</Text>
-            </TouchableOpacity>
-
-            {/* Facebook Login */}
-            <TouchableOpacity
-              style={styles.socialButton}
-              onPress={() => Alert.alert('Info', 'La connexion avec Facebook sera disponible dans l\'application mobile')}
-              disabled={loading}
-            >
-              <Ionicons name="logo-facebook" size={20} color="#1877f2" />
-              <Text style={styles.socialButtonText}>Continuer avec Facebook</Text>
+              <Ionicons name="logo-google" size={20} color="#DB4437" />
+              <Text style={styles.socialButtonText}>Continuer avec Google</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -238,20 +281,7 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingBottom: 32,
   },
-  logoContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: '#f4f4f5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  logoText: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    color: '#9333ea',
-  },
+  // Les styles logoContainer et logoText peuvent être supprimés si plus utilisés
   title: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -398,5 +428,11 @@ const styles = StyleSheet.create({
   footerLink: {
     color: '#52525b',
     fontSize: 13,
+  },
+  logoImage: {
+    width: 100, 
+    height: 100,
+    marginBottom: 24,
+    borderRadius: 20, 
   },
 });
