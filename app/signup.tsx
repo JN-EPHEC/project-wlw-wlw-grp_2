@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
@@ -178,7 +178,11 @@ if (role === 'formateur') {
           <Text style={styles.backButtonText}>Retour</Text>
         </TouchableOpacity>
         <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>SS</Text>
+          <Image 
+            source={require('../assets/images/logo.png')} 
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
         </View>
       </View>
 
@@ -678,5 +682,11 @@ levelButtonTextSelected: {
   bottomLink: {
     fontSize: 13,
     color: '#52525b',
+  },
+logoImage: {
+    width: 100, 
+    height: 100,
+    marginBottom: 24,
+    borderRadius: 20, 
   },
 });
