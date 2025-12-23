@@ -8,11 +8,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 
-// Assure-toi que ces chemins correspondent à ton projet
 import { auth, db, storage } from '../../firebaseConfig'; 
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { signOut as firebaseSignOut } from 'firebase/auth'; // Renommé pour éviter les conflits
+import { signOut as firebaseSignOut } from 'firebase/auth';
+import { useUserProgress } from '../../hooks/useuserprogress'; // Import du hook
 
 const { width } = Dimensions.get('window');
 
@@ -26,6 +26,10 @@ export default function ProfileApprenantScreen() {
   const [editedName, setEditedName] = useState('');
   const [editedBio, setEditedBio] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+
+  // Utilisation du hook de progression avec système XP
+  const { stats, videosProgress, loading: progressLoading, getXPProgressPercentage } = useUserProgress();
+  const xpPercentage = getXPProgressPercentage();
 
   useEffect(() => {
     loadProfile();
@@ -49,18 +53,15 @@ export default function ProfileApprenantScreen() {
     }
   };
 
-  // --- FONCTION DE DÉCONNEXION SIMPLIFIÉE ---
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
-      // Redirection immédiate vers le login sans possibilité de retour arrière
       router.replace('/login');
     } catch (error) {
       console.error('Error signing out:', error);
     }
   };
 
-  // --- FONCTION DE SÉLECTION D'IMAGE ---
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -80,7 +81,6 @@ export default function ProfileApprenantScreen() {
     }
   };
 
-  // --- UPLOAD ---
   const uploadImage = async (uri: string) => {
     const user = auth.currentUser;
     if (!user) return;
@@ -129,7 +129,7 @@ export default function ProfileApprenantScreen() {
     }
   };
 
-  if (loading || !userProfile) {
+  if (loading || !userProfile || progressLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#9333ea" />
@@ -147,7 +147,6 @@ export default function ProfileApprenantScreen() {
                 <Ionicons name="share-social-outline" size={20} color="white" />
             </TouchableOpacity>
             
-            {/* BOUTON DÉCONNEXION (Haut Droite) */}
             <TouchableOpacity 
               style={[styles.glassIcon, { backgroundColor: 'rgba(239, 68, 68, 0.4)' }]} 
               onPress={signOut}
@@ -197,37 +196,108 @@ export default function ProfileApprenantScreen() {
         )}
       </View>
 
+      {/* STATS DYNAMIQUES depuis Firebase */}
       <View style={styles.statsRow}>
-        <View style={styles.statCard}><Text style={styles.statNum}>0</Text><Text style={styles.statLabel}>Vidéos vues</Text></View>
-        <View style={styles.statCard}><Text style={styles.statNum}>0 🔥</Text><Text style={styles.statLabel}>Jours série</Text></View>
-        <View style={styles.statCard}><Text style={styles.statNum}>0</Text><Text style={styles.statLabel}>Minutes</Text></View>
+        <View style={styles.statCard}>
+          <Text style={styles.statNum}>{stats.videosVues}</Text>
+          <Text style={styles.statLabel}>Vidéos vues</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statNum}>{stats.joursConsecutifs} 🔥</Text>
+          <Text style={styles.statLabel}>Jours série</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statNum}>{Math.floor(stats.minutesVisionnees)}</Text>
+          <Text style={styles.statLabel}>Minutes</Text>
+        </View>
       </View>
 
+      {/* NIVEAU DYNAMIQUE avec système XP */}
       <View style={styles.levelSection}>
         <View style={styles.levelHeader}>
-          <View style={styles.levelIcon}><Text style={styles.levelIconText}>0</Text></View>
-          <Text style={styles.levelName}>Niveau 0</Text>
-          <Text style={styles.levelPercent}>0%</Text>
+          <View style={styles.levelIcon}>
+            <Text style={styles.levelIconText}>{stats.progressData.level}</Text>
+          </View>
+          <Text style={styles.levelName}>Niveau {stats.progressData.level}</Text>
+          <Text style={styles.levelPercent}>{Math.round(xpPercentage)}%</Text>
         </View>
-        <View style={styles.progressBg}><View style={[styles.progressFill, { width: '5%' }]} /></View>
-        <Text style={styles.progressSub}>Encore 0 vidéo pour atteindre le niveau 1</Text>
+        <View style={styles.progressBg}>
+          <View style={[styles.progressFill, { width: `${xpPercentage}%` }]} />
+        </View>
+        <Text style={styles.progressSub}>
+          {stats.progressData.currentXP} / {stats.progressData.nextLevelXP} XP pour le niveau {stats.progressData.level + 1}
+        </Text>
       </View>
 
       <View style={styles.tabBar}>
-        <TouchableOpacity style={[styles.tab, activeTab === 'progress' && styles.activeTab]} onPress={() => setActiveTab('progress')}>
-          <Text style={[styles.tabLabel, activeTab === 'progress' && styles.activeLabel]}>📊 Progrès</Text>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'progress' && styles.activeTab]} 
+          onPress={() => setActiveTab('progress')}
+        >
+          <Text style={[styles.tabLabel, activeTab === 'progress' && styles.activeLabel]}>
+            📊 Progrès
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'fav' && styles.activeTab]} onPress={() => setActiveTab('fav')}>
-          <Text style={[styles.tabLabel, activeTab === 'fav' && styles.activeLabel]}>⭐ Favoris</Text>
+        <TouchableOpacity 
+          style={[styles.tab, activeTab === 'fav' && styles.activeTab]} 
+          onPress={() => setActiveTab('fav')}
+        >
+          <Text style={[styles.tabLabel, activeTab === 'fav' && styles.activeLabel]}>
+            ⭐ Favoris
+          </Text>
         </TouchableOpacity>
       </View>
 
+      {/* CONTENU DES ONGLETS */}
+      {activeTab === 'progress' && (
+        <View style={styles.contentSection}>
+          {videosProgress.length > 0 ? (
+            videosProgress.map((video, index) => (
+              <View key={index} style={styles.videoCard}>
+                <View style={styles.videoInfo}>
+                  <Text style={styles.videoTitle}>{video.titre}</Text>
+                  <Text style={styles.videoProgress}>{video.progression}% complété</Text>
+                </View>
+                <View style={styles.videoProgressBar}>
+                  <View style={[styles.videoProgressFill, { width: `${video.progression}%` }]} />
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={{ fontSize: 40 }}>📺</Text>
+              <Text style={styles.emptyText}>Aucune vidéo en cours</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {activeTab === 'fav' && (
+        <View style={styles.contentSection}>
+          <View style={styles.emptyState}>
+            <Text style={{ fontSize: 40 }}>⭐</Text>
+            <Text style={styles.emptyText}>Aucun favori pour le moment</Text>
+          </View>
+        </View>
+      )}
+
       <View style={styles.badgesSection}>
         <Text style={styles.sectionTitle}>Badges débloqués</Text>
-        <View style={styles.badgeEmptyCard}>
-          <Text style={{ fontSize: 32 }}>🏆</Text>
-          <Text style={styles.badgeEmptyText}>Regardez des vidéos pour débloquer vos badges !</Text>
-        </View>
+        {stats.badges.length > 0 ? (
+          <View style={styles.badgesGrid}>
+            {stats.badges.map((badge, index) => (
+              <View key={index} style={styles.badgeCard}>
+                <Text style={{ fontSize: 32 }}>{badge.icon}</Text>
+                <Text style={styles.badgeName}>{badge.name}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.badgeEmptyCard}>
+            <Text style={{ fontSize: 32 }}>🏆</Text>
+            <Text style={styles.badgeEmptyText}>Regardez des vidéos pour débloquer vos badges !</Text>
+          </View>
+        )}
       </View>
 
       <View style={{ height: 100 }} />
@@ -273,8 +343,20 @@ const styles = StyleSheet.create({
   activeTab: { backgroundColor: 'white', elevation: 2 },
   tabLabel: { fontSize: 12, color: '#71717A', fontWeight: '600' },
   activeLabel: { color: '#9333ea' },
+  contentSection: { marginHorizontal: 20, marginTop: 20 },
+  videoCard: { backgroundColor: '#F9FAFB', padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: '#F3F4F6' },
+  videoInfo: { marginBottom: 8 },
+  videoTitle: { fontSize: 14, fontWeight: 'bold', color: '#18181B', marginBottom: 4 },
+  videoProgress: { fontSize: 12, color: '#71717A' },
+  videoProgressBar: { height: 6, backgroundColor: '#E4E4E7', borderRadius: 3, overflow: 'hidden' },
+  videoProgressFill: { height: '100%', backgroundColor: '#9333ea' },
+  emptyState: { padding: 40, alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 24, borderWidth: 1, borderColor: '#F3F4F6', borderStyle: 'dashed' },
+  emptyText: { textAlign: 'center', color: '#71717A', fontSize: 13, marginTop: 10 },
   badgesSection: { marginHorizontal: 20, marginTop: 25 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#18181B', marginBottom: 15 },
+  badgesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  badgeCard: { width: (width - 60) / 3, backgroundColor: '#F9FAFB', padding: 16, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#F3F4F6' },
+  badgeName: { fontSize: 11, color: '#18181B', marginTop: 8, textAlign: 'center' },
   badgeEmptyCard: { padding: 40, alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 24, borderWidth: 1, borderColor: '#F3F4F6', borderStyle: 'dashed', marginTop: 15 },
   badgeEmptyText: { textAlign: 'center', color: '#71717A', fontSize: 13, marginTop: 10 },
   editForm: { width: '100%' },
