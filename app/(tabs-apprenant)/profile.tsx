@@ -12,7 +12,7 @@ import { auth, db, storage } from '../../firebaseConfig';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { signOut as firebaseSignOut } from 'firebase/auth';
-import { useUserProgress } from '../../hooks/useuserprogress'; // Import du hook
+import { useUserProgress } from '../../hooks/useuserprogress';
 
 const { width } = Dimensions.get('window');
 
@@ -27,7 +27,6 @@ export default function ProfileApprenantScreen() {
   const [editedBio, setEditedBio] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
-  // Utilisation du hook de progression avec système XP
   const { stats, videosProgress, loading: progressLoading, getXPProgressPercentage } = useUserProgress();
   const xpPercentage = getXPProgressPercentage();
 
@@ -196,7 +195,6 @@ export default function ProfileApprenantScreen() {
         )}
       </View>
 
-      {/* STATS DYNAMIQUES depuis Firebase */}
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Text style={styles.statNum}>{stats.videosVues}</Text>
@@ -212,7 +210,6 @@ export default function ProfileApprenantScreen() {
         </View>
       </View>
 
-      {/* NIVEAU DYNAMIQUE avec système XP */}
       <View style={styles.levelSection}>
         <View style={styles.levelHeader}>
           <View style={styles.levelIcon}>
@@ -248,7 +245,6 @@ export default function ProfileApprenantScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* CONTENU DES ONGLETS */}
       {activeTab === 'progress' && (
         <View style={styles.contentSection}>
           {videosProgress.length > 0 ? (
@@ -282,21 +278,56 @@ export default function ProfileApprenantScreen() {
       )}
 
       <View style={styles.badgesSection}>
-        <Text style={styles.sectionTitle}>Badges débloqués</Text>
+        <View style={styles.badgesSectionHeader}>
+          <Text style={styles.sectionTitle}>Badges débloqués</Text>
+          <TouchableOpacity 
+            style={styles.viewAllBadgesBtn}
+            onPress={() => router.push('/badges')}
+          >
+            <Text style={styles.viewAllBadgesText}>Voir tout</Text>
+            <Ionicons name="chevron-forward" size={16} color="#9333ea" />
+          </TouchableOpacity>
+        </View>
+
         {stats.badges.length > 0 ? (
-          <View style={styles.badgesGrid}>
-            {stats.badges.map((badge, index) => (
-              <View key={index} style={styles.badgeCard}>
-                <Text style={{ fontSize: 32 }}>{badge.icon}</Text>
-                <Text style={styles.badgeName}>{badge.name}</Text>
+          <>
+            <View style={styles.badgesGrid}>
+              {stats.badges.slice(0, 3).map((badge, index) => (
+                <View key={index} style={styles.badgeCard}>
+                  <Text style={{ fontSize: 32 }}>{badge.icon}</Text>
+                  <Text style={styles.badgeName}>{badge.name}</Text>
+                </View>
+              ))}
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.allBadgesButton}
+              onPress={() => router.push('/badges')}
+            >
+              <View style={styles.allBadgesButtonContent}>
+                <Text style={styles.allBadgesButtonIcon}>🏆</Text>
+                <View style={styles.allBadgesButtonTextContainer}>
+                  <Text style={styles.allBadgesButtonTitle}>Mes Badges</Text>
+                  <Text style={styles.allBadgesButtonSubtitle}>
+                    {stats.badges.length} badge{stats.badges.length > 1 ? 's' : ''} débloqué{stats.badges.length > 1 ? 's' : ''}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#9333ea" />
               </View>
-            ))}
-          </View>
+            </TouchableOpacity>
+          </>
         ) : (
-          <View style={styles.badgeEmptyCard}>
+          <TouchableOpacity 
+            style={styles.badgeEmptyCard}
+            onPress={() => router.push('/badges')}
+          >
             <Text style={{ fontSize: 32 }}>🏆</Text>
             <Text style={styles.badgeEmptyText}>Regardez des vidéos pour débloquer vos badges !</Text>
-          </View>
+            <View style={styles.badgeEmptyButton}>
+              <Text style={styles.badgeEmptyButtonText}>Voir mes badges</Text>
+              <Ionicons name="chevron-forward" size={16} color="#9333ea" />
+            </View>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -353,12 +384,86 @@ const styles = StyleSheet.create({
   emptyState: { padding: 40, alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 24, borderWidth: 1, borderColor: '#F3F4F6', borderStyle: 'dashed' },
   emptyText: { textAlign: 'center', color: '#71717A', fontSize: 13, marginTop: 10 },
   badgesSection: { marginHorizontal: 20, marginTop: 25 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#18181B', marginBottom: 15 },
-  badgesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  badgesSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#18181B' },
+  viewAllBadgesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  viewAllBadgesText: {
+    fontSize: 13,
+    color: '#9333ea',
+    fontWeight: '600',
+  },
+  badgesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 15 },
   badgeCard: { width: (width - 60) / 3, backgroundColor: '#F9FAFB', padding: 16, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#F3F4F6' },
   badgeName: { fontSize: 11, color: '#18181B', marginTop: 8, textAlign: 'center' },
-  badgeEmptyCard: { padding: 40, alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 24, borderWidth: 1, borderColor: '#F3F4F6', borderStyle: 'dashed', marginTop: 15 },
-  badgeEmptyText: { textAlign: 'center', color: '#71717A', fontSize: 13, marginTop: 10 },
+  allBadgesButton: {
+    backgroundColor: 'rgba(147, 51, 234, 0.05)',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+  },
+  allBadgesButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  allBadgesButtonIcon: {
+    fontSize: 36,
+    marginRight: 16,
+  },
+  allBadgesButtonTextContainer: {
+    flex: 1,
+  },
+  allBadgesButtonTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#18181B',
+    marginBottom: 4,
+  },
+  allBadgesButtonSubtitle: {
+    fontSize: 13,
+    color: '#71717A',
+  },
+  badgeEmptyCard: { 
+    padding: 40, 
+    alignItems: 'center', 
+    backgroundColor: '#F9FAFB', 
+    borderRadius: 24, 
+    borderWidth: 1, 
+    borderColor: '#F3F4F6', 
+    borderStyle: 'dashed',
+  },
+  badgeEmptyText: { 
+    textAlign: 'center', 
+    color: '#71717A', 
+    fontSize: 13, 
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  badgeEmptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'white',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+  },
+  badgeEmptyButtonText: {
+    fontSize: 13,
+    color: '#9333ea',
+    fontWeight: '600',
+  },
   editForm: { width: '100%' },
   input: { backgroundColor: '#F9FAFB', padding: 12, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#E4E4E7' },
   saveBtn: { backgroundColor: '#9333ea', padding: 12, borderRadius: 10, alignItems: 'center' },

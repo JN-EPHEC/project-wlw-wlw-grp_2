@@ -105,11 +105,119 @@ export const useUserProgress = () => {
     return (currentXP / nextLevelXP) * 100;
   };
 
+  // Fonction pour calculer les badges avec progression
+  const getBadgesWithProgress = () => {
+    const videosWatched = stats.videosVues;
+    
+    const allBadges = [
+      {
+        id: 'badge_1',
+        name: 'Curieux',
+        level: 'Bronze' as const,
+        icon: '🌱',
+        requirement: 5,
+        description: '5 vidéos regardées',
+        unlocked: videosWatched >= 5,
+        progress: Math.min(100, Math.round((videosWatched / 5) * 100)),
+      },
+      {
+        id: 'badge_2',
+        name: 'Apprenant',
+        level: 'Bronze' as const,
+        icon: '🔥',
+        requirement: 15,
+        description: '15 vidéos regardées',
+        unlocked: videosWatched >= 15,
+        progress: Math.min(100, Math.round((videosWatched / 15) * 100)),
+      },
+      {
+        id: 'badge_3',
+        name: 'Motivé',
+        level: 'Bronze' as const,
+        icon: '⭐',
+        requirement: 30,
+        description: '30 vidéos regardées',
+        unlocked: videosWatched >= 30,
+        progress: Math.min(100, Math.round((videosWatched / 30) * 100)),
+      },
+      {
+        id: 'badge_4',
+        name: 'Passionné',
+        level: 'Argent' as const,
+        icon: '❤️',
+        requirement: 60,
+        description: '60 vidéos regardées',
+        unlocked: videosWatched >= 60,
+        progress: Math.min(100, Math.round((videosWatched / 60) * 100)),
+      },
+      {
+        id: 'badge_5',
+        name: 'Assidu',
+        level: 'Argent' as const,
+        icon: '🎯',
+        requirement: 100,
+        description: '100 vidéos regardées',
+        unlocked: videosWatched >= 100,
+        progress: Math.min(100, Math.round((videosWatched / 100) * 100)),
+      },
+      {
+        id: 'badge_6',
+        name: 'Expert',
+        level: 'Or' as const,
+        icon: '👑',
+        requirement: 250,
+        description: '250 vidéos regardées',
+        unlocked: videosWatched >= 250,
+        progress: Math.min(100, Math.round((videosWatched / 250) * 100)),
+      },
+    ];
+    
+    return allBadges;
+  };
+
+  // Fonction pour calculer les badges bonus
+  const getBonusBadgesWithProgress = () => {
+    const joursConsecutifs = stats.joursConsecutifs;
+    
+    return [
+      {
+        id: 'bonus_1',
+        name: 'Régulier',
+        icon: '⚡',
+        description: '3 jours consécutifs',
+        unlocked: joursConsecutifs >= 3,
+      },
+      {
+        id: 'bonus_2',
+        name: 'Marathonien',
+        icon: '🏃',
+        description: '20 vidéos/jour',
+        unlocked: false,
+      },
+      {
+        id: 'bonus_3',
+        name: 'Noctambule',
+        icon: '🌙',
+        description: '5 vidéos 22h-6h',
+        unlocked: false,
+      },
+      {
+        id: 'bonus_4',
+        name: 'Matinal',
+        icon: '☀️',
+        description: '5 vidéos avant 8h',
+        unlocked: false,
+      },
+    ];
+  };
+
   return {
     stats,
     videosProgress,
     loading,
     getXPProgressPercentage,
+    getBadgesWithProgress,
+    getBonusBadgesWithProgress,
     refreshProgress: loadVideosProgress
   };
 };
