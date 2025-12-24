@@ -1,8 +1,24 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
+import { useEffect } from 'react';
+import { auth } from '../../firebaseConfig';
+import { updateStreak } from '../utils/progressManager';
 
 export default function ApprenantTabsLayout() {
+  // 🔥 Mettre à jour le streak à chaque ouverture de l'app
+  useEffect(() => {
+    const initStreak = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        console.log('🔥 Mise à jour du streak...');
+        await updateStreak(user.uid);
+        console.log('✅ Streak mis à jour');
+      }
+    };
+    initStreak();
+  }, []);
+
   return (
     <Tabs
       screenOptions={{
@@ -34,7 +50,6 @@ export default function ApprenantTabsLayout() {
         },
       }}
     >
-      {/* 1. ACCUEIL */}
       <Tabs.Screen
         name="home"
         options={{
@@ -48,8 +63,6 @@ export default function ApprenantTabsLayout() {
           ),
         }}
       />
-      
-      {/* 2. EXPLORER / RECHERCHE */}
       <Tabs.Screen
         name="recherche"
         options={{
@@ -63,8 +76,6 @@ export default function ApprenantTabsLayout() {
           ),
         }}
       />
-      
-      {/* 3. NOTIFICATIONS */}
       <Tabs.Screen
         name="notifications"
         options={{
@@ -78,8 +89,6 @@ export default function ApprenantTabsLayout() {
           ),
         }}
       />
-      
-      {/* 4. PROFIL */}
       <Tabs.Screen
         name="profile"
         options={{

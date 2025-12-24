@@ -7,6 +7,7 @@ import { collection, getDocs, query, orderBy, limit, doc, updateDoc, increment, 
 import { db, auth } from '../../firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
+import { updateVideoProgress } from '../utils/progressManager';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -171,12 +172,20 @@ export default function HomeScreen() {
     }
   };
 
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      setProgress(status.positionMillis);
-      setDuration(status.durationMillis || 0);
+ const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+  if (status.isLoaded) {
+    setProgress(status.positionMillis);
+    setDuration(status.durationMillis || 0);
+    
+    // 🎯 Calculer le pourcentage de progression
+    const percentage = (status.positionMillis / (status.durationMillis || 1)) * 100;
+    
+    // Si la vidéo atteint 95%+ et qu'elle vient de se terminer
+    if (percentage >= 95 && status.didJustFinish) {
+     handleVideoComplete(videos[currentIndex], percentage);
     }
-  };
+  }
+};
 
   const togglePlayPause = async () => {
     const currentVideo = videoRefs.current[videos[currentIndex]?.id];
@@ -233,6 +242,32 @@ export default function HomeScreen() {
       console.error('Error marking video as watched:', error);
     }
   };
+  // 🎮 Gérer la complétion de vidéo avec XP
+const handleVideoComplete = async (video: VideoData, progressPercentage: number) => {
+  try {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    // Si la vidéo est complétée à 95%+
+    if (progressPercentage >= 95) {
+      console.log('🎉 Vidéo complétée ! Ajout de 50 XP...');
+      
+      await updateVideoProgress(
+        user.uid,
+        video.id,
+        video.title,
+        Math.round(progressPercentage),
+        video.duration / 1000 // Durée en secondes
+      );
+      
+      console.log('✅ XP ajouté avec succès');
+      // Optionnel : afficher une alerte
+      // Alert.alert('🎉 Bravo !', 'Vidéo complétée ! +50 XP');
+    }
+  } catch (error) {
+    console.error('Erreur ajout XP:', error);
+  }
+};
 
   const handleLike = async (videoId: string, creatorId: string) => {
     try {
