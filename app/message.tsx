@@ -1,91 +1,169 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, TextInput, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { auth, db } from './../firebaseConfig';
+import { getDoc, doc } from 'firebase/firestore';
+import { 
+  subscribeToConversations, 
+  getOrCreateConversation,
+  Conversation 
+} from './utils/messaging';
+
+interface Contact {
+  id: string;
+  name: string;
+  avatar?: string;
+  emoji?: string;
+  status?: string;
+}
 
 export default function MessagesListScreen() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewMessageModal, setShowNewMessageModal] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [creatingChat, setCreatingChat] = useState(false);
 
-  const [discussions, setDiscussions] = useState([
-    { 
-      id: '1', 
-      name: 'Marie Dupont', 
-      lastMsg: 'Merci pour ta vidéo !', 
-      time: 'Il y a 1h', 
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150', 
-      unread: 2 
-    },
-    { 
-      id: '2', 
-      name: 'Thomas Bernard', 
-      lastMsg: 'Tu as des ressources sur l\'IA ?', 
-      time: 'Il y a 3h', 
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', 
-      unread: 0 
-    },
-    { 
-      id: '3', 
-      name: 'Lucas Noel', 
-      lastMsg: 'Le rendu est pour demain.', 
-      time: 'Hier', 
-      avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150', 
-      unread: 1 
-    },
-    { 
-      id: '4', 
-      name: 'Sophie Martin', 
-      lastMsg: 'Excellent cours aujourd\'hui ! 👏', 
-      time: 'Hier', 
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150', 
-      unread: 0 
-    },
-    { 
-      id: '5', 
-      name: 'Ahmed Khalil', 
-      lastMsg: 'J\'ai une question sur le projet...', 
-      time: 'Il y a 2j', 
-      avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150', 
-      unread: 3 
-    },
-    { 
-      id: '6', 
-      name: 'Emma Wilson', 
-      lastMsg: 'Merci pour ton aide ! 😊', 
-      time: 'Il y a 3j', 
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150', 
-      unread: 0 
-    },
-    { 
-      id: '7', 
-      name: 'Kevin Dubois', 
-      lastMsg: 'À quelle heure la prochaine session ?', 
-      time: 'Il y a 4j', 
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150', 
-      unread: 0 
-    },
-  ]);
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) {
+      setTimeout(() => router.replace('/login'), 100);
+      return;
+    }
 
-  const filteredDiscussions = discussions.filter(chat => 
-    chat.name.toLowerCase().includes(searchQuery.toLowerCase())
+    // S'abonner aux conversations en temps réel
+    const unsubscribe = subscribeToConversations((convs) => {
+      setConversations(convs);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Charger les contacts quand on ouvre le modal
+  useEffect(() => {
+    if (showNewMessageModal) {
+      loadMutualFollowers();
+    }
+  }, [showNewMessageModal]);
+
+  // Charger les contacts (personnes qui se suivent mutuellement)
+  const loadMutualFollowers = async () => {
+    setLoadingContacts(true);
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (!userDoc.exists()) return;
+
+      const userData = userDoc.data();
+      const following = userData.following || [];
+
+      if (following.length === 0) {
+        setContacts([]);
+        setLoadingContacts(false);
+        return;
+      }
+
+      // Trouver les followers mutuels
+      const mutualFollowers: Contact[] = [];
+
+      for (const followedUserId of following) {
+        const followedUserDoc = await getDoc(doc(db, 'users', followedUserId));
+        
+        if (followedUserDoc.exists()) {
+          const followedUserData = followedUserDoc.data();
+          const theirFollowing = followedUserData.following || [];
+
+          // Si cette personne me suit aussi = mutual
+          if (theirFollowing.includes(user.uid)) {
+            mutualFollowers.push({
+              id: followedUserId,
+              name: `${followedUserData.prenom || ''} ${followedUserData.nom || ''}`.trim() || 'Utilisateur',
+              avatar: followedUserData.photoURL,
+              emoji: followedUserData.profileEmoji || '👤',
+              status: 'En ligne'
+            });
+          }
+        }
+      }
+
+      setContacts(mutualFollowers);
+    } catch (error) {
+      console.error('Erreur chargement contacts:', error);
+    } finally {
+      setLoadingContacts(false);
+    }
+  };
+
+  const filteredConversations = conversations.filter(conv => {
+    const user = auth.currentUser;
+    if (!user) return false;
+
+    const otherUserId = conv.participants.find(id => id !== user.uid);
+    if (!otherUserId) return false;
+
+    const otherUserDetails = conv.participantDetails[otherUserId];
+    return otherUserDetails?.username?.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  const filteredContacts = contacts.filter(contact =>
+    contact.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const markAsRead = (id: string) => {
-    setDiscussions(prevDiscussions =>
-      prevDiscussions.map(chat =>
-        chat.id === id ? { ...chat, unread: 0 } : chat
-      )
-    );
-  };
-
-  const openChat = (chatId: string) => {
-    markAsRead(chatId);
+  const openChat = (conversationId: string) => {
     router.push({
       pathname: '/chat',
-      params: { userId: chatId }
+      params: { conversationId }
     } as any);
   };
+
+  const startNewChat = async (contactId: string) => {
+    setCreatingChat(true);
+    try {
+      const conversationId = await getOrCreateConversation(contactId);
+      setShowNewMessageModal(false);
+      openChat(conversationId);
+    } catch (error) {
+      console.error('Erreur création conversation:', error);
+      Alert.alert('Erreur', 'Impossible de créer la conversation');
+    } finally {
+      setCreatingChat(false);
+    }
+  };
+
+  const formatTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'À l\'instant';
+    if (diffMins < 60) return `Il y a ${diffMins}min`;
+    if (diffHours < 24) return `Il y a ${diffHours}h`;
+    if (diffDays === 1) return 'Hier';
+    if (diffDays < 7) return `Il y a ${diffDays}j`;
+    
+    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#9333EA" />
+        <Text style={styles.loadingText}>Chargement...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -119,46 +197,76 @@ export default function MessagesListScreen() {
       </View>
 
       <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
-        {filteredDiscussions.length > 0 ? (
-          filteredDiscussions.map((chat) => (
-            <TouchableOpacity 
-              key={chat.id} 
-              style={styles.card} 
-              onPress={() => openChat(chat.id)}
-            >
-              <Image source={{ uri: chat.avatar }} style={styles.avatar} />
-              <View style={{ flex: 1 }}>
-                <View style={styles.row}>
-                  <Text style={styles.name}>{chat.name}</Text>
-                  <Text style={styles.time}>{chat.time}</Text>
+        {filteredConversations.length > 0 ? (
+          filteredConversations.map((conv) => {
+            const user = auth.currentUser;
+            if (!user) return null;
+
+            const otherUserId = conv.participants.find(id => id !== user.uid);
+            if (!otherUserId) return null;
+
+            const otherUser = conv.participantDetails[otherUserId];
+            const unreadCount = conv.unreadCount?.[user.uid] || 0;
+            const lastMessage = conv.lastMessage;
+
+            return (
+              <TouchableOpacity 
+                key={conv.id} 
+                style={styles.card} 
+                onPress={() => openChat(conv.id)}
+              >
+                {otherUser?.profileImage ? (
+                  <Image source={{ uri: otherUser.profileImage }} style={styles.avatar} />
+                ) : (
+                  <View style={styles.avatarEmoji}>
+                    <Text style={styles.emojiText}>{otherUser?.profileEmoji || '👤'}</Text>
+                  </View>
+                )}
+                
+                <View style={{ flex: 1 }}>
+                  <View style={styles.row}>
+                    <Text style={styles.name}>{otherUser?.username || 'Utilisateur'}</Text>
+                    <Text style={styles.time}>
+                      {formatTime(lastMessage?.createdAt)}
+                    </Text>
+                  </View>
+                  <Text 
+                    style={[
+                      styles.lastMsg, 
+                      unreadCount > 0 && styles.unreadMsg
+                    ]} 
+                    numberOfLines={1}
+                  >
+                    {lastMessage?.senderId === user.uid && 'Vous: '}
+                    {lastMessage?.text || 'Nouvelle conversation'}
+                  </Text>
                 </View>
-                <Text 
-                  style={[
-                    styles.lastMsg, 
-                    chat.unread > 0 && styles.unreadMsg
-                  ]} 
-                  numberOfLines={1}
-                >
-                  {chat.lastMsg}
-                </Text>
-              </View>
-              {chat.unread > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{chat.unread}</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          ))
+                
+                {unreadCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unreadCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })
         ) : (
           <View style={styles.emptyContainer}>
             <Ionicons name="chatbubbles-outline" size={64} color="#E5E7EB" />
             <Text style={styles.emptyText}>
-              Aucune discussion trouvée pour "{searchQuery}"
+              {searchQuery ? `Aucune discussion trouvée pour "${searchQuery}"` : 'Aucune conversation'}
             </Text>
+            <TouchableOpacity 
+              style={styles.startChatBtn}
+              onPress={() => setShowNewMessageModal(true)}
+            >
+              <Text style={styles.startChatBtnText}>Démarrer une conversation</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
 
+      {/* Modal Nouveau Message */}
       <Modal
         visible={showNewMessageModal}
         transparent
@@ -177,35 +285,76 @@ export default function MessagesListScreen() {
               <Ionicons name="search-outline" size={20} color="#A1A1AA" />
               <TextInput 
                 style={styles.modalSearchInput}
-                placeholder="Rechercher un utilisateur..."
+                placeholder="Rechercher un contact..."
                 placeholderTextColor="#A1A1AA"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
               />
             </View>
 
-            <ScrollView style={styles.usersList}>
-              {discussions.map((user) => (
-                <TouchableOpacity 
-                  key={user.id} 
-                  style={styles.userItem}
-                  onPress={() => {
-                    setShowNewMessageModal(false);
-                    openChat(user.id);
-                  }}
-                >
-                  <Image source={{ uri: user.avatar }} style={styles.userAvatar} />
-                  <Text style={styles.userName}>{user.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            {loadingContacts ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#9333EA" />
+              </View>
+            ) : (
+              <ScrollView style={styles.usersList}>
+                {filteredContacts.length > 0 ? (
+                  filteredContacts.map((contact) => (
+                    <TouchableOpacity 
+                      key={contact.id} 
+                      style={styles.userItem}
+                      onPress={() => startNewChat(contact.id)}
+                      disabled={creatingChat}
+                    >
+                      {contact.avatar ? (
+                        <Image source={{ uri: contact.avatar }} style={styles.userAvatar} />
+                      ) : (
+                        <View style={styles.userAvatarEmoji}>
+                          <Text style={styles.userEmojiText}>{contact.emoji}</Text>
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.userName}>{contact.name}</Text>
+                        <Text style={styles.userStatus}>{contact.status}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color="#A1A1AA" />
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View style={styles.emptyContacts}>
+                    <Ionicons name="people-outline" size={64} color="#E5E7EB" />
+                    <Text style={styles.emptyContactsText}>
+                      {searchQuery 
+                        ? `Aucun contact trouvé pour "${searchQuery}"`
+                        : 'Aucun contact mutuel. Suivez des personnes qui vous suivent aussi !'}
+                    </Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
+
+      {creatingChat && (
+        <View style={styles.creatingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.creatingText}>Création de la conversation...</Text>
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    backgroundColor: '#FFF' 
+  },
+  loadingText: { marginTop: 12, color: '#71717A', fontSize: 14 },
   header: { 
     paddingTop: Platform.OS === 'ios' ? 60 : 40, 
     paddingHorizontal: 20, 
@@ -241,6 +390,16 @@ const styles = StyleSheet.create({
     borderColor: '#F3F4F6' 
   },
   avatar: { width: 55, height: 55, borderRadius: 27.5, marginRight: 12 },
+  avatarEmoji: {
+    width: 55,
+    height: 55,
+    borderRadius: 27.5,
+    marginRight: 12,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emojiText: { fontSize: 28 },
   row: { 
     flexDirection: 'row', 
     justifyContent: 'space-between', 
@@ -273,7 +432,19 @@ const styles = StyleSheet.create({
     color: '#71717A', 
     fontSize: 14, 
     textAlign: 'center',
-    marginTop: 16 
+    marginTop: 16,
+    marginBottom: 24
+  },
+  startChatBtn: {
+    backgroundColor: '#9333EA',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  startChatBtnText: {
+    color: '#FFF',
+    fontWeight: '600',
+    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,
@@ -335,9 +506,51 @@ const styles = StyleSheet.create({
     height: 45,
     borderRadius: 22.5,
   },
+  userAvatarEmoji: {
+    width: 45,
+    height: 45,
+    borderRadius: 22.5,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userEmojiText: {
+    fontSize: 24,
+  },
   userName: {
     fontSize: 16,
     fontWeight: '500',
     color: '#18181B',
+  },
+  userStatus: {
+    fontSize: 13,
+    color: '#71717A',
+    marginTop: 2,
+  },
+  emptyContacts: {
+    marginTop: 60,
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyContactsText: {
+    color: '#71717A',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  creatingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  creatingText: {
+    color: '#FFF',
+    fontSize: 16,
+    marginTop: 12,
   },
 });

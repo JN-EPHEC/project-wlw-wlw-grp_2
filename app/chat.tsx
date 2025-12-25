@@ -1,148 +1,150 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, StyleSheet, KeyboardAvoidingView, Platform, Alert, Modal, Pressable } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity, TextInput, StyleSheet, KeyboardAvoidingView, Platform, Alert, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
-
-// Base de données des utilisateurs
-const USERS_DATABASE: Record<string, { id: string; name: string; avatar: string; status: string }> = {
-  '1': {
-    id: '1',
-    name: 'Marie Dupont',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-    status: 'En ligne'
-  },
-  '2': {
-    id: '2',
-    name: 'Thomas Bernard',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-    status: 'En ligne'
-  },
-  '3': {
-    id: '3',
-    name: 'Lucas Noel',
-    avatar: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150',
-    status: 'Hors ligne'
-  },
-  '4': {
-    id: '4',
-    name: 'Sophie Martin',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
-    status: 'En ligne'
-  },
-  '5': {
-    id: '5',
-    name: 'Ahmed Khalil',
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150',
-    status: 'Hors ligne'
-  },
-  '6': {
-    id: '6',
-    name: 'Emma Wilson',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-    status: 'En ligne'
-  },
-  '7': {
-    id: '7',
-    name: 'Kevin Dubois',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-    status: 'Hors ligne'
-  },
-};
-
-interface Message {
-  id: string;
-  text: string;
-  isMine: boolean;
-  time: string;
-}
-
-// Messages initiaux pour chaque conversation
-const INITIAL_MESSAGES: Record<string, Message[]> = {
-  '1': [
-    { id: '1', text: "Salut ! J'ai adoré ta dernière vidéo", isMine: false, time: 'Il y a 2h' },
-    { id: '2', text: "Merci beaucoup ! 😊", isMine: true, time: 'Il y a 1h' },
-    { id: '3', text: "Tu peux en faire d'autres sur React Native ?", isMine: false, time: 'Il y a 30min' }
-  ],
-  '2': [
-    { id: '1', text: "Tu as des ressources sur l'IA ?", isMine: false, time: 'Il y a 3h' },
-    { id: '2', text: "Oui, je t'envoie ça tout de suite", isMine: true, time: 'Il y a 2h' },
-    { id: '3', text: "Regarde ce cours sur Coursera", isMine: true, time: 'Il y a 2h' }
-  ],
-  '3': [
-    { id: '1', text: "Le rendu est pour demain.", isMine: false, time: 'Hier' },
-    { id: '2', text: "Oui je sais, j'y travaille", isMine: true, time: 'Hier' },
-    { id: '3', text: "Tu veux qu'on se retrouve pour réviser ?", isMine: false, time: 'Hier' }
-  ],
-  '4': [
-    { id: '1', text: "Excellent cours aujourd'hui ! 👏", isMine: false, time: 'Hier' },
-    { id: '2', text: "Merci Sophie ! Content que ça t'ait plu", isMine: true, time: 'Hier' },
-    { id: '3', text: "La partie sur les hooks était super claire", isMine: false, time: 'Hier' }
-  ],
-  '5': [
-    { id: '1', text: "J'ai une question sur le projet...", isMine: false, time: 'Il y a 2j' },
-    { id: '2', text: "Bien sûr, vas-y", isMine: true, time: 'Il y a 2j' },
-    { id: '3', text: "Comment tu gères l'authentification ?", isMine: false, time: 'Il y a 2j' }
-  ],
-  '6': [
-    { id: '1', text: "Merci pour ton aide ! 😊", isMine: false, time: 'Il y a 3j' },
-    { id: '2', text: "De rien, n'hésite pas", isMine: true, time: 'Il y a 3j' },
-    { id: '3', text: "J'ai enfin compris les props !", isMine: false, time: 'Il y a 3j' }
-  ],
-  '7': [
-    { id: '1', text: "À quelle heure la prochaine session ?", isMine: false, time: 'Il y a 4j' },
-    { id: '2', text: "14h demain", isMine: true, time: 'Il y a 4j' },
-    { id: '3', text: "Ok parfait, merci !", isMine: false, time: 'Il y a 4j' }
-  ],
-};
+import { auth, db } from './../firebaseConfig';
+import { 
+  subscribeToMessages, 
+  sendMessage, 
+  markMessagesAsRead,
+  Message 
+} from './utils/messaging';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function ChatScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const scrollViewRef = useRef<ScrollView>(null);
   
-  // Récupérer l'ID de l'utilisateur depuis les paramètres
-  const userId = (params.userId as string) || '1';
-  const currentUser = USERS_DATABASE[userId] || USERS_DATABASE['1'];
+  const conversationId = params.conversationId as string;
   
   const [inputText, setInputText] = useState('');
   const [showMenu, setShowMenu] = useState(false);
-  const [chatMessages, setChatMessages] = useState<Message[]>(
-    INITIAL_MESSAGES[userId] || INITIAL_MESSAGES['1']
-  );
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [otherUser, setOtherUser] = useState<any>(null);
 
-  // Mettre à jour les messages quand l'utilisateur change
   useEffect(() => {
-    setChatMessages(INITIAL_MESSAGES[userId] || INITIAL_MESSAGES['1']);
-  }, [userId]);
+    if (!conversationId) {
+      Alert.alert('Erreur', 'Conversation introuvable');
+      setTimeout(() => router.back(), 100);
+      return;
+    }
 
-  const handleSendMessage = () => {
-    if (!inputText.trim()) return;
-    setChatMessages([...chatMessages, { 
-      id: Date.now().toString(), 
-      text: inputText, 
-      isMine: true, 
-      time: 'À l\'instant' 
-    }]);
-    setInputText('');
+    const user = auth.currentUser;
+    if (!user) {
+      setTimeout(() => router.replace('/login'), 100);
+      return;
+    }
+
+    // Charger les infos de l'autre utilisateur
+    loadOtherUserInfo();
+
+    // S'abonner aux messages en temps réel
+    const unsubscribe = subscribeToMessages(conversationId, (msgs) => {
+      setMessages(msgs);
+      setLoading(false);
+      
+      // Scroll automatique vers le bas
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    });
+
+    // Marquer les messages comme lus
+    markMessagesAsRead(conversationId);
+
+    return () => unsubscribe();
+  }, [conversationId]);
+
+  const loadOtherUserInfo = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      // Extraire l'ID de l'autre utilisateur depuis conversationId
+      const participants = conversationId.split('_');
+      const otherUserId = participants.find(id => id !== user.uid);
+      
+      if (!otherUserId) return;
+
+      const userDoc = await getDoc(doc(db, 'users', otherUserId));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        setOtherUser({
+          id: otherUserId,
+          name: `${userData.prenom || ''} ${userData.nom || ''}`.trim() || 'Utilisateur',
+          avatar: userData.photoURL,
+          emoji: userData.profileEmoji || '👤',
+          status: 'En ligne'
+        });
+      }
+    } catch (error) {
+      console.error('Erreur chargement utilisateur:', error);
+    }
   };
 
-  const deleteMessage = (id: string) => {
-    Alert.alert("Supprimer", "Voulez-vous supprimer ce message ?", [
-      { text: "Annuler", style: "cancel" },
-      { 
-        text: "Supprimer", 
-        style: "destructive", 
-        onPress: () => setChatMessages(prev => prev.filter(m => m.id !== id)) 
-      }
-    ]);
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || sending) return;
+    
+    setSending(true);
+    const textToSend = inputText.trim();
+    setInputText(''); // Vider immédiatement l'input
+    
+    try {
+      await sendMessage(conversationId, textToSend);
+      
+      // Scroll vers le bas après envoi
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      console.error('Erreur envoi message:', error);
+      Alert.alert('Erreur', 'Impossible d\'envoyer le message');
+      setInputText(textToSend); // Restaurer le texte en cas d'erreur
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const formatTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+
+    if (diffMins < 1) return 'À l\'instant';
+    if (diffMins < 60) return `Il y a ${diffMins}min`;
+    if (diffHours < 24) return `Il y a ${diffHours}h`;
+    
+    return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   };
 
   const goToProfile = () => {
-    router.back();
-    setTimeout(() => {
-      router.push('/(tabs-formateur)/profile' as any);
-    }, 100);
+    if (!otherUser) return;
+    router.push(`/profile/${otherUser.id}` as any);
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#A855F7" />
+        <Text style={styles.loadingText}>Chargement...</Text>
+      </View>
+    );
+  }
+
+  if (!otherUser) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Utilisateur introuvable</Text>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView 
@@ -159,18 +161,19 @@ export default function ChatScreen() {
           onPress={goToProfile} 
           style={styles.userInfoContainer}
         >
-          <Image 
-            source={{ uri: currentUser.avatar }} 
-            style={styles.avatarSmall} 
-          />
+          {otherUser.avatar ? (
+            <Image 
+              source={{ uri: otherUser.avatar }} 
+              style={styles.avatarSmall} 
+            />
+          ) : (
+            <View style={styles.avatarEmojiSmall}>
+              <Text style={styles.emojiSmall}>{otherUser.emoji}</Text>
+            </View>
+          )}
           <View style={{ flex: 1 }}>
-            <Text style={styles.userName}>{currentUser.name}</Text>
-            <Text style={[
-              styles.onlineStatus,
-              { color: currentUser.status === 'En ligne' ? '#22C55E' : '#71717A' }
-            ]}>
-              {currentUser.status}
-            </Text>
+            <Text style={styles.userName}>{otherUser.name}</Text>
+            <Text style={styles.onlineStatus}>{otherUser.status}</Text>
           </View>
         </TouchableOpacity>
 
@@ -179,26 +182,53 @@ export default function ChatScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.chatContainer}>
-        {chatMessages.map((msg) => (
-          <TouchableOpacity 
-            key={msg.id} 
-            onLongPress={() => deleteMessage(msg.id)} 
-            style={msg.isMine ? styles.myMsg : styles.theirMsg}
-          >
-            <Text style={msg.isMine ? styles.myText : styles.theirText}>
-              {msg.text}
+      <ScrollView 
+        ref={scrollViewRef}
+        contentContainerStyle={styles.chatContainer}
+        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+      >
+        {messages.map((msg) => {
+          const user = auth.currentUser;
+          const isMine = msg.senderId === user?.uid;
+
+          return (
+            <View 
+              key={msg.id} 
+              style={isMine ? styles.myMsg : styles.theirMsg}
+            >
+              <Text style={isMine ? styles.myText : styles.theirText}>
+                {msg.text}
+              </Text>
+              <View style={styles.messageFooter}>
+                <Text style={isMine ? styles.myTime : styles.theirTime}>
+                  {formatTime(msg.createdAt)}
+                </Text>
+                {isMine && (
+                  <Ionicons 
+                    name={msg.isRead ? "checkmark-done" : "checkmark"} 
+                    size={14} 
+                    color={msg.isRead ? "#A855F7" : "#E9D5FF"} 
+                    style={{ marginLeft: 4 }}
+                  />
+                )}
+              </View>
+            </View>
+          );
+        })}
+        
+        {messages.length === 0 && (
+          <View style={styles.emptyChat}>
+            <Ionicons name="chatbubbles-outline" size={64} color="#E5E7EB" />
+            <Text style={styles.emptyText}>
+              Démarrez la conversation avec {otherUser.name}
             </Text>
-            <Text style={msg.isMine ? styles.myTime : styles.theirTime}>
-              {msg.time}
-            </Text>
-          </TouchableOpacity>
-        ))}
+          </View>
+        )}
       </ScrollView>
 
       <View style={styles.inputArea}>
-        <TouchableOpacity onPress={async () => await DocumentPicker.getDocumentAsync({})}>
-          <Ionicons name="attach" size={26} color="#52525B" />
+        <TouchableOpacity disabled>
+          <Ionicons name="attach" size={26} color="#D1D5DB" />
         </TouchableOpacity>
         <TextInput 
           style={styles.input} 
@@ -207,9 +237,18 @@ export default function ChatScreen() {
           onChangeText={setInputText}
           onSubmitEditing={handleSendMessage}
           returnKeyType="send"
+          editable={!sending}
         />
-        <TouchableOpacity onPress={handleSendMessage} style={styles.sendBtn}>
-          <Ionicons name="send" size={20} color="#fff" />
+        <TouchableOpacity 
+          onPress={handleSendMessage} 
+          style={[styles.sendBtn, sending && styles.sendBtnDisabled]}
+          disabled={sending || !inputText.trim()}
+        >
+          {sending ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="send" size={20} color="#fff" />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -233,7 +272,7 @@ export default function ChatScreen() {
               style={styles.menuItem} 
               onPress={() => { 
                 setShowMenu(false); 
-                Alert.alert("Signalé", `Vous avez signalé ${currentUser.name}`); 
+                Alert.alert("Signalé", `Vous avez signalé ${otherUser.name}`); 
               }}
             >
               <Ionicons name="alert-circle-outline" size={20} color="#EF4444" />
@@ -250,6 +289,14 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+  },
+  loadingText: { marginTop: 12, color: '#71717A', fontSize: 14 },
+  errorText: { color: '#EF4444', fontSize: 16 },
   header: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -267,9 +314,30 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   avatarSmall: { width: 36, height: 36, borderRadius: 18 },
+  avatarEmojiSmall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emojiSmall: { fontSize: 20 },
   userName: { fontSize: 16, fontWeight: 'bold', color: '#18181B' },
-  onlineStatus: { fontSize: 12 },
+  onlineStatus: { fontSize: 12, color: '#22C55E' },
   chatContainer: { padding: 16, gap: 12, paddingBottom: 30 },
+  emptyChat: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 100,
+  },
+  emptyText: {
+    color: '#71717A',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 16,
+  },
   theirMsg: { 
     alignSelf: 'flex-start', 
     backgroundColor: '#F4F4F5', 
@@ -289,7 +357,12 @@ const styles = StyleSheet.create({
     maxWidth: '80%' 
   },
   myText: { color: '#FFF', fontSize: 15 },
-  myTime: { fontSize: 10, color: '#E9D5FF', marginTop: 4, textAlign: 'right' },
+  messageFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  myTime: { fontSize: 10, color: '#E9D5FF' },
   inputArea: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -315,6 +388,9 @@ const styles = StyleSheet.create({
     borderRadius: 22, 
     justifyContent: 'center', 
     alignItems: 'center' 
+  },
+  sendBtnDisabled: {
+    opacity: 0.5,
   },
   modalOverlay: { 
     flex: 1, 
