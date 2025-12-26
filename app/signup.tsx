@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
@@ -12,7 +12,7 @@ interface SignupScreenProps {
 }
 
 export default function SignupScreen({ role }: SignupScreenProps) {
-      const router = useRouter();
+  const router = useRouter();
 
   const [formData, setFormData] = useState({
     nom: '',
@@ -22,11 +22,22 @@ export default function SignupScreen({ role }: SignupScreenProps) {
     password: '',
     confirmPassword: '',
   });
+  
+  // --- NOUVEAU: État pour la visibilité du mot de passe ---
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [profileLevel, setProfileLevel] = useState('');
   const [acceptedPolicy, setAcceptedPolicy] = useState(false);
   const [diplomaFile, setDiplomaFile] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
+
+  // --- VARIABLES DE VALIDATION ---
+  const hasMinLength = formData.password.length >= 6;
+  const hasUpperCase = /[A-Z]/.test(formData.password);
+  const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(formData.password);
+  const hasNumber = /\d/.test(formData.password); // Nouveau: Vérifie s'il y a un chiffre
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -52,7 +63,6 @@ export default function SignupScreen({ role }: SignupScreenProps) {
 
       const file = result.assets[0];
       
-      // Vérifier la taille (max 5MB)
       if (file.size && file.size > 5 * 1024 * 1024) {
         Alert.alert('Erreur', 'Le fichier est trop volumineux. Taille maximale : 5MB');
         return;
@@ -75,25 +85,14 @@ export default function SignupScreen({ role }: SignupScreenProps) {
       formData.confirmPassword,
     ];
 
-    if (role === 'formateur' && !profileLevel) {
-      return false;
-    }
+    if (role === 'formateur' && !profileLevel) return false;
+    if (requiredFields.some(field => !field.trim())) return false;
+    if (emailError) return false;
+    if (formData.password !== formData.confirmPassword) return false;
+    if (!acceptedPolicy) return false;
 
-    if (requiredFields.some(field => !field.trim())) {
-      return false;
-    }
-
-    if (emailError) {
-      return false;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      return false;
-    }
-
-    if (!acceptedPolicy) {
-      return false;
-    }
+    // --- Validation complète ---
+    if (!hasMinLength || !hasUpperCase || !hasSpecialChar || !hasNumber) return false;
 
     return true;
   };
@@ -109,8 +108,12 @@ export default function SignupScreen({ role }: SignupScreenProps) {
       return;
     }
 
-    if (formData.password.length < 6) {
-      Alert.alert('Erreur', 'Le mot de passe doit contenir au moins 6 caractères');
+    // --- Alerte mise à jour avec le chiffre ---
+    if (!hasMinLength || !hasUpperCase || !hasSpecialChar || !hasNumber) {
+      Alert.alert(
+        'Mot de passe faible', 
+        'Le mot de passe doit contenir : 6 caractères, une majuscule, un chiffre et un caractère spécial.'
+      );
       return;
     }
 
@@ -128,7 +131,6 @@ export default function SignupScreen({ role }: SignupScreenProps) {
         formData.password
       );
 
-      // Créer le profil utilisateur dans Firestore
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         nom: formData.nom,
         prenom: formData.prenom,
@@ -139,13 +141,12 @@ export default function SignupScreen({ role }: SignupScreenProps) {
         createdAt: new Date().toISOString(),
       });
 
-     Alert.alert('Succès', 'Inscription réussie !');
-// Rediriger vers l'onboarding selon le rôle
-if (role === 'formateur') {
-  router.replace('/onboarding-formateur');
-} else {
-  router.replace('/onboarding-apprenant');
-}
+      Alert.alert('Succès', 'Inscription réussie !');
+      if (role === 'formateur') {
+        router.replace('/onboarding-formateur');
+      } else {
+        router.replace('/onboarding-apprenant');
+      }
     } catch (error: any) {
       console.error('Signup error:', error);
       
@@ -153,7 +154,7 @@ if (role === 'formateur') {
         Alert.alert('Erreur', 'Cet e-mail est déjà utilisé');
         setEmailError('Cet e-mail est déjà utilisé');
       } else if (error.code === 'auth/weak-password') {
-        Alert.alert('Erreur', 'Le mot de passe doit contenir au moins 6 caractères');
+        Alert.alert('Erreur', 'Le mot de passe est trop faible');
       } else if (error.code === 'auth/invalid-email') {
         Alert.alert('Erreur', 'Adresse e-mail invalide');
         setEmailError('Adresse e-mail invalide');
@@ -167,7 +168,6 @@ if (role === 'formateur') {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -186,7 +186,6 @@ if (role === 'formateur') {
         </View>
       </View>
 
-      {/* Content */}
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -195,7 +194,6 @@ if (role === 'formateur') {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Title */}
           <View style={styles.titleContainer}>
             <Text style={styles.title}>Inscription</Text>
             <Text style={styles.subtitle}>
@@ -203,9 +201,7 @@ if (role === 'formateur') {
             </Text>
           </View>
 
-          {/* Form */}
           <View style={styles.form}>
-            {/* Nom */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Nom <Text style={styles.required}>*</Text></Text>
               <TextInput
@@ -218,7 +214,6 @@ if (role === 'formateur') {
               />
             </View>
 
-            {/* Prénom */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Prénom <Text style={styles.required}>*</Text></Text>
               <TextInput
@@ -231,7 +226,6 @@ if (role === 'formateur') {
               />
             </View>
 
-            {/* Email */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Adresse e-mail <Text style={styles.required}>*</Text></Text>
               <TextInput
@@ -247,7 +241,6 @@ if (role === 'formateur') {
               {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
             </View>
 
-            {/* Téléphone */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Numéro de téléphone <Text style={styles.required}>*</Text></Text>
               <TextInput
@@ -261,45 +254,26 @@ if (role === 'formateur') {
               />
             </View>
 
-           {/* Niveau de profil (formateur uniquement) */}
-{role === 'formateur' && (
-  <View style={styles.inputGroup}>
-    <Text style={styles.label}>Niveau de profil <Text style={styles.required}>*</Text></Text>
-    <View style={styles.levelsContainer}>
-      <TouchableOpacity
-        style={[styles.levelButton, profileLevel === 'amateur' && styles.levelButtonSelected]}
-        onPress={() => setProfileLevel('amateur')}
-        disabled={loading}
-      >
-        <Text style={[styles.levelButtonText, profileLevel === 'amateur' && styles.levelButtonTextSelected]}>
-          Amateur
-        </Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity
-        style={[styles.levelButton, profileLevel === 'diplome' && styles.levelButtonSelected]}
-        onPress={() => setProfileLevel('diplome')}
-        disabled={loading}
-      >
-        <Text style={[styles.levelButtonText, profileLevel === 'diplome' && styles.levelButtonTextSelected]}>
-          Diplômé
-        </Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity
-        style={[styles.levelButton, profileLevel === 'expert' && styles.levelButtonSelected]}
-        onPress={() => setProfileLevel('expert')}
-        disabled={loading}
-      >
-        <Text style={[styles.levelButtonText, profileLevel === 'expert' && styles.levelButtonTextSelected]}>
-          Expert
-        </Text>
-      </TouchableOpacity>
-    </View>
-  </View>
-)}
+            {role === 'formateur' && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Niveau de profil <Text style={styles.required}>*</Text></Text>
+                <View style={styles.levelsContainer}>
+                  {['amateur', 'diplome', 'expert'].map((lvl) => (
+                    <TouchableOpacity
+                      key={lvl}
+                      style={[styles.levelButton, profileLevel === lvl && styles.levelButtonSelected]}
+                      onPress={() => setProfileLevel(lvl)}
+                      disabled={loading}
+                    >
+                      <Text style={[styles.levelButtonText, profileLevel === lvl && styles.levelButtonTextSelected]}>
+                        {lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
 
-            {/* Upload diplôme (formateur uniquement) */}
             {role === 'formateur' && (
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Preuve de diplôme (PNG, PDF)</Text>
@@ -324,66 +298,131 @@ if (role === 'formateur') {
               </View>
             )}
 
-            {/* Mot de passe */}
+            {/* --- MOT DE PASSE AVEC OEIL ET NOUVELLES RÈGLES --- */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Mot de passe <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                style={styles.input}
-                value={formData.password}
-                onChangeText={(text) => handleChange('password', text)}
-                placeholder="••••••••"
-                placeholderTextColor="#a1a1aa"
-                secureTextEntry
-                editable={!loading}
-              />
-              <Text style={styles.helpText}>Minimum 6 caractères</Text>
+              
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  value={formData.password}
+                  onChangeText={(text) => handleChange('password', text)}
+                  placeholder="••••••••"
+                  placeholderTextColor="#a1a1aa"
+                  secureTextEntry={!showPassword}
+                  editable={!loading}
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowPassword(!showPassword)} 
+                  style={styles.eyeIcon}
+                >
+                  <Ionicons 
+                    name={showPassword ? "eye-off" : "eye"} 
+                    size={20} 
+                    color="#71717a" 
+                  />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.passwordRequirements}>
+                <View style={styles.requirementItem}>
+                  <Ionicons 
+                    name={hasMinLength ? "checkmark-circle" : "ellipse-outline"} 
+                    size={14} 
+                    color={hasMinLength ? "#10B981" : "#71717a"} 
+                  />
+                  <Text style={[styles.requirementText, hasMinLength && styles.requirementTextMet]}>
+                    6 caractères minimum
+                  </Text>
+                </View>
+                <View style={styles.requirementItem}>
+                  <Ionicons 
+                    name={hasUpperCase ? "checkmark-circle" : "ellipse-outline"} 
+                    size={14} 
+                    color={hasUpperCase ? "#10B981" : "#71717a"} 
+                  />
+                  <Text style={[styles.requirementText, hasUpperCase && styles.requirementTextMet]}>
+                    Une majuscule
+                  </Text>
+                </View>
+                <View style={styles.requirementItem}>
+                  <Ionicons 
+                    name={hasNumber ? "checkmark-circle" : "ellipse-outline"} 
+                    size={14} 
+                    color={hasNumber ? "#10B981" : "#71717a"} 
+                  />
+                  <Text style={[styles.requirementText, hasNumber && styles.requirementTextMet]}>
+                    Un chiffre
+                  </Text>
+                </View>
+                <View style={styles.requirementItem}>
+                  <Ionicons 
+                    name={hasSpecialChar ? "checkmark-circle" : "ellipse-outline"} 
+                    size={14} 
+                    color={hasSpecialChar ? "#10B981" : "#71717a"} 
+                  />
+                  <Text style={[styles.requirementText, hasSpecialChar && styles.requirementTextMet]}>
+                    Un caractère spécial (!@#$...)
+                  </Text>
+                </View>
+              </View>
             </View>
 
-            {/* Confirmation mot de passe */}
+            {/* --- CONFIRMATION MOT DE PASSE AVEC OEIL --- */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Confirmer le mot de passe <Text style={styles.required}>*</Text></Text>
-              <TextInput
-                style={styles.input}
-                value={formData.confirmPassword}
-                onChangeText={(text) => handleChange('confirmPassword', text)}
-                placeholder="••••••••"
-                placeholderTextColor="#a1a1aa"
-                secureTextEntry
-                editable={!loading}
-              />
+              
+              <View style={styles.passwordContainer}>
+                <TextInput
+                  style={styles.passwordInput}
+                  value={formData.confirmPassword}
+                  onChangeText={(text) => handleChange('confirmPassword', text)}
+                  placeholder="••••••••"
+                  placeholderTextColor="#a1a1aa"
+                  secureTextEntry={!showConfirmPassword}
+                  editable={!loading}
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)} 
+                  style={styles.eyeIcon}
+                >
+                  <Ionicons 
+                    name={showConfirmPassword ? "eye-off" : "eye"} 
+                    size={20} 
+                    color="#71717a" 
+                  />
+                </TouchableOpacity>
+              </View>
+
               {formData.confirmPassword && formData.password !== formData.confirmPassword && (
                 <Text style={styles.errorText}>Les mots de passe ne correspondent pas</Text>
               )}
             </View>
 
-            {/* Checkbox politique */}
             <View style={styles.checkboxRow}>
-  <TouchableOpacity
-    style={styles.checkboxButton}
-    onPress={() => setAcceptedPolicy(!acceptedPolicy)}
-    disabled={loading}
-  >
-    <View style={[styles.checkbox, acceptedPolicy && styles.checkboxChecked]}>
-      {acceptedPolicy && <Ionicons name="checkmark" size={16} color="#fff" />}
-    </View>
-  </TouchableOpacity>
-  
-  <View style={styles.checkboxTextContainer}>
-    <Text style={styles.checkboxLabel}>
-      J'accepte les{' '}
-    </Text>
-    <TouchableOpacity onPress={() => router.push('/privacy-policy')}>
-      <Text style={styles.link}>conditions générales</Text>
-    </TouchableOpacity>
-    <Text style={styles.checkboxLabel}> et la </Text>
-    <TouchableOpacity onPress={() => router.push('/privacy-policy')}>
-      <Text style={styles.link}>politique de confidentialité</Text>
-    </TouchableOpacity>
-    <Text style={styles.required}> *</Text>
-  </View>
-</View>
+              <TouchableOpacity
+                style={styles.checkboxButton}
+                onPress={() => setAcceptedPolicy(!acceptedPolicy)}
+                disabled={loading}
+              >
+                <View style={[styles.checkbox, acceptedPolicy && styles.checkboxChecked]}>
+                  {acceptedPolicy && <Ionicons name="checkmark" size={16} color="#fff" />}
+                </View>
+              </TouchableOpacity>
+              
+              <View style={styles.checkboxTextContainer}>
+                <Text style={styles.checkboxLabel}>J'accepte les </Text>
+                <TouchableOpacity onPress={() => router.push('/privacy-policy')}>
+                  <Text style={styles.link}>conditions générales</Text>
+                </TouchableOpacity>
+                <Text style={styles.checkboxLabel}> et la </Text>
+                <TouchableOpacity onPress={() => router.push('/privacy-policy')}>
+                  <Text style={styles.link}>politique de confidentialité</Text>
+                </TouchableOpacity>
+                <Text style={styles.required}> *</Text>
+              </View>
+            </View>
 
-            {/* Bouton S'inscrire */}
             <TouchableOpacity
               style={[styles.submitButton, (!isFormValid() || loading) && styles.submitButtonDisabled]}
               onPress={handleSubmit}
@@ -394,7 +433,6 @@ if (role === 'formateur') {
               </Text>
             </TouchableOpacity>
 
-            {/* Footer */}
             <View style={styles.footerContainer}>
               <Text style={styles.footerText}>Vous avez déjà un compte ?</Text>
               <TouchableOpacity onPress={() => router.back()} disabled={loading}>
@@ -405,7 +443,6 @@ if (role === 'formateur') {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Footer Links */}
       <View style={styles.bottomFooter}>
         <TouchableOpacity onPress={() => router.push('/privacy-policy')} disabled={loading}>
           <Text style={styles.bottomLink}>Politique de confidentialité</Text>
@@ -504,6 +541,29 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#18181b',
   },
+  
+  // --- NOUVEAUX STYLES POUR LE CHAMP MOT DE PASSE ---
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f4f4f5',
+    borderWidth: 1,
+    borderColor: '#e4e4e7',
+    borderRadius: 8,
+    height: 48,
+    paddingHorizontal: 16,
+  },
+  passwordInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 15,
+    color: '#18181b',
+  },
+  eyeIcon: {
+    padding: 4,
+  },
+  // ------------------------------------------------
+
   inputError: {
     borderColor: '#ef4444',
   },
@@ -517,6 +577,27 @@ const styles = StyleSheet.create({
     color: '#71717a',
     marginTop: 4,
   },
+  
+  // --- STYLES EXIGENCES MOT DE PASSE ---
+  passwordRequirements: {
+    marginTop: 8,
+    gap: 4,
+  },
+  requirementItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  requirementText: {
+    fontSize: 12,
+    color: '#71717a',
+  },
+  requirementTextMet: {
+    color: '#10B981', 
+    fontWeight: '500',
+  },
+  // ------------------------------------
+
   pickerContainer: {
     position: 'relative',
   },
@@ -572,37 +653,37 @@ const styles = StyleSheet.create({
     color: '#7e22ce',
   },
   checkboxRow: {
-  flexDirection: 'row',
-  alignItems: 'flex-start',
-  gap: 12,
-  paddingTop: 8,
-},
-checkboxButton: {
-  marginTop: 2,
-},
-checkbox: {
-  width: 20,
-  height: 20,
-  borderWidth: 2,
-  borderColor: '#e4e4e7',
-  borderRadius: 4,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-checkboxChecked: {
-  backgroundColor: '#9333ea',
-  borderColor: '#9333ea',
-},
-checkboxTextContainer: {
-  flex: 1,
-  flexDirection: 'row',
-  flexWrap: 'wrap',
-  alignItems: 'center',
-},
-checkboxLabel: {
-  fontSize: 13,
-  color: '#3f3f46',
-},
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingTop: 8,
+  },
+  checkboxButton: {
+    marginTop: 2,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#e4e4e7',
+    borderRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#9333ea',
+    borderColor: '#9333ea',
+  },
+  checkboxTextContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  checkboxLabel: {
+    fontSize: 13,
+    color: '#3f3f46',
+  },
   link: {
     color: '#9333ea',
     textDecorationLine: 'underline',
@@ -652,38 +733,39 @@ checkboxLabel: {
     borderTopWidth: 1,
     borderTopColor: '#e4e4e7',
     backgroundColor: '#fff',
-  },levelsContainer: {
-  flexDirection: 'row',
-  gap: 8,
-},
-levelButton: {
-  flex: 1,
-  height: 48,
-  backgroundColor: '#f4f4f5',
-  borderWidth: 2,
-  borderColor: '#e4e4e7',
-  borderRadius: 8,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-levelButtonSelected: {
-  backgroundColor: '#9333ea',
-  borderColor: '#9333ea',
-},
-levelButtonText: {
-  fontSize: 14,
-  color: '#52525b',
-  fontWeight: '500',
-},
-levelButtonTextSelected: {
-  color: '#fff',
-  fontWeight: '600',
-},
+  },
+  levelsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  levelButton: {
+    flex: 1,
+    height: 48,
+    backgroundColor: '#f4f4f5',
+    borderWidth: 2,
+    borderColor: '#e4e4e7',
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  levelButtonSelected: {
+    backgroundColor: '#9333ea',
+    borderColor: '#9333ea',
+  },
+  levelButtonText: {
+    fontSize: 14,
+    color: '#52525b',
+    fontWeight: '500',
+  },
+  levelButtonTextSelected: {
+    color: '#fff',
+    fontWeight: '600',
+  },
   bottomLink: {
     fontSize: 13,
     color: '#52525b',
   },
-logoImage: {
+  logoImage: {
     width: 100, 
     height: 100,
     marginBottom: 24,

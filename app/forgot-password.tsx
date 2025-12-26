@@ -125,7 +125,7 @@ export default function ForgotPasswordScreen() {
             disabled={loading}
           >
             <Text style={styles.submitButtonText}>
-              {loading ? 'Envoi en cours...' : 'Envoyer le lien de réinitialisation'}
+              {loading ? 'Envoi en cours...' : 'Réinitialisiter le mot de passe'}
             </Text>
           </TouchableOpacity>
 
@@ -135,7 +135,7 @@ export default function ForgotPasswordScreen() {
               <Text style={styles.securityTitle}>Sécurité</Text>
             </View>
             <Text style={styles.securityText}>
-              Le lien de réinitialisation sera valide pendant 1 heure. Si vous n'avez pas demandé cette réinitialisation, ignorez cet email.
+              Le lien de réinitialisation sera valide pendant 1 heure. 
             </Text>
           </View>
         </View>
