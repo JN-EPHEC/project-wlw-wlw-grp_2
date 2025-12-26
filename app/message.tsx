@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { auth, db } from './../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
 import { getDoc, doc } from 'firebase/firestore';
 import { 
   subscribeToConversations, 
@@ -171,7 +171,7 @@ export default function MessagesListScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#18181B" />
         </TouchableOpacity>
-        <Text style={styles.title}>Messages</Text>
+        <Text style={styles.title}>Message</Text>
         
         <TouchableOpacity onPress={() => setShowNewMessageModal(true)}>
           <Ionicons name="create-outline" size={24} color="#9333EA" />

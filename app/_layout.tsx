@@ -16,7 +16,7 @@ export default function RootLayout() {
       <Stack.Screen name="(tabs-formateur)" />
       <Stack.Screen name="privacy-policy" />
       <Stack.Screen name="help" />
-      <Stack.Screen name="messages" />
+      <Stack.Screen name="message" />
       <Stack.Screen name="chat" />
     </Stack>
   );
