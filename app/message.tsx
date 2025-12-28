@@ -37,9 +37,11 @@ export default function MessagesListScreen() {
 
     // S'abonner aux conversations en temps réel
     const unsubscribe = subscribeToConversations((convs) => {
-      setConversations(convs);
-      setLoading(false);
-    });
+  console.log('📬 Conversations reçues:', convs.length);
+  console.log('📋 Détails complets:', convs);  // ← AJOUTEZ CETTE LIGNE
+  setConversations(convs);
+  setLoading(false);
+});
 
     return () => unsubscribe();
   }, []);
@@ -102,16 +104,23 @@ export default function MessagesListScreen() {
   };
 
   const filteredConversations = conversations.filter(conv => {
-    const user = auth.currentUser;
-    if (!user) return false;
+  const user = auth.currentUser;
+  if (!user) return false;
 
-    const otherUserId = conv.participants.find(id => id !== user.uid);
-    if (!otherUserId) return false;
+  const otherUserId = conv.participants.find(id => id !== user.uid);
+  if (!otherUserId) return false;
 
-    const otherUserDetails = conv.participantDetails[otherUserId];
-    return otherUserDetails?.username?.toLowerCase().includes(searchQuery.toLowerCase());
-  });
-
+  const otherUserDetails = conv.participantDetails[otherUserId];
+  
+  console.log('🔍 Conv:', conv.id);  // ← AJOUTEZ
+  console.log('👤 Other user:', otherUserDetails);  // ← AJOUTEZ
+  
+  // Si pas de searchQuery, afficher toutes les conversations
+  if (!searchQuery) return true;
+  
+  // Sinon, filtrer par nom d'utilisateur
+  return otherUserDetails?.username?.toLowerCase().includes(searchQuery.toLowerCase());
+});
   const filteredContacts = contacts.filter(contact =>
     contact.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -164,7 +173,7 @@ export default function MessagesListScreen() {
       </View>
     );
   }
-
+console.log('🎯 Conversations à afficher:', filteredConversations.length);
   return (
     <View style={styles.container}>
       <View style={styles.header}>
