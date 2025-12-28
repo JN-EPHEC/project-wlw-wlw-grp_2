@@ -635,6 +635,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    zIndex: 1,
   },
   playPauseIcon: {
     position: 'absolute',
@@ -669,6 +670,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: '50%',
+    zIndex: 10,
   },
   leftSide: {
     position: 'absolute',
@@ -817,10 +819,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 80,
     alignSelf: 'center',
+    zIndex: 20,
   },
   swipeDownIndicator: {
     position: 'absolute',
     bottom: 150,
     alignSelf: 'center',
+    zIndex: 20,
   },
 });
