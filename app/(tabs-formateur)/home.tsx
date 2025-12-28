@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, useWindowDimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TouchableWithoutFeedback } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -36,6 +36,8 @@ interface UserProfile {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { width: dynamicWidth, height: dynamicHeight } = useWindowDimensions();
+  
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedVideos, setLikedVideos] = useState<Set<string>>(new Set());
@@ -353,13 +355,13 @@ export default function HomeScreen() {
   };
 
   const handleCreatorClick = (creatorId: string) => {
-  try {
-    router.push(`/profile/${creatorId}` as any);
-  } catch (error) {
-    console.error('Navigation error:', error);
-    Alert.alert('Erreur', 'Impossible de charger le profil');
-  }
-};
+    try {
+      router.push(`/profile/${creatorId}` as any);
+    } catch (error) {
+      console.error('Navigation error:', error);
+      Alert.alert('Erreur', 'Impossible de charger le profil');
+    }
+  };
 
 
   if (loading) {
@@ -424,8 +426,13 @@ export default function HomeScreen() {
                     resizeMode={ResizeMode.COVER}
                     shouldPlay={index === currentIndex && isPlaying}
                     isLooping
-                    style={styles.video}
+                    style={StyleSheet.absoluteFillObject}
                     onPlaybackStatusUpdate={index === currentIndex ? handlePlaybackStatusUpdate : undefined}
+                    useNativeControls={false}
+                    videoStyle={{
+                      width: dynamicWidth,
+                      height: dynamicHeight,
+                    }}
                   />
                   
                   {!isPlaying && index === currentIndex && (
@@ -629,19 +636,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
   },
-  video: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
   playPauseIcon: {
     position: 'absolute',
     top: '50%',
     left: '50%',
     marginTop: -40,
     marginLeft: -40,
+    zIndex: 10,
   },
   progressBarContainer: {
     position: 'absolute',
