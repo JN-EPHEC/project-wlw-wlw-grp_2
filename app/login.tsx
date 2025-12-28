@@ -213,26 +213,7 @@ export default function LoginScreen() {
           >
             <Text style={styles.forgotPasswordText}>Mot de passe oublié ?</Text>
           </TouchableOpacity>
-
-          {/* Divider */}
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>Autres connexions</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {/* Social Login Buttons */}
-          <View style={styles.socialButtons}>
-            {/* Google Login */}
-            <TouchableOpacity
-              style={styles.socialButton}
-              disabled={!request || loading}
-              onPress={() => promptAsync()}
-            >
-              <Ionicons name="logo-google" size={20} color="#DB4437" />
-              <Text style={styles.socialButtonText}>Continuer avec Google</Text>
-            </TouchableOpacity>
-          </View>
+          
         </View>
 
         {/* Inscription */}

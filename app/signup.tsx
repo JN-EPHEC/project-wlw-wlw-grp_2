@@ -317,7 +317,7 @@ export default function SignupScreen({ role }: SignupScreenProps) {
                   style={styles.eyeIcon}
                 >
                   <Ionicons 
-                    name={showPassword ? "eye-off" : "eye"} 
+                    name={showPassword ? "eye" : "eye-off"} 
                     size={20} 
                     color="#71717a" 
                   />
@@ -387,7 +387,7 @@ export default function SignupScreen({ role }: SignupScreenProps) {
                   style={styles.eyeIcon}
                 >
                   <Ionicons 
-                    name={showConfirmPassword ? "eye-off" : "eye"} 
+                    name={showConfirmPassword ? "eye" : "eye-off"} 
                     size={20} 
                     color="#71717a" 
                   />
