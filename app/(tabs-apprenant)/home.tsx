@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TouchableWithoutFeedback } from 'react-native';
+import { View, Text, StyleSheet, useWindowDimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TouchableWithoutFeedback, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -8,8 +8,6 @@ import { db, auth } from '../../firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { updateVideoProgress } from '../utils/progressManager';
-
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface VideoData {
   id: string;
@@ -37,6 +35,8 @@ interface UserProfile {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedVideos, setLikedVideos] = useState<Set<string>>(new Set());
@@ -49,12 +49,10 @@ export default function HomeScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const videoRefs = useRef<Record<string, Video | null>>({});
 
-  // Gérer la lecture/pause des vidéos
   useFocusEffect(
     useCallback(() => {
       setIsPlaying(true);
       
-      // Relancer la vidéo courante après un court délai
       const timer = setTimeout(async () => {
         const currentVideo = videoRefs.current[videos[currentIndex]?.id];
         if (currentVideo) {
@@ -68,7 +66,6 @@ export default function HomeScreen() {
 
       return () => {
         clearTimeout(timer);
-        // Mettre en pause toutes les vidéos
         Object.values(videoRefs.current).forEach(async (video) => {
           if (video) {
             try {
@@ -88,7 +85,6 @@ export default function HomeScreen() {
     loadVideos();
   }, []);
 
-  // Arrêter les autres vidéos quand on change d'index
   useEffect(() => {
     const pauseOtherVideos = async () => {
       Object.keys(videoRefs.current).forEach(async (videoId, index) => {
@@ -388,14 +384,13 @@ const handleVideoComplete = async (video: VideoData, progressPercentage: number)
   };
 
   const handleCreatorClick = (creatorId: string) => {
-  try {
-    router.push(`/profile/${creatorId}` as any);
-  } catch (error) {
-    console.error('Navigation error:', error);
-    Alert.alert('Erreur', 'Impossible de charger le profil');
-  }
-};
-
+    try {
+      router.push(`/profile/${creatorId}` as any);
+    } catch (error) {
+      console.error('Navigation error:', error);
+      Alert.alert('Erreur', 'Impossible de charger le profil');
+    }
+  };
 
   if (loading) {
     return (
@@ -420,6 +415,8 @@ const handleVideoComplete = async (video: VideoData, progressPercentage: number)
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      
       <View style={styles.progressIndicator}>
         <Text style={styles.progressText}>
           {currentIndex + 1} / {videos.length}
@@ -443,26 +440,31 @@ const handleVideoComplete = async (video: VideoData, progressPercentage: number)
           const isFollowing = userProfile?.following?.includes(video.creatorId) ?? false;
           
           return (
-            <View key={video.id} style={styles.videoContainer}>
+            <View key={video.id} style={[styles.videoContainer, { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }]}>
+              <Video
+                ref={(ref) => {
+                  if (ref) {
+                    videoRefs.current[video.id] = ref;
+                  }
+                }}
+                source={{ uri: video.videoUrl }}
+                rate={1.0}
+                volume={1.0}
+                isMuted={false}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay={index === currentIndex && isPlaying}
+                isLooping
+                style={StyleSheet.absoluteFillObject}
+                onPlaybackStatusUpdate={index === currentIndex ? handlePlaybackStatusUpdate : undefined}
+                useNativeControls={false}
+                videoStyle={{
+                  width: SCREEN_WIDTH,
+                  height: SCREEN_HEIGHT,
+                }}
+              />
+              
               <TouchableWithoutFeedback onPress={togglePlayPause}>
-                <View style={styles.videoWrapper}>
-                  <Video
-                    ref={(ref) => {
-                      if (ref) {
-                        videoRefs.current[video.id] = ref;
-                      }
-                    }}
-                    source={{ uri: video.videoUrl }}
-                    rate={1.0}
-                    volume={1.0}
-                    isMuted={false}
-                    resizeMode={ResizeMode.COVER}
-                    shouldPlay={index === currentIndex && isPlaying}
-                    isLooping
-                    style={styles.video}
-                    onPlaybackStatusUpdate={index === currentIndex ? handlePlaybackStatusUpdate : undefined}
-                  />
-                  
+                <View style={styles.touchableOverlay}>
                   {!isPlaying && index === currentIndex && (
                     <View style={styles.playPauseIcon}>
                       <Ionicons name="play" size={80} color="rgba(255,255,255,0.8)" />
@@ -653,30 +655,20 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   videoContainer: {
-    height: SCREEN_HEIGHT,
-    width: SCREEN_WIDTH,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000',
     position: 'relative',
+    overflow: 'hidden',
   },
-  videoWrapper: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  video: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  touchableOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
   },
   playPauseIcon: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    marginTop: -40,
-    marginLeft: -40,
+    zIndex: 10,
   },
   progressBarContainer: {
     position: 'absolute',
@@ -703,6 +695,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: '50%',
+    zIndex: 10,
   },
   leftSide: {
     position: 'absolute',
@@ -851,10 +844,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 80,
     alignSelf: 'center',
+    zIndex: 20,
   },
   swipeDownIndicator: {
     position: 'absolute',
     bottom: 150,
     alignSelf: 'center',
+    zIndex: 20,
   },
 });
