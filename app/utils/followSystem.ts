@@ -4,7 +4,11 @@ import {
   arrayUnion, 
   arrayRemove, 
   increment, 
-  getDoc 
+  getDoc,
+  query,
+  collection,
+  where,
+  getDocs
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 
@@ -93,5 +97,135 @@ export const checkIsFollowing = async (currentUserId: string, targetUserId: stri
   } catch (error) {
     console.error("❌ Erreur checkIsFollowing:", error);
     return false;
+  }
+};
+
+/**
+ * Alias pour checkIsFollowing
+ */
+export const isFollowing = async (currentUserId: string, targetUserId: string): Promise<boolean> => {
+  return checkIsFollowing(currentUserId, targetUserId);
+};
+
+/**
+ * Récupère la liste des followers d'un utilisateur
+ */
+export const getFollowers = async (userId: string): Promise<string[]> => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (userDoc.exists()) {
+      return userDoc.data().followers || [];
+    }
+    return [];
+  } catch (error) {
+    console.error("❌ Erreur getFollowers:", error);
+    return [];
+  }
+};
+
+/**
+ * Récupère la liste des utilisateurs que suit un utilisateur
+ */
+export const getFollowing = async (userId: string): Promise<string[]> => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (userDoc.exists()) {
+      return userDoc.data().following || [];
+    }
+    return [];
+  } catch (error) {
+    console.error("❌ Erreur getFollowing:", error);
+    return [];
+  }
+};
+
+/**
+ * Récupère les statistiques de suivi d'un utilisateur
+ */
+export const getFollowCounts = async (userId: string): Promise<{ followersCount: number; followingCount: number }> => {
+  try {
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      return {
+        followersCount: data.stats?.followersCount || 0,
+        followingCount: data.stats?.followingCount || 0
+      };
+    }
+    return { followersCount: 0, followingCount: 0 };
+  } catch (error) {
+    console.error("❌ Erreur getFollowCounts:", error);
+    return { followersCount: 0, followingCount: 0 };
+  }
+};
+
+/**
+ * Recherche des utilisateurs par nom ou email
+ */
+export const searchUsers = async (searchTerm: string): Promise<Array<{ id: string; name: string; email: string }>> => {
+  try {
+    if (!searchTerm.trim()) return [];
+    
+    const q = query(
+      collection(db, 'users'),
+      where('name', '>=', searchTerm),
+      where('name', '<=', searchTerm + '\uf8ff')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      name: doc.data().name || '',
+      email: doc.data().email || ''
+    }));
+  } catch (error) {
+    console.error("❌ Erreur searchUsers:", error);
+    return [];
+  }
+};
+
+/**
+ * Récupère les utilisateurs suggérés (non suivis)
+ */
+export const getSuggestedUsers = async (currentUserId: string, limit: number = 10): Promise<Array<{ id: string; name: string; email: string }>> => {
+  try {
+    const currentUserDoc = await getDoc(doc(db, 'users', currentUserId));
+    const followingList = currentUserDoc.data()?.following || [];
+    
+    const usersRef = collection(db, 'users');
+    const snapshot = await getDocs(usersRef);
+    
+    const suggestedUsers = snapshot.docs
+      .filter(doc => doc.id !== currentUserId && !followingList.includes(doc.id))
+      .slice(0, limit)
+      .map(doc => ({
+        id: doc.id,
+        name: doc.data().name || '',
+        email: doc.data().email || ''
+      }));
+    
+    return suggestedUsers;
+  } catch (error) {
+    console.error("❌ Erreur getSuggestedUsers:", error);
+    return [];
+  }
+};
+
+/**
+ * Récupère les followers mutuels entre deux utilisateurs
+ */
+export const getMutualFollows = async (userId1: string, userId2: string): Promise<string[]> => {
+  try {
+    const user1Doc = await getDoc(doc(db, 'users', userId1));
+    const user2Doc = await getDoc(doc(db, 'users', userId2));
+    
+    const followers1 = user1Doc.data()?.followers || [];
+    const followers2 = user2Doc.data()?.followers || [];
+    
+    const mutualFollows = followers1.filter((id: string) => followers2.includes(id));
+    return mutualFollows;
+  } catch (error) {
+    console.error("❌ Erreur getMutualFollows:", error);
+    return [];
   }
 };
