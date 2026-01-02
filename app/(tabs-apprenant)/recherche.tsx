@@ -28,7 +28,7 @@ const MOCK_CREATORS = [
   { id: 'c3', name: 'Sophie Dev', followers: '5k', tag: 'Dev', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150' },
 ];
 
-// --- TYPES (Nettoyé : plus de 'thumb') ---
+// --- TYPES ---
 interface VideoData {
   id: string;
   title: string;
@@ -65,7 +65,6 @@ export default function RechercheScreen() {
             title: data.title || 'Sans titre',
             creator: data.creator || 'Inconnu',
             videoUrl: data.videoUrl || '',
-            // On ne récupère plus d'image ici
             tag: data.category ? String(data.category) : 'Général', 
             description: data.description || ''
           });
@@ -218,8 +217,11 @@ export default function RechercheScreen() {
                       style={styles.textOnlyCard}
                       onPress={() => setSelectedVideo(video)}
                     >
-                      {/* RANG / INDEX */}
-                      <Text style={styles.rank}>#{index + 1}</Text>
+                      {/* --- MODIFICATION ICI --- */}
+                      {/* Le rang #1, #2 ne s'affiche que si la recherche est vide */}
+                      {search === '' && (
+                        <Text style={styles.rank}>#{index + 1}</Text>
+                      )}
                       
                       {/* INFORMATIONS TEXTUELLES */}
                       <View style={styles.videoInfo}>
@@ -238,7 +240,7 @@ export default function RechercheScreen() {
                         </View>
                       </View>
 
-                      {/* PETITE FLÈCHE DISCRÈTE (Pour indiquer que c'est cliquable) */}
+                      {/* PETITE FLÈCHE DISCRÈTE */}
                       <Ionicons name="chevron-forward" size={20} color="#D4D4D8" />
                     </TouchableOpacity>
                   ))
@@ -394,12 +396,11 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
   emptyText: { color: '#999', fontStyle: 'italic', marginTop: 10, textAlign: 'center' },
 
-  // --- NOUVEAU STYLE : CARTE TEXTE SEULEMENT ---
+  // --- STYLE CARTE ---
   textOnlyCard: { 
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', 
     borderRadius: 16, padding: 15, marginBottom: 12, 
     borderWidth: 1, borderColor: '#F3F4F6',
-    // Ombre légère pour le relief
     shadowColor: "#000", shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1
   },
   rank: { fontSize: 18, fontWeight: 'bold', color: '#9333EA', width: 35 },
