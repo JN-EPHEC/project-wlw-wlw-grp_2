@@ -35,7 +35,7 @@ export default function MessagesListScreen() {
       return;
     }
 
-    // S'abonner aux conversations en temps réel
+    // ✅ Exigence ID 279 : S'abonner aux conversations en temps réel
     const unsubscribe = subscribeToConversations((convs) => {
       setConversations(convs);
       setLoading(false);
@@ -44,14 +44,12 @@ export default function MessagesListScreen() {
     return () => unsubscribe();
   }, []);
 
-  // Charger les contacts quand on ouvre le modal
   useEffect(() => {
     if (showNewMessageModal) {
       loadMutualFollowers();
     }
   }, [showNewMessageModal]);
 
-  // Charger les contacts (personnes qui se suivent mutuellement)
   const loadMutualFollowers = async () => {
     setLoadingContacts(true);
     try {
@@ -70,7 +68,6 @@ export default function MessagesListScreen() {
         return;
       }
 
-      // Trouver les followers mutuels
       const mutualFollowers: Contact[] = [];
 
       for (const followedUserId of following) {
@@ -80,14 +77,13 @@ export default function MessagesListScreen() {
           const followedUserData = followedUserDoc.data();
           const theirFollowing = followedUserData.following || [];
 
-          // Si cette personne me suit aussi = mutual
           if (theirFollowing.includes(user.uid)) {
             mutualFollowers.push({
               id: followedUserId,
               name: `${followedUserData.prenom || ''} ${followedUserData.nom || ''}`.trim() || 'Utilisateur',
               avatar: followedUserData.photoURL,
               emoji: followedUserData.profileEmoji || '👤',
-              status: 'En ligne'
+              status: 'En ligne' // TODO: Implémenter la vraie détection (ID 380-382)
             });
           }
         }
@@ -109,6 +105,11 @@ export default function MessagesListScreen() {
     if (!otherUserId) return false;
 
     const otherUserDetails = conv.participantDetails[otherUserId];
+    
+    // Si pas de searchQuery, afficher toutes les conversations
+    if (!searchQuery) return true;
+    
+    // Sinon, filtrer par nom d'utilisateur
     return otherUserDetails?.username?.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
@@ -123,11 +124,13 @@ export default function MessagesListScreen() {
     } as any);
   };
 
+  // ✅ Exigence ID 280, 281 : Créer une nouvelle conversation
   const startNewChat = async (contactId: string) => {
     setCreatingChat(true);
     try {
       const conversationId = await getOrCreateConversation(contactId);
       setShowNewMessageModal(false);
+      setSearchQuery(''); // Réinitialiser la recherche
       openChat(conversationId);
     } catch (error) {
       console.error('Erreur création conversation:', error);
@@ -140,20 +143,24 @@ export default function MessagesListScreen() {
   const formatTime = (timestamp: any) => {
     if (!timestamp) return '';
     
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+    try {
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'À l\'instant';
-    if (diffMins < 60) return `Il y a ${diffMins}min`;
-    if (diffHours < 24) return `Il y a ${diffHours}h`;
-    if (diffDays === 1) return 'Hier';
-    if (diffDays < 7) return `Il y a ${diffDays}j`;
-    
-    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+      if (diffMins < 1) return 'À l\'instant';
+      if (diffMins < 60) return `Il y a ${diffMins}min`;
+      if (diffHours < 24) return `Il y a ${diffHours}h`;
+      if (diffDays === 1) return 'Hier';
+      if (diffDays < 7) return `Il y a ${diffDays}j`;
+      
+      return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    } catch (error) {
+      return '';
+    }
   };
 
   if (loading) {
@@ -167,11 +174,12 @@ export default function MessagesListScreen() {
 
   return (
     <View style={styles.container}>
+      {/* ✅ Exigence ID 377-379 : Bouton retour vers notifications */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#18181B" />
         </TouchableOpacity>
-        <Text style={styles.title}>Message</Text>
+        <Text style={styles.title}>Messages</Text>
         
         <TouchableOpacity onPress={() => setShowNewMessageModal(true)}>
           <Ionicons name="create-outline" size={24} color="#9333EA" />
@@ -214,6 +222,7 @@ export default function MessagesListScreen() {
                 key={conv.id} 
                 style={styles.card} 
                 onPress={() => openChat(conv.id)}
+                activeOpacity={0.7}
               >
                 {otherUser?.profileImage ? (
                   <Image source={{ uri: otherUser.profileImage }} style={styles.avatar} />
@@ -256,10 +265,14 @@ export default function MessagesListScreen() {
             <Text style={styles.emptyText}>
               {searchQuery ? `Aucune discussion trouvée pour "${searchQuery}"` : 'Aucune conversation'}
             </Text>
+            <Text style={styles.emptySubtext}>
+              Commencez à discuter avec vos contacts mutuels
+            </Text>
             <TouchableOpacity 
               style={styles.startChatBtn}
               onPress={() => setShowNewMessageModal(true)}
             >
+              <Ionicons name="add" size={20} color="#FFF" style={{ marginRight: 8 }} />
               <Text style={styles.startChatBtnText}>Démarrer une conversation</Text>
             </TouchableOpacity>
           </View>
@@ -271,12 +284,16 @@ export default function MessagesListScreen() {
         visible={showNewMessageModal}
         transparent
         animationType="slide"
+        onRequestClose={() => setShowNewMessageModal(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Nouveau message</Text>
-              <TouchableOpacity onPress={() => setShowNewMessageModal(false)}>
+              <TouchableOpacity onPress={() => {
+                setShowNewMessageModal(false);
+                setSearchQuery('');
+              }}>
                 <Ionicons name="close" size={24} color="#52525B" />
               </TouchableOpacity>
             </View>
@@ -289,12 +306,14 @@ export default function MessagesListScreen() {
                 placeholderTextColor="#A1A1AA"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                autoFocus
               />
             </View>
 
             {loadingContacts ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#9333EA" />
+                <Text style={styles.loadingText}>Chargement des contacts...</Text>
               </View>
             ) : (
               <ScrollView style={styles.usersList}>
@@ -305,6 +324,7 @@ export default function MessagesListScreen() {
                       style={styles.userItem}
                       onPress={() => startNewChat(contact.id)}
                       disabled={creatingChat}
+                      activeOpacity={0.7}
                     >
                       {contact.avatar ? (
                         <Image source={{ uri: contact.avatar }} style={styles.userAvatar} />
@@ -315,6 +335,7 @@ export default function MessagesListScreen() {
                       )}
                       <View style={{ flex: 1 }}>
                         <Text style={styles.userName}>{contact.name}</Text>
+                        {/* TODO: Implémenter le vrai statut en ligne/hors ligne (ID 380-382) */}
                         <Text style={styles.userStatus}>{contact.status}</Text>
                       </View>
                       <Ionicons name="chevron-forward" size={20} color="#A1A1AA" />
@@ -323,10 +344,13 @@ export default function MessagesListScreen() {
                 ) : (
                   <View style={styles.emptyContacts}>
                     <Ionicons name="people-outline" size={64} color="#E5E7EB" />
+                    <Text style={styles.emptyContactsTitle}>
+                      {searchQuery ? 'Aucun résultat' : 'Aucun contact mutuel'}
+                    </Text>
                     <Text style={styles.emptyContactsText}>
                       {searchQuery 
                         ? `Aucun contact trouvé pour "${searchQuery}"`
-                        : 'Aucun contact mutuel. Suivez des personnes qui vous suivent aussi !'}
+                        : 'Suivez des personnes qui vous suivent aussi pour pouvoir leur envoyer des messages !'}
                     </Text>
                   </View>
                 )}
@@ -363,10 +387,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     justifyContent: 'space-between', 
     borderBottomWidth: 1, 
-    borderBottomColor: '#F3F4F6' 
+    borderBottomColor: '#F3F4F6',
+    backgroundColor: '#FFF',
   },
-  title: { fontSize: 24, fontWeight: 'bold', flex: 1, textAlign: 'center' },
-  searchArea: { padding: 16 },
+  title: { fontSize: 24, fontWeight: 'bold', flex: 1, textAlign: 'center', color: '#18181B' },
+  searchArea: { padding: 16, backgroundColor: '#FFF' },
   searchBar: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -378,7 +403,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB' 
   },
   searchInput: { flex: 1, fontSize: 16, color: '#18181B' },
-  list: { paddingHorizontal: 16 },
+  list: { flex: 1, paddingHorizontal: 16 },
   card: { 
     flexDirection: 'row', 
     alignItems: 'center', 
@@ -387,7 +412,12 @@ const styles = StyleSheet.create({
     borderRadius: 20, 
     marginBottom: 12, 
     borderWidth: 1, 
-    borderColor: '#F3F4F6' 
+    borderColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   avatar: { width: 55, height: 55, borderRadius: 27.5, marginRight: 12 },
   avatarEmoji: {
@@ -407,7 +437,7 @@ const styles = StyleSheet.create({
   },
   name: { fontWeight: 'bold', fontSize: 16, color: '#18181B' },
   time: { fontSize: 12, color: '#71717A' },
-  lastMsg: { color: '#71717A', fontSize: 14 },
+  lastMsg: { color: '#71717A', fontSize: 14, lineHeight: 20 },
   unreadMsg: { 
     fontWeight: '600', 
     color: '#18181B' 
@@ -430,21 +460,35 @@ const styles = StyleSheet.create({
   },
   emptyText: { 
     color: '#71717A', 
-    fontSize: 14, 
+    fontSize: 16, 
     textAlign: 'center',
     marginTop: 16,
-    marginBottom: 24
+    fontWeight: '600',
+  },
+  emptySubtext: {
+    color: '#A1A1AA',
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 24,
   },
   startChatBtn: {
+    flexDirection: 'row',
     backgroundColor: '#9333EA',
     paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#9333EA',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   startChatBtnText: {
     color: '#FFF',
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: 15,
   },
   modalOverlay: {
     flex: 1,
@@ -455,7 +499,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
-    height: '80%',
+    height: '85%',
     paddingTop: 20,
   },
   modalHeader: {
@@ -502,14 +546,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   userAvatar: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
   userAvatarEmoji: {
-    width: 45,
-    height: 45,
-    borderRadius: 22.5,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
@@ -519,24 +563,31 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#18181B',
   },
   userStatus: {
     fontSize: 13,
-    color: '#71717A',
+    color: '#22C55E',
     marginTop: 2,
   },
   emptyContacts: {
-    marginTop: 60,
+    marginTop: 80,
     alignItems: 'center',
     paddingHorizontal: 40,
+  },
+  emptyContactsTitle: {
+    marginTop: 16,
+    fontSize: 18,
+    color: '#18181B',
+    fontWeight: '600',
   },
   emptyContactsText: {
     color: '#71717A',
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: 8,
+    lineHeight: 20,
   },
   creatingOverlay: {
     position: 'absolute',

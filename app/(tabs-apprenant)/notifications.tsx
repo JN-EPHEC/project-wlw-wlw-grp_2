@@ -3,7 +3,7 @@ import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Platform, 
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebaseConfig';
-import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, updateDoc, doc, orderBy } from 'firebase/firestore';
 
 interface Notification {
   id: string;
@@ -17,6 +17,8 @@ interface Notification {
   type?: string;
   read?: boolean;
   createdAt: any;
+  videoId?: string;
+  fromUserId?: string;
 }
 
 export default function NotificationsScreen() {
@@ -39,9 +41,11 @@ export default function NotificationsScreen() {
 
     try {
       // Écouter les notifications en temps réel
+      // ✅ Exigence ID 42 : Tri du plus récent au plus ancien
       const notifQuery = query(
         collection(db, 'notifications'),
-        where('userId', '==', user.uid)
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc') // Plus récent en premier
       );
 
       console.log('✅ Query créée, attente données...');
@@ -58,19 +62,34 @@ export default function NotificationsScreen() {
             const data = docSnap.data();
             console.log('📄 Document:', docSnap.id, data);
             
-            // Transformer les données Firebase vers votre format
+            // ✅ Exigence ID 185, 397 : Format "Nom d'utilisateur" + "action" + "nom de la vidéo"
+            let message = '';
+            if (data.type === 'new_video') {
+              message = 'a publié une nouvelle vidéo';
+            } else if (data.type === 'follow') {
+              message = 'a commencé à vous suivre';
+            } else if (data.type === 'like') {
+              message = 'a aimé votre vidéo';
+            } else if (data.type === 'comment') {
+              message = 'a commenté votre vidéo';
+            } else {
+              message = data.msg || 'notification';
+            }
+            
             notifications.push({
               id: docSnap.id,
               user: data.fromUserName || 'Utilisateur',
               role: data.role || 'Membre',
-              msg: data.type === 'new_video' ? 'a posté une nouvelle vidéo' : data.msg || 'notification',
-              title: data.videoTitle || '',
+              msg: message,
+              title: data.videoTitle || '', // ✅ Nom de la vidéo
               time: formatTime(data.createdAt),
               avatar: data.fromUserAvatar || 'https://via.placeholder.com/150',
               thumb: data.videoThumb || '',
               type: data.type,
               read: data.read || false,
-              createdAt: data.createdAt
+              createdAt: data.createdAt,
+              videoId: data.videoId,
+              fromUserId: data.fromUserId
             });
             
             if (!data.read) unread++;
@@ -97,6 +116,7 @@ export default function NotificationsScreen() {
     }
   }, []);
 
+  // ✅ Exigence ID 40 : Format du temps avec "Il y a + heures/minutes/jours"
   const formatTime = (timestamp: any) => {
     if (!timestamp) return 'récemment';
     
@@ -108,11 +128,16 @@ export default function NotificationsScreen() {
       const diffHours = Math.floor(diffMs / 3600000);
       const diffDays = Math.floor(diffMs / 86400000);
 
+      // Format selon l'exigence ID 40
       if (diffMins < 1) return 'à l\'instant';
-      if (diffMins < 60) return `${diffMins} minutes`;
-      if (diffHours < 24) return `${diffHours} heures`;
-      if (diffDays === 1) return '1 jour';
-      return `${diffDays} jours`;
+      if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''}`;
+      if (diffHours < 24) return `${diffHours} heure${diffHours > 1 ? 's' : ''}`;
+      if (diffDays === 1) return 'hier';
+      if (diffDays === 2) return 'il y a deux jours';
+      if (diffDays < 7) return `${diffDays} jours`;
+      
+      // Au-delà d'une semaine, afficher la date
+      return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
     } catch (error) {
       return 'récemment';
     }
@@ -132,13 +157,14 @@ export default function NotificationsScreen() {
     await markAsRead(notif.id);
     
     // Rediriger selon le type
-    if (notif.type === 'follow') {
+    if (notif.type === 'follow' && notif.fromUserId) {
       // Aller vers le profil du formateur
-      const userData = notifs.find(n => n.id === notif.id);
-      // TODO: récupérer l'ID du formateur et naviguer
-      // router.push(`/profile/${formateurId}` as any);
+      router.push(`/profile/${notif.fromUserId}` as any);
     } else if (notif.type === 'new_video') {
-      // Aller vers la page vidéo ou home pour voir la vidéo
+      // Aller vers la page d'accueil pour voir la vidéo
+      router.push('/(tabs-apprenant)' as any);
+    } else if (notif.type === 'like' || notif.type === 'comment') {
+      // Aller vers la vidéo si possible
       router.push('/(tabs-apprenant)' as any);
     }
   };
@@ -154,8 +180,10 @@ export default function NotificationsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* ✅ Exigence ID 36, 392 : Menu principal accessible */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Notifications</Text>
+        {/* ✅ Exigence ID 38, 393 : Icône bulle de conversation pour accéder aux messages */}
         <TouchableOpacity onPress={() => router.push('/message' as any)} style={styles.iconBtn}>
           {unreadCount > 0 && (
             <View style={styles.msgBadge}>
@@ -168,30 +196,39 @@ export default function NotificationsScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {notifs.length > 0 ? (
+          // ✅ Exigence ID 42 : Notifications du plus récent au plus ancien
           notifs.map((item) => (
             <TouchableOpacity 
               key={item.id} 
               style={[styles.notifCard, !item.read && styles.unreadCard]}
               onPress={() => handleNotificationClick(item)}
+              activeOpacity={0.7}
             >
               <Image source={{ uri: item.avatar }} style={styles.avatar} />
               <View style={styles.notifInfo}>
+                {/* ✅ Exigence ID 185 : Format "Nom d'utilisateur" + "action" + "Temps" */}
                 <Text style={styles.notifUser}>
                   {item.user} <Text style={styles.notifRole}>• {item.role}</Text>
                 </Text>
                 <Text style={styles.notifMsg}>{item.msg}</Text>
-                {item.title && <Text style={styles.notifVideo}>"{item.title}"</Text>}
+                {/* ✅ Exigence ID 397 : Affichage du nom de la vidéo */}
+                {item.title && (
+                  <Text style={styles.notifVideo}>"{item.title}"</Text>
+                )}
+                {/* ✅ Exigence ID 40 : Format du temps */}
                 <Text style={styles.notifTime}>Il y a {item.time}</Text>
               </View>
+              {/* Miniature de la vidéo si disponible */}
               {item.thumb && <Image source={{ uri: item.thumb }} style={styles.thumbnail} />}
             </TouchableOpacity>
           ))
         ) : (
+          // ✅ Exigence ID 41, 187 : Message "Vous êtes à jour !" si aucune notification
           <View style={styles.emptyState}>
-            <Ionicons name="notifications-outline" size={64} color="#E5E7EB" />
-            <Text style={styles.emptyText}>Aucune notification</Text>
+            <Ionicons name="checkmark-circle-outline" size={80} color="#22C55E" />
+            <Text style={styles.emptyTitle}>Vous êtes à jour !</Text>
             <Text style={styles.emptySubtext}>
-              Les nouvelles vidéos apparaîtront ici
+              Les nouvelles vidéos et interactions apparaîtront ici
             </Text>
           </View>
         )}
@@ -249,10 +286,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#F3F4F6'
+    borderColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   unreadCard: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FAF5FF',
     borderColor: '#9333ea',
     borderWidth: 2,
   },
@@ -261,24 +303,37 @@ const styles = StyleSheet.create({
   notifUser: { fontSize: 15, fontWeight: 'bold', color: '#18181B' },
   notifRole: { fontWeight: '400', color: '#71717A', fontSize: 13 },
   notifMsg: { fontSize: 14, color: '#3F3F46', marginTop: 2 },
-  notifVideo: { fontSize: 14, fontWeight: '600', color: '#18181B', marginTop: 4 },
+  notifVideo: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#9333ea', 
+    marginTop: 4,
+    lineHeight: 20,
+  },
   notifTime: { fontSize: 12, color: '#A1A1AA', marginTop: 6 },
-  thumbnail: { width: 70, height: 70, borderRadius: 12, marginLeft: 10 },
+  thumbnail: { 
+    width: 70, 
+    height: 70, 
+    borderRadius: 12, 
+    marginLeft: 10,
+    backgroundColor: '#F3F4F6',
+  },
   emptyState: {
-    marginTop: 100,
+    marginTop: 120,
     alignItems: 'center',
     paddingHorizontal: 40,
   },
-  emptyText: {
-    marginTop: 16,
-    fontSize: 16,
+  emptyTitle: {
+    marginTop: 20,
+    fontSize: 24,
     color: '#18181B',
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   emptySubtext: {
-    marginTop: 8,
-    fontSize: 14,
+    marginTop: 12,
+    fontSize: 15,
     color: '#71717A',
     textAlign: 'center',
+    lineHeight: 22,
   },
 });
