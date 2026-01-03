@@ -61,6 +61,7 @@ export default function PublicProfileScreen() {
   
   // RÔLE & INTERACTIONS
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string>(""); // Stocker le nom de l'utilisateur connecté
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
   
@@ -84,10 +85,14 @@ export default function PublicProfileScreen() {
     if (!id) return;
     setLoading(true);
 
-    // 1. Récupérer mon rôle
+    // 1. Récupérer mon rôle et mon nom
     if (currentUserId) {
         getDoc(doc(db, 'users', currentUserId)).then(snap => {
-            if (snap.exists()) setCurrentUserRole(snap.data().role);
+            if (snap.exists()) {
+              const data = snap.data();
+              setCurrentUserRole(data.role);
+              setCurrentUserName(`${data.prenom} ${data.nom}`); // Récupération du nom
+            }
         });
     }
 
@@ -158,8 +163,11 @@ export default function PublicProfileScreen() {
         await updateDoc(myRef, { following: arrayUnion(profile.uid) });
         await updateDoc(targetRef, { followers: arrayUnion(currentUserId) });
         
-        // --- NOTIFICATION FOLLOW ---
-        await sendNotification(profile.uid, 'follow');
+        // --- NOTIFICATION FOLLOW CORRIGÉE ---
+        await sendNotification(profile.uid, 'follow', {
+          senderName: currentUserName,
+          senderId: currentUserId
+        });
       }
     } catch (error) { Alert.alert("Info", "Action impossible"); }
   };
@@ -184,10 +192,12 @@ export default function PublicProfileScreen() {
               await updateDoc(userRef, { likedVideos: arrayUnion(videoId) });
               await updateDoc(videoRef, { likes: increment(1) });
               
-              // --- NOTIFICATION LIKE ---
+              // --- NOTIFICATION LIKE CORRIGÉE ---
               await sendNotification(selectedVideo.creatorId, 'like', {
                   videoId: videoId,
-                  videoTitle: selectedVideo.title
+                  videoTitle: selectedVideo.title,
+                  senderName: currentUserName,
+                  senderId: currentUserId
               });
           }
       } catch (e) { console.error(e); }
@@ -201,13 +211,14 @@ export default function PublicProfileScreen() {
           const userRef = doc(db, 'users', currentUserId);
           if (isSaved) {
               await updateDoc(userRef, { favorites: arrayRemove(videoId) });
-              // --- NOTIFICATION SAVE (Optionnel, souvent on notifie pas le save) ---
-              // await sendNotification(selectedVideo.creatorId, 'save', { videoId, videoTitle: selectedVideo.title });
           } else {
               await updateDoc(userRef, { favorites: arrayUnion(videoId) });
-              await sendNotification(selectedVideo.creatorId, 'save', { 
+              // --- NOTIFICATION SAVE CORRIGÉE ---
+              await sendNotification(selectedVideo.creatorId, 'save' as any, { 
                   videoId: videoId, 
-                  videoTitle: selectedVideo.title 
+                  videoTitle: selectedVideo.title,
+                  senderName: currentUserName,
+                  senderId: currentUserId
               });
           }
       } catch (e) { console.error(e); }
@@ -219,8 +230,6 @@ export default function PublicProfileScreen() {
       setIsPlaying(true);
       if (currentUserRole !== 'formateur') {
           updateDoc(doc(db, 'videos', video.id), { views: increment(1) }).catch(()=>{});
-          // --- NOTIFICATION VIEW (Attention au spam, à activer avec prudence) ---
-          // await sendNotification(video.creatorId, 'view', { videoId: video.id, videoTitle: video.title });
       }
   };
 
@@ -368,7 +377,6 @@ export default function PublicProfileScreen() {
 
                     {/* DROITE : ACTIONS */}
                     <View style={styles.rightSide}>
-                        {/* Avatar */}
                         <View style={styles.rightAvatarContainer}>
                              <View style={styles.rightAvatarCircle}>
                                 {profile?.photoURL ? (
@@ -382,7 +390,6 @@ export default function PublicProfileScreen() {
                              </View>
                         </View>
 
-                        {/* BOUTONS D'INTERACTION (Visibles car Apprenant) */}
                         {!isViewerFormateur && (
                             <>
                                 <TouchableOpacity style={styles.actionBtn} onPress={handleVideoLike}>
@@ -421,8 +428,8 @@ export default function PublicProfileScreen() {
         <CommentModal 
             visible={showComments} 
             videoId={selectedVideo.id} 
-            creatorId={selectedVideo.creatorId} // ✅ PROPRIÉTÉ AJOUTÉE
-            videoTitle={selectedVideo.title}    // ✅ PROPRIÉTÉ AJOUTÉE
+            creatorId={selectedVideo.creatorId}
+            videoTitle={selectedVideo.title}
             onClose={() => setShowComments(false)} 
         />
       )}
@@ -433,46 +440,31 @@ export default function PublicProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  
-  // Header
   headerWrapper: { marginBottom: 60 },
   headerGradient: { height: 140, paddingTop: 50, paddingHorizontal: 20 },
-  glassIcon: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 20, width: 40 },
+  glassIcon: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 20, width: 40, alignItems:'center', justifyContent:'center' },
   avatarSection: { position: 'absolute', bottom: -40, width: SCREEN_WIDTH, alignItems: 'center' },
   avatarBorder: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#9333ea', justifyContent:'center', alignItems:'center', borderWidth:4, borderColor:'white' },
   avatarImg: { width: '100%', height: '100%', borderRadius: 50 },
   avatarCircle: { width: '100%', height: '100%', borderRadius: 50, backgroundColor:'#9333ea', justifyContent:'center', alignItems:'center' },
   avatarInit: { fontSize: 40, color:'white', fontWeight:'bold' },
-  
   identitySection: { alignItems: 'center', marginTop: 10 },
   name: { fontSize: 22, fontWeight: 'bold', color: '#1F2937' },
   bio: { color: '#666', textAlign: 'center', marginHorizontal: 20, marginVertical: 5 },
   modifyBtn: { marginTop: 10, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: '#9333ea' },
   modifyText: { color: 'white', fontWeight: 'bold' },
-  
   statsRow: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 20 },
   statCard: { alignItems: 'center' },
   statNum: { fontWeight: 'bold', fontSize: 18, color: '#4B5563' },
   statLabel: { color: '#9CA3AF', fontSize: 12 },
-  
-  // GRILLE VIDÉOS
   contentSection: { padding: 0 },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', width: '100%' },
-  videoCard: { 
-    width: ITEM_WIDTH, 
-    height: 180, 
-    marginRight: GRID_SPACING, 
-    marginBottom: GRID_SPACING, 
-    backgroundColor: '#1a1a1a', 
-    position: 'relative'
-  },
+  videoCard: { width: ITEM_WIDTH, height: 180, marginRight: GRID_SPACING, marginBottom: GRID_SPACING, backgroundColor: '#1a1a1a', position: 'relative' },
   videoThumb: { width: '100%', height: '100%' },
   videoThumbPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   pinBadge: { position: 'absolute', top: 5, left: 5, backgroundColor: '#9333ea', padding: 4, borderRadius: 4 },
   playOverlay: { position: 'absolute', bottom: 5, left: 5, flexDirection: 'row', alignItems: 'center', gap: 4 },
   viewsText: { color: 'white', fontSize: 12, fontWeight: 'bold', textShadowColor:'rgba(0,0,0,0.8)', textShadowRadius:2 },
-
-  // PLAYER STYLES
   fullScreenContainer: { flex: 1, backgroundColor: 'black' },
   touchOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   playIconContainer: { opacity: 0.8 },
@@ -480,7 +472,6 @@ const styles = StyleSheet.create({
   progressBarContainer: { position: 'absolute', bottom: 50, left: 0, right: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.3)', zIndex: 40 },
   progressBarBackground: { flex: 1 },
   progressBarFill: { height: '100%', backgroundColor: '#9333ea' },
-  
   leftSide: { position: 'absolute', bottom: 80, left: 20, width: '70%', zIndex: 30 },
   creatorRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
   miniAvatar: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: 'white', marginRight: 10, overflow:'hidden', backgroundColor:'#9333ea', justifyContent:'center', alignItems:'center' },
@@ -488,13 +479,11 @@ const styles = StyleSheet.create({
   creatorName: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   videoTitleFull: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   videoDescFull: { color: '#ddd', fontSize: 14 },
-  
   rightSide: { position: 'absolute', bottom: 100, right: 10, alignItems: 'center', gap: 20, zIndex: 30 },
   rightAvatarContainer: { marginBottom: 15, alignItems: 'center' },
   rightAvatarCircle: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: 'white', justifyContent: 'center', alignItems: 'center', backgroundColor: '#9333ea', overflow:'hidden' },
   avatarSmall: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: 'white' },
   plusIcon: { position: 'absolute', bottom: -10, alignSelf: 'center', width: 22, height: 22, borderRadius: 11, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
-  
   actionBtn: { alignItems: 'center', gap: 4 },
   actionText: { color: 'white', fontSize: 12, fontWeight: 'bold', textShadowColor:'rgba(0,0,0,0.5)', textShadowRadius:2 },
   closePlayerBtn: { position: 'absolute', top: 50, left: 20, padding: 10, zIndex: 50 },
