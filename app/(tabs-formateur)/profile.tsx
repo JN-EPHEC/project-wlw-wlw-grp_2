@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  Image, Dimensions, TextInput, ActivityIndicator, Alert, Modal, RefreshControl, StatusBar
+  Image, Dimensions, TextInput, ActivityIndicator, Alert, Modal, RefreshControl, StatusBar, FlatList, Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,12 +12,12 @@ import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 // ===== IMPORTS FIREBASE =====
 import { auth, db, storage } from '../../firebaseConfig'; 
 import { 
-  doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, serverTimestamp, deleteDoc 
+  doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, serverTimestamp, deleteDoc, arrayUnion, arrayRemove 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { signOut as firebaseSignOut } from 'firebase/auth';
 
-// Import du modal commentaire (assurez-vous que le fichier existe dans components/)
+// Import du modal commentaire
 import CommentModal from '../../components/CommentModal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -71,10 +71,16 @@ export default function ProfileFormateurScreen() {
 
   // --- MODALS STATES ---
   const [showSettings, setShowSettings] = useState(false);
-  const [showVideoOptions, setShowVideoOptions] = useState(false); // Menu 3 points
-  const [showComments, setShowComments] = useState(false); // Commentaires
+  const [showVideoOptions, setShowVideoOptions] = useState(false);
+  const [showComments, setShowComments] = useState(false);
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+
+  // --- PLAYLIST DETAILS & ADD VIDEO STATES ---
+  const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
+  const [selectedPlaylistVideos, setSelectedPlaylistVideos] = useState<CreatorVideo[]>([]);
+  const [showAddVideoModal, setShowAddVideoModal] = useState(false);
+  const [likedVideosList, setLikedVideosList] = useState<CreatorVideo[]>([]);
   
   // Stats
   const totalViews = myVideos.reduce((acc, curr) => acc + (curr.views || 0), 0);
@@ -108,7 +114,6 @@ export default function ProfileFormateurScreen() {
           const vSnapshot = await getDocs(vQuery);
           const videosData = vSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as CreatorVideo));
           
-          // Tri manuel
           videosData.sort((a, b) => {
              if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
              return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
@@ -168,16 +173,28 @@ export default function ProfileFormateurScreen() {
     finally { setIsUploading(false); }
   };
 
-  // --- ACTIONS VIDEO ---
+  // --- HELPER: Fetch videos by IDs ---
+  const fetchVideosByIds = async (videoIds: string[]) => {
+    if (!videoIds || videoIds.length === 0) return [];
+    const videosData: CreatorVideo[] = [];
+    for (const id of videoIds) {
+        try {
+            const vidDoc = await getDoc(doc(db, 'videos', id));
+            if (vidDoc.exists()) {
+                videosData.push({ id: vidDoc.id, ...vidDoc.data() } as CreatorVideo);
+            }
+        } catch (e) { console.log(`Vidéo ${id} introuvable`); }
+    }
+    return videosData;
+  };
 
-  // 1. Ouvrir le lecteur
+  // --- ACTIONS VIDEO ---
   const handleVideoPress = (video: CreatorVideo) => {
     setSelectedVideo(video);
     setShowPlayer(true);
     setIsPlaying(true);
   };
 
-  // 2. Gestion Play/Pause
   const togglePlayPause = async () => {
     if (videoRef.current) {
         if (isPlaying) { await videoRef.current.pauseAsync(); setIsPlaying(false); }
@@ -192,7 +209,6 @@ export default function ProfileFormateurScreen() {
     }
   };
 
-  // 3. Actions Admin (Menu 3 points)
   const togglePinVideo = async () => {
     if (!selectedVideo) return;
     try {
@@ -200,7 +216,6 @@ export default function ProfileFormateurScreen() {
         await updateDoc(doc(db, 'videos', selectedVideo.id), { isPinned: newStatus });
         Alert.alert("Succès", newStatus ? "Vidéo épinglée 📌" : "Vidéo désépinglée");
         setShowVideoOptions(false);
-        // Mise à jour locale
         setSelectedVideo({...selectedVideo, isPinned: newStatus});
         loadProfile();
     } catch (e) { Alert.alert("Erreur", "Action échouée"); }
@@ -214,7 +229,7 @@ export default function ProfileFormateurScreen() {
             try {
                 await deleteDoc(doc(db, 'videos', selectedVideo.id));
                 setShowVideoOptions(false);
-                setShowPlayer(false); // Fermer le lecteur
+                setShowPlayer(false);
                 loadProfile();
             } catch(e) { Alert.alert("Erreur", "Suppression échouée"); }
         }}
@@ -223,15 +238,128 @@ export default function ProfileFormateurScreen() {
 
   // --- PLAYLIST ACTIONS ---
   const createPlaylist = async () => {
-    if (!newPlaylistName.trim()) return;
+    if (!newPlaylistName.trim()) {
+        Alert.alert("Erreur", "Veuillez entrer un nom pour la playlist.");
+        return;
+    }
+    setLoading(true);
     try {
         const user = auth.currentUser;
         if (!user) return;
         await addDoc(collection(db, 'playlists'), {
-            name: newPlaylistName, userId: user.uid, videoIds: [], createdAt: serverTimestamp()
+            name: newPlaylistName,
+            userId: user.uid,
+            videoIds: [],
+            createdAt: serverTimestamp()
         });
-        setNewPlaylistName(''); setShowCreatePlaylist(false); loadProfile();
-    } catch (e) { Alert.alert("Erreur", "Création échouée"); }
+        setNewPlaylistName(''); 
+        setShowCreatePlaylist(false); 
+        await loadProfile(); 
+    } catch (e: any) {
+        Alert.alert("Erreur", e.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  // 1. Ouvrir une playlist
+  const openPlaylist = async (playlist: Playlist) => {
+    setSelectedPlaylist(playlist);
+    const videos = await fetchVideosByIds(playlist.videoIds || []);
+    setSelectedPlaylistVideos(videos);
+  };
+
+  // 2. Supprimer la playlist (CORRIGÉ & ROBUSTE)
+  const deletePlaylist = async () => {
+    console.log("🗑️ Clic suppression playlist");
+    if (!selectedPlaylist) return;
+
+    const performDelete = async () => {
+        try {
+            console.log("🔥 Suppression dans Firestore...");
+            await deleteDoc(doc(db, 'playlists', selectedPlaylist.id));
+            console.log("✅ Playlist supprimée");
+            
+            // Mise à jour locale (Optimistic UI Update)
+            setMyPlaylists(prev => prev.filter(p => p.id !== selectedPlaylist.id));
+            
+            setSelectedPlaylist(null); // Fermer le modal
+        } catch (e: any) {
+            console.error("❌ Erreur suppression :", e);
+            Alert.alert("Erreur", "Impossible de supprimer la playlist : " + e.message);
+        }
+    };
+
+    if (Platform.OS === 'web') {
+        if (confirm("Supprimer cette playlist ?")) {
+            performDelete();
+        }
+    } else {
+        Alert.alert(
+            "Supprimer la playlist",
+            "Êtes-vous sûr ? Cette action est irréversible.",
+            [
+                { text: "Annuler", style: "cancel" },
+                { 
+                    text: "Supprimer", 
+                    style: "destructive", 
+                    onPress: performDelete
+                }
+            ]
+        );
+    }
+  };
+
+  // 3. Charger les vidéos likées
+  const openAddVideoModal = async () => {
+    if (!userProfile?.likedVideos || userProfile.likedVideos.length === 0) {
+        Alert.alert("Info", "Vous n'avez liké aucune vidéo pour le moment.");
+        return;
+    }
+    
+    // Filtrer les doublons
+    const existingIds = selectedPlaylist?.videoIds || [];
+    const candidateIds = userProfile.likedVideos.filter((id: string) => !existingIds.includes(id));
+
+    if (candidateIds.length === 0) {
+        Alert.alert("Info", "Toutes vos vidéos likées sont déjà dans cette playlist.");
+        return;
+    }
+
+    const likedVids = await fetchVideosByIds(candidateIds);
+    setLikedVideosList(likedVids);
+    setShowAddVideoModal(true);
+  };
+
+  // 4. Ajouter une vidéo
+  const addVideoToPlaylist = async (video: CreatorVideo) => {
+    if (!selectedPlaylist) return;
+    try {
+        await updateDoc(doc(db, 'playlists', selectedPlaylist.id), {
+            videoIds: arrayUnion(video.id)
+        });
+        
+        setSelectedPlaylistVideos(prev => [...prev, video]);
+        setLikedVideosList(prev => prev.filter(v => v.id !== video.id));
+        
+        if (likedVideosList.length <= 1) setShowAddVideoModal(false);
+
+    } catch (e) {
+        Alert.alert("Erreur", "Impossible d'ajouter la vidéo");
+    }
+  };
+
+  // 5. Retirer une vidéo
+  const removeVideoFromPlaylist = async (videoId: string) => {
+    if (!selectedPlaylist) return;
+    try {
+        await updateDoc(doc(db, 'playlists', selectedPlaylist.id), {
+            videoIds: arrayRemove(videoId)
+        });
+        setSelectedPlaylistVideos(prev => prev.filter(v => v.id !== videoId));
+    } catch (e) {
+        Alert.alert('Erreur', 'Impossible de retirer la vidéo');
+    }
   };
 
   if (loading || !userProfile) {
@@ -364,7 +492,7 @@ export default function ProfileFormateurScreen() {
                         <Text style={styles.createPlaylistText}>Nouvelle Playlist</Text>
                     </TouchableOpacity>
                     {myPlaylists.map(pl => (
-                        <TouchableOpacity key={pl.id} style={styles.playlistCard}>
+                        <TouchableOpacity key={pl.id} style={styles.playlistCard} onPress={() => openPlaylist(pl)}>
                             <View style={styles.playlistIcon}><Ionicons name="musical-notes" size={24} color="#9333ea" /></View>
                             <View style={{flex:1}}>
                                 <Text style={styles.playlistTitle}>{pl.name}</Text>
@@ -430,7 +558,6 @@ export default function ProfileFormateurScreen() {
 
                     {/* DROITE : ACTIONS DE GESTION */}
                     <View style={styles.rightSide}>
-                        {/* Avatar */}
                         <View style={styles.rightAvatarContainer}>
                             <View style={styles.rightAvatarCircle}>
                                 {userProfile?.photoURL ? (
@@ -441,25 +568,21 @@ export default function ProfileFormateurScreen() {
                             </View>
                         </View>
 
-                        {/* Likes (Vue seulement pour le créateur) */}
                         <View style={styles.actionBtn}>
                             <Ionicons name="heart" size={35} color="white" />
                             <Text style={styles.actionText}>{selectedVideo.likes}</Text>
                         </View>
 
-                        {/* Commentaires (Cliquable pour répondre) */}
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(true)}>
                             <Ionicons name="chatbubble-ellipses" size={35} color="white" />
                             <Text style={styles.actionText}>{selectedVideo.comments || 0}</Text>
                         </TouchableOpacity>
 
-                        {/* Sauvegarder (Icône visuelle) */}
                         <TouchableOpacity style={styles.actionBtn} onPress={()=>Alert.alert("Info", "Vidéo ajoutée à vos archives.")}>
                              <Ionicons name="bookmark" size={35} color="white" />
                              <Text style={styles.actionText}>Sauver</Text>
                         </TouchableOpacity>
 
-                        {/* MENU GESTION (3 POINTS) */}
                         <TouchableOpacity style={styles.actionBtn} onPress={() => setShowVideoOptions(true)}>
                             <Ionicons name="ellipsis-horizontal-circle" size={40} color="white" />
                             <Text style={styles.actionText}>Gérer</Text>
@@ -474,7 +597,7 @@ export default function ProfileFormateurScreen() {
         </View>
       </Modal>
 
-      {/* MODAL COMMENTAIRES (Répondre) */}
+      {/* MODAL COMMENTAIRES */}
       {selectedVideo && (
         <CommentModal 
             visible={showComments} 
@@ -483,13 +606,13 @@ export default function ProfileFormateurScreen() {
         />
       )}
 
-      {/* MODAL OPTIONS (Modifier/Supprimer) */}
+      {/* MODAL OPTIONS VIDÉO */}
       <Modal visible={showVideoOptions} transparent animationType="fade" onRequestClose={() => setShowVideoOptions(false)}>
         <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>Gérer la vidéo</Text>
                 
-                <TouchableOpacity style={styles.modalOption} onPress={() => { setShowVideoOptions(false); /* Navigation vers Edit */ }}>
+                <TouchableOpacity style={styles.modalOption} onPress={() => { setShowVideoOptions(false); }}>
                     <Ionicons name="create-outline" size={24} color="#333" />
                     <Text style={styles.modalOptionText}>Modifier les infos</Text>
                 </TouchableOpacity>
@@ -511,7 +634,7 @@ export default function ProfileFormateurScreen() {
         </View>
       </Modal>
 
-      {/* MODAL SETTINGS (Gardé tel quel) */}
+      {/* MODAL SETTINGS */}
       <Modal visible={showSettings} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowSettings(false)}>
         <View style={styles.settingsContainer}>
             <View style={styles.settingsHeader}>
@@ -536,6 +659,80 @@ export default function ProfileFormateurScreen() {
                     <TouchableOpacity onPress={createPlaylist}><Text style={{color:'#9333ea', fontWeight:'bold'}}>Créer</Text></TouchableOpacity>
                 </View>
             </View>
+        </View>
+      </Modal>
+      
+      <Modal visible={selectedPlaylist !== null} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSelectedPlaylist(null)}>
+        <View style={styles.sheetContainer}>
+            {/* Header avec bouton Poubelle */}
+            <View style={styles.sheetHeader}>
+                <View style={{flexDirection:'row', alignItems:'center'}}>
+                    <TouchableOpacity onPress={() => setSelectedPlaylist(null)} style={{marginRight: 10}}>
+                        <Ionicons name="close" size={24} />
+                    </TouchableOpacity>
+                    <Text style={styles.sheetTitle}>{selectedPlaylist?.name}</Text>
+                </View>
+                {/* BOUTON POUBELLE */}
+                <TouchableOpacity onPress={deletePlaylist} style={styles.deletePlaylistBtn}>
+                    <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                </TouchableOpacity>
+            </View>
+
+            <ScrollView contentContainerStyle={{padding: 20}}>
+                {/* Bouton Ajouter des vidéos */}
+                <TouchableOpacity style={styles.addVideoToPlBtn} onPress={openAddVideoModal}>
+                    <Ionicons name="add-circle" size={24} color="#9333ea" />
+                    <Text style={styles.addVideoToPlText}>Ajouter des vidéos likées</Text>
+                </TouchableOpacity>
+
+                {/* Liste des vidéos */}
+                {selectedPlaylistVideos.length === 0 ? (
+                    <Text style={styles.emptyText}>Playlist vide</Text>
+                ) : (
+                    selectedPlaylistVideos.map(vid => (
+                        <View key={vid.id} style={styles.sheetVideoItem}>
+                            <View style={{width: 60, height: 40, backgroundColor: '#eee', borderRadius: 4, marginRight: 10}} >
+                                {vid.thumbnail && <Image source={{uri:vid.thumbnail}} style={{width:'100%', height:'100%', borderRadius:4}} />}
+                            </View>
+                            <Text style={{flex:1, fontWeight:'600'}} numberOfLines={1}>{vid.title}</Text>
+                            <TouchableOpacity onPress={() => removeVideoFromPlaylist(vid.id)}>
+                                <Ionicons name="remove-circle-outline" size={24} color="#EF4444" />
+                            </TouchableOpacity>
+                        </View>
+                    ))
+                )}
+            </ScrollView>
+        </View>
+      </Modal>
+
+      {/* MODAL SÉLECTION VIDÉOS LIKÉES (AJOUT) */}
+      <Modal visible={showAddVideoModal} animationType="slide" onRequestClose={() => setShowAddVideoModal(false)}>
+        <View style={styles.sheetContainer}>
+            <View style={styles.sheetHeader}>
+                <Text style={styles.sheetTitle}>Ajouter à la playlist</Text>
+                <TouchableOpacity onPress={() => setShowAddVideoModal(false)}><Text style={{color:'#9333ea'}}>Fermer</Text></TouchableOpacity>
+            </View>
+            <FlatList 
+                data={likedVideosList}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{padding: 20}}
+                renderItem={({item}) => (
+                    <TouchableOpacity style={styles.sheetVideoItem} onPress={() => addVideoToPlaylist(item)}>
+                        <View style={{width: 60, height: 40, backgroundColor: '#333', borderRadius: 4, marginRight: 10}}>
+                             {item.thumbnail ? (
+                                <Image source={{uri: item.thumbnail}} style={{width:'100%', height:'100%', borderRadius:4}} />
+                             ) : (
+                                <View style={{flex:1, justifyContent:'center', alignItems:'center'}}><Ionicons name="play" color="white" /></View>
+                             )}
+                        </View>
+                        <View style={{flex:1}}>
+                            <Text style={{fontWeight:'600'}} numberOfLines={1}>{item.title}</Text>
+                            <Text style={{fontSize:12, color:'#777'}}>J'aime</Text>
+                        </View>
+                        <Ionicons name="add-circle-outline" size={28} color="#9333ea" />
+                    </TouchableOpacity>
+                )}
+            />
         </View>
       </Modal>
 
@@ -611,6 +808,7 @@ const styles = StyleSheet.create({
   playlistCount: { fontSize: 12, color: '#9CA3AF' },
 
   emptyState: { padding: 40, alignItems: 'center', width: '100%' },
+  emptyText: { textAlign: 'center', color: '#9CA3AF', marginTop: 20 },
   uploadBtn: { marginTop: 10, backgroundColor: '#9333ea', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
 
   // --- PLAYER STYLES ---
@@ -651,4 +849,13 @@ const styles = StyleSheet.create({
   settingsContainer: { flex: 1, backgroundColor: '#F9FAFB' },
   settingsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, backgroundColor: '#FFF' },
   settingsTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
+
+  // --- PLAYLIST DETAIL SHEET ---
+  sheetContainer: { flex: 1, backgroundColor: '#FFF', marginTop: 60, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderColor: '#F3F4F6', alignItems: 'center' },
+  sheetTitle: { fontSize: 18, fontWeight: 'bold' },
+  deletePlaylistBtn: { padding: 8, backgroundColor: '#FEF2F2', borderRadius: 8 },
+  addVideoToPlBtn: { flexDirection:'row', alignItems:'center', justifyContent:'center', backgroundColor:'#F3E8FF', padding:15, borderRadius:12, marginBottom:20 },
+  addVideoToPlText: { color:'#9333ea', fontWeight:'bold', marginLeft:10 },
+  sheetVideoItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#F9FAFB' },
 });
