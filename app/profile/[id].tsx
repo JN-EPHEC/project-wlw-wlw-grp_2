@@ -15,36 +15,17 @@ import { db, auth } from '../../firebaseConfig';
 import CommentModal from '../../components/CommentModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const COLUMN_COUNT = 3; // 3 colonnes comme sur les réseaux sociaux
+// Pour la grille de vidéos
+const COLUMN_COUNT = 3;
 const GRID_SPACING = 1;
 const ITEM_WIDTH = (SCREEN_WIDTH - (GRID_SPACING * (COLUMN_COUNT - 1))) / COLUMN_COUNT;
 
 // --- TYPES ---
 interface UserData { 
-  uid: string; 
-  prenom: string; 
-  nom: string; 
-  role: 'formateur' | 'apprenant'; 
-  bio?: string; 
-  photoURL?: string; 
-  followers?: string[]; 
-  following?: string[]; 
-  stats?: { videosWatched: number; }; 
+  uid: string; prenom: string; nom: string; role: 'formateur' | 'apprenant'; bio?: string; photoURL?: string; followers?: string[]; following?: string[]; stats?: { videosWatched: number; }; 
 }
-
 interface VideoData { 
-  id: string; 
-  title: string; 
-  videoUrl: string; 
-  thumbnail?: string; 
-  views: number; 
-  likes: number; 
-  comments: number; 
-  description?: string; 
-  creatorId: string; 
-  tags?: string[]; 
-  isPinned?: boolean; 
-  createdAt?: any; 
+  id: string; title: string; videoUrl: string; thumbnail?: string; views: number; likes: number; comments: number; description?: string; creatorId: string; tags?: string[]; isPinned?: boolean; createdAt?: any; 
 }
 
 export default function PublicProfileScreen() {
@@ -56,16 +37,19 @@ export default function PublicProfileScreen() {
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // RÔLE & INTERACTIONS
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
+  
+  // MES INTERACTIONS (Pour la synchro)
   const [myLikedVideos, setMyLikedVideos] = useState<Set<string>>(new Set());
   const [mySavedVideos, setMySavedVideos] = useState<Set<string>>(new Set());
 
+  // PLAYER
   const [showPlayer, setShowPlayer] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<VideoData | null>(null);
   const [showComments, setShowComments] = useState(false);
-  
   const [isPlaying, setIsPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -78,53 +62,45 @@ export default function PublicProfileScreen() {
     if (!id) return;
     setLoading(true);
 
+    // 1. Récupérer mon rôle
     if (currentUserId) {
         getDoc(doc(db, 'users', currentUserId)).then(snap => {
             if (snap.exists()) setCurrentUserRole(snap.data().role);
         });
     }
 
+    // 2. Écouter le profil visité
     const unsubProfile = onSnapshot(doc(db, 'users', id as string), (docSnap) => {
         if (docSnap.exists()) {
             const data = docSnap.data();
             setProfile({
-                uid: id as string,
-                prenom: data.prenom || 'Utilisateur',
-                nom: data.nom || '',
-                role: data.role || 'formateur',
-                bio: data.bio || 'Membre de SwipeSkills',
-                photoURL: data.photoURL || null,
-                followers: data.followers || [],
-                following: data.following || [],
-                stats: data.stats
+                uid: id as string, prenom: data.prenom || 'Utilisateur', nom: data.nom || '', role: data.role || 'formateur', bio: data.bio || 'Membre', photoURL: data.photoURL || null, followers: data.followers || [], following: data.following || [], stats: data.stats
             });
             setFollowersCount(data.followers ? data.followers.length : 0);
         }
         setLoading(false);
     });
 
+    // 3. Écouter mes interactions (Likes/Saves/Follow)
     let unsubMe = () => {};
     if (currentUserId) {
         unsubMe = onSnapshot(doc(db, 'users', currentUserId), (docSnap) => {
             if (docSnap.exists()) {
                 const myData = docSnap.data();
-                const myFollowing = myData.following || [];
-                setIsFollowing(myFollowing.includes(id));
+                setIsFollowing((myData.following || []).includes(id));
                 setMyLikedVideos(new Set(myData.likedVideos || []));
                 setMySavedVideos(new Set(myData.favorites || []));
             }
         });
     }
 
+    // 4. Charger les vidéos
     const loadVideos = async () => {
         try {
             const vQuery = query(collection(db, 'videos'), where('creatorId', '==', id));
             const vSnapshot = await getDocs(vQuery);
             const videosData = vSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as VideoData));
-            videosData.sort((a: any, b: any) => {
-                if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-                return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-            });
+            videosData.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             setVideos(videosData);
         } catch (e) { console.error(e); }
     };
@@ -145,13 +121,19 @@ export default function PublicProfileScreen() {
         await updateDoc(myRef, { following: arrayUnion(profile.uid) });
         await updateDoc(targetRef, { followers: arrayUnion(currentUserId) });
       }
-    } catch (error) { Alert.alert("Erreur", "Impossible de modifier l'abonnement."); }
+    } catch (error) { Alert.alert("Info", "Action impossible"); }
   };
 
+  // --- ACTIONS VIDEO ---
   const handleVideoLike = async () => {
       if (!currentUserId || !selectedVideo) return;
       const videoId = selectedVideo.id;
       const isLiked = myLikedVideos.has(videoId);
+      
+      // Mise à jour optimiste locale
+      const newLikes = isLiked ? selectedVideo.likes - 1 : selectedVideo.likes + 1;
+      setSelectedVideo({...selectedVideo, likes: newLikes});
+
       try {
           const userRef = doc(db, 'users', currentUserId);
           const videoRef = doc(db, 'videos', videoId);
@@ -171,15 +153,10 @@ export default function PublicProfileScreen() {
       const isSaved = mySavedVideos.has(videoId);
       try {
           const userRef = doc(db, 'users', currentUserId);
-          if (isSaved) {
-              await updateDoc(userRef, { favorites: arrayRemove(videoId) });
-          } else {
-              await updateDoc(userRef, { favorites: arrayUnion(videoId) });
-          }
+          if (isSaved) await updateDoc(userRef, { favorites: arrayRemove(videoId) });
+          else await updateDoc(userRef, { favorites: arrayUnion(videoId) });
       } catch (e) { console.error(e); }
   };
-
-  const handleOpenComments = () => { setShowComments(true); };
 
   const openVideo = (video: VideoData) => {
       setSelectedVideo(video);
@@ -208,6 +185,8 @@ export default function PublicProfileScreen() {
   if (!profile) return <View style={styles.center}><Text>Profil introuvable.</Text></View>;
 
   const progressPercentage = duration > 0 ? (progress / duration) * 100 : 0;
+  
+  // VÉRIFICATION DYNAMIQUE DES ÉTATS
   const isVideoLiked = selectedVideo ? myLikedVideos.has(selectedVideo.id) : false;
   const isVideoSaved = selectedVideo ? mySavedVideos.has(selectedVideo.id) : false;
   const isViewerFormateur = currentUserRole === 'formateur';
@@ -224,17 +203,12 @@ export default function PublicProfileScreen() {
             </LinearGradient>
             <View style={styles.avatarSection}>
                 <View style={styles.avatarBorder}>
-                    {profile.photoURL ? (
-                        <Image source={{ uri: profile.photoURL }} style={styles.avatarImg} />
-                    ) : (
-                        <View style={styles.avatarCircle}>
-                            <Text style={styles.avatarInit}>{profile.prenom?.[0]}</Text>
-                        </View>
-                    )}
+                    {profile.photoURL ? <Image source={{ uri: profile.photoURL }} style={styles.avatarImg} /> : <View style={styles.avatarCircle}><Text style={styles.avatarInit}>{profile.prenom?.[0]}</Text></View>}
                 </View>
             </View>
         </View>
 
+        {/* INFOS */}
         <View style={styles.identitySection}>
             <Text style={styles.name}>{profile.prenom} {profile.nom}</Text>
             <Text style={styles.bio}>{profile.bio}</Text>
@@ -247,40 +221,28 @@ export default function PublicProfileScreen() {
             )}
         </View>
 
+        {/* STATS */}
         <View style={styles.statsRow}>
             <View style={styles.statCard}><Text style={styles.statNum}>{totalViews}</Text><Text style={styles.statLabel}>Vues</Text></View>
             <View style={styles.statCard}><Text style={styles.statNum}>{totalLikes} ❤️</Text><Text style={styles.statLabel}>J'aime</Text></View>
             <View style={styles.statCard}><Text style={styles.statNum}>{videos.length}</Text><Text style={styles.statLabel}>Vidéos</Text></View>
         </View>
 
-        {/* --- SECTION VIDÉOS CORRIGÉE --- */}
+        {/* GRILLE VIDÉOS (AMÉLIORÉE) */}
         <View style={styles.contentSection}>
             <View style={styles.gridContainer}>
                 {videos.map((video) => (
                     <TouchableOpacity key={video.id} style={styles.videoCard} onPress={() => openVideo(video)}>
-                        {/* AFFICHER MINIATURE SI DISPO, SINON PLACEHOLDER GRIS */}
                         {video.thumbnail ? (
-                            <Image 
-                                source={{ uri: video.thumbnail }} 
-                                style={styles.videoThumb} 
-                                resizeMode="cover"
-                            />
+                            <Image source={{ uri: video.thumbnail }} style={styles.videoThumb} resizeMode="cover" />
                         ) : (
                             <View style={styles.videoThumbPlaceholder}>
-                                <Ionicons name="videocam-outline" size={24} color="rgba(255,255,255,0.5)" />
+                                <Ionicons name="videocam" size={24} color="rgba(255,255,255,0.5)" />
                             </View>
                         )}
-
-                        {/* ICÔNE ÉPINGLÉ */}
-                        {video.isPinned && (
-                            <View style={styles.pinBadge}>
-                                <Ionicons name="pricetag" size={10} color="white" />
-                            </View>
-                        )}
-
-                        {/* OVERLAY PLAY POUR MIEUX VOIR */}
+                        {/* Surcouche Play + Vues pour bien montrer que c'est une vidéo */}
                         <View style={styles.playOverlay}>
-                            <Ionicons name="play" size={14} color="white" />
+                            <Ionicons name="play" size={12} color="white" />
                             <Text style={styles.viewsText}>{video.views}</Text>
                         </View>
                     </TouchableOpacity>
@@ -289,7 +251,7 @@ export default function PublicProfileScreen() {
         </View>
       </ScrollView>
 
-      {/* MODAL PLAYER */}
+      {/* MODAL PLAYER (STYLE HOME) */}
       <Modal visible={showPlayer && selectedVideo !== null} animationType="slide" transparent={false} onRequestClose={() => setShowPlayer(false)}>
         <View style={styles.fullScreenContainer}>
             <StatusBar hidden />
@@ -320,22 +282,30 @@ export default function PublicProfileScreen() {
 
                     {/* GAUCHE : INFOS */}
                     <View style={styles.leftSide}>
+                        <View style={styles.creatorRow}>
+                            <View style={styles.miniAvatar}>
+                                {profile?.photoURL ? <Image source={{uri: profile.photoURL}} style={styles.avatarSmall} /> : <Text style={styles.miniAvatarText}>{profile?.prenom?.[0]}</Text>}
+                            </View>
+                            <Text style={styles.creatorName}>@{profile?.prenom} {profile?.nom}</Text>
+                        </View>
                         <Text style={styles.videoTitleFull}>{selectedVideo.title}</Text>
                         <Text style={styles.videoDescFull} numberOfLines={2}>{selectedVideo.description}</Text>
                     </View>
 
-                    {/* DROITE : ACTIONS */}
+                    {/* DROITE : ACTIONS (Identiques Home) */}
                     <View style={styles.rightSide}>
+                        {/* Avatar + Check/Plus */}
                         <View style={styles.rightAvatarContainer}>
-                             {profile?.photoURL ? (
-                                <Image source={{uri: profile.photoURL}} style={styles.avatarSmall} />
-                             ) : (
-                                <View style={styles.avatarSmallPlaceholder}>
-                                    <Text style={{color:'white', fontWeight:'bold'}}>{profile?.prenom?.[0]}</Text>
-                                </View>
-                             )}
+                             <View style={styles.rightAvatarCircle}>
+                                {profile?.photoURL ? <Image source={{uri: profile.photoURL}} style={{width:'100%', height:'100%'}} /> : <Text style={{color:'white', fontWeight:'bold'}}>{profile?.prenom?.[0]}</Text>}
+                             </View>
+                             {/* Toujours le check car on est sur le profil */}
+                             <View style={[styles.plusIcon, {backgroundColor:'#10B981'}]}>
+                                <Ionicons name="checkmark" size={12} color="white" />
+                             </View>
                         </View>
 
+                        {/* BOUTONS D'INTERACTION (Visibles car Apprenant) */}
                         {!isViewerFormateur && (
                             <>
                                 <TouchableOpacity style={styles.actionBtn} onPress={handleVideoLike}>
@@ -343,13 +313,19 @@ export default function PublicProfileScreen() {
                                     <Text style={styles.actionText}>{selectedVideo.likes}</Text>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity style={styles.actionBtn} onPress={handleOpenComments}>
+                                <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(true)}>
                                     <Ionicons name="chatbubble-ellipses" size={35} color="white" />
                                     <Text style={styles.actionText}>{selectedVideo.comments || 0}</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity style={styles.actionBtn} onPress={handleVideoSave}>
                                     <Ionicons name={isVideoSaved ? "bookmark" : "bookmark-outline"} size={35} color={isVideoSaved ? "#FBA31A" : "white"} />
+                                    <Text style={styles.actionText}>{isVideoSaved ? "Enregistré" : "Sauver"}</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity style={styles.actionBtn} onPress={()=>Alert.alert("Partage", "Lien copié !")}>
+                                    <Ionicons name="share-social" size={35} color="white" />
+                                    <Text style={styles.actionText}>Partager</Text>
                                 </TouchableOpacity>
                             </>
                         )}
@@ -363,6 +339,7 @@ export default function PublicProfileScreen() {
         </View>
       </Modal>
 
+      {/* MODAL COMMENTAIRES */}
       {!isViewerFormateur && selectedVideo && (
         <CommentModal visible={showComments} videoId={selectedVideo.id} onClose={() => setShowComments(false)} />
       )}
@@ -374,6 +351,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
+  // Header
   headerWrapper: { marginBottom: 60 },
   headerGradient: { height: 140, paddingTop: 50, paddingHorizontal: 20 },
   glassIcon: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 20, width: 40 },
@@ -384,7 +362,7 @@ const styles = StyleSheet.create({
   avatarInit: { fontSize: 40, color:'white', fontWeight:'bold' },
   
   identitySection: { alignItems: 'center', marginTop: 10 },
-  name: { fontSize: 22, fontWeight: 'bold' },
+  name: { fontSize: 22, fontWeight: 'bold', color: '#1F2937' },
   bio: { color: '#666', textAlign: 'center', marginHorizontal: 20, marginVertical: 5 },
   modifyBtn: { marginTop: 10, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 20, backgroundColor: '#9333ea' },
   modifyText: { color: 'white', fontWeight: 'bold' },
@@ -394,36 +372,23 @@ const styles = StyleSheet.create({
   statNum: { fontWeight: 'bold', fontSize: 18, color: '#4B5563' },
   statLabel: { color: '#9CA3AF', fontSize: 12 },
   
+  // GRILLE VIDÉOS AMÉLIORÉE
   contentSection: { padding: 0 },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', width: '100%' },
-  
-  // STYLE DE LA VIGNETTE (CARRÉ NOIR CORRIGÉ)
   videoCard: { 
     width: ITEM_WIDTH, 
-    height: 180, // Hauteur fixe pour uniformité
+    height: 180, // Hauteur fixe
     marginRight: GRID_SPACING, 
     marginBottom: GRID_SPACING, 
-    backgroundColor: '#1a1a1a', // Gris très foncé (moins dur que noir pur)
-    position: 'relative',
-    overflow: 'hidden'
+    backgroundColor: '#1a1a1a', // Fond sombre
+    position: 'relative'
   },
   videoThumb: { width: '100%', height: '100%' },
-  videoThumbPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#333' },
-  
-  pinBadge: { position: 'absolute', top: 5, left: 5, backgroundColor: '#9333ea', padding: 4, borderRadius: 4 },
-  
-  // OVERLAY EN BAS DE CHAQUE VIDEO
-  playOverlay: { 
-    position: 'absolute', 
-    bottom: 5, 
-    left: 5, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 4 
-  },
+  videoThumbPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  playOverlay: { position: 'absolute', bottom: 5, left: 5, flexDirection: 'row', alignItems: 'center', gap: 4 },
   viewsText: { color: 'white', fontSize: 12, fontWeight: 'bold', textShadowColor:'rgba(0,0,0,0.8)', textShadowRadius:2 },
 
-  // PLAYER
+  // PLAYER STYLES (Identique Home)
   fullScreenContainer: { flex: 1, backgroundColor: 'black' },
   touchOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   playIconContainer: { opacity: 0.8 },
@@ -433,15 +398,20 @@ const styles = StyleSheet.create({
   progressBarFill: { height: '100%', backgroundColor: '#9333ea' },
   
   leftSide: { position: 'absolute', bottom: 80, left: 20, width: '70%', zIndex: 30 },
+  creatorRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  miniAvatar: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: 'white', marginRight: 10, overflow:'hidden', backgroundColor:'#9333ea', justifyContent:'center', alignItems:'center' },
+  miniAvatarText: { color:'white', fontWeight:'bold' },
+  creatorName: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   videoTitleFull: { color: 'white', fontWeight: 'bold', fontSize: 16 },
   videoDescFull: { color: '#ddd', fontSize: 14 },
   
   rightSide: { position: 'absolute', bottom: 100, right: 10, alignItems: 'center', gap: 20, zIndex: 30 },
   rightAvatarContainer: { marginBottom: 15, alignItems: 'center' },
+  rightAvatarCircle: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: 'white', justifyContent: 'center', alignItems: 'center', backgroundColor: '#9333ea', overflow:'hidden' },
   avatarSmall: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: 'white' },
-  avatarSmallPlaceholder: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#9333ea', borderWidth: 2, borderColor: 'white', justifyContent:'center', alignItems:'center' },
+  plusIcon: { position: 'absolute', bottom: -10, alignSelf: 'center', width: 22, height: 22, borderRadius: 11, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
   
-  actionBtn: { alignItems: 'center' },
-  actionText: { color: 'white', fontSize: 12, fontWeight: 'bold' },
+  actionBtn: { alignItems: 'center', gap: 4 },
+  actionText: { color: 'white', fontSize: 12, fontWeight: 'bold', textShadowColor:'rgba(0,0,0,0.5)', textShadowRadius:2 },
   closePlayerBtn: { position: 'absolute', top: 50, left: 20, padding: 10, zIndex: 50 },
 });
