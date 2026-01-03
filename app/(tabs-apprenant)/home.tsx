@@ -362,11 +362,14 @@ export default function HomeScreen() {
         })}
       </ScrollView>
 
-      {/* MODAL COMMENTAIRES */}
+     {/* MODAL COMMENTAIRES DANS HOME APPRENANT */}
       {selectedVideoId && (
         <CommentModal 
             visible={showComments} 
             videoId={selectedVideoId} 
+            // On récupère le créateur et le titre depuis la liste des vidéos
+            creatorId={videos.find(v => v.id === selectedVideoId)?.creatorId || ''}
+            videoTitle={videos.find(v => v.id === selectedVideoId)?.title || 'Vidéo'}
             onClose={() => setShowComments(false)} 
         />
       )}

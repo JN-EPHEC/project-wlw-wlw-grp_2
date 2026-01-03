@@ -12,20 +12,42 @@ import {
   arrayUnion, arrayRemove, increment, onSnapshot, getDoc 
 } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
+
+// Import du modal et du service de notification
 import CommentModal from '../../components/CommentModal';
+import { sendNotification } from '../../app/utils/notificationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-// Pour la grille de vidéos
 const COLUMN_COUNT = 3;
 const GRID_SPACING = 1;
 const ITEM_WIDTH = (SCREEN_WIDTH - (GRID_SPACING * (COLUMN_COUNT - 1))) / COLUMN_COUNT;
 
 // --- TYPES ---
 interface UserData { 
-  uid: string; prenom: string; nom: string; role: 'formateur' | 'apprenant'; bio?: string; photoURL?: string; followers?: string[]; following?: string[]; stats?: { videosWatched: number; }; 
+  uid: string; 
+  prenom: string; 
+  nom: string; 
+  role: 'formateur' | 'apprenant'; 
+  bio?: string; 
+  photoURL?: string; 
+  followers?: string[]; 
+  following?: string[]; 
+  stats?: { videosWatched: number; }; 
 }
+
 interface VideoData { 
-  id: string; title: string; videoUrl: string; thumbnail?: string; views: number; likes: number; comments: number; description?: string; creatorId: string; tags?: string[]; isPinned?: boolean; createdAt?: any; 
+  id: string; 
+  title: string; 
+  videoUrl: string; 
+  thumbnail?: string; 
+  views: number; 
+  likes: number; 
+  comments: number; 
+  description?: string; 
+  creatorId: string; 
+  tags?: string[]; 
+  isPinned?: boolean; 
+  createdAt?: any; 
 }
 
 export default function PublicProfileScreen() {
@@ -74,7 +96,15 @@ export default function PublicProfileScreen() {
         if (docSnap.exists()) {
             const data = docSnap.data();
             setProfile({
-                uid: id as string, prenom: data.prenom || 'Utilisateur', nom: data.nom || '', role: data.role || 'formateur', bio: data.bio || 'Membre', photoURL: data.photoURL || null, followers: data.followers || [], following: data.following || [], stats: data.stats
+                uid: id as string, 
+                prenom: data.prenom || 'Utilisateur', 
+                nom: data.nom || '', 
+                role: data.role || 'formateur', 
+                bio: data.bio || 'Membre', 
+                photoURL: data.photoURL || null, 
+                followers: data.followers || [], 
+                following: data.following || [], 
+                stats: data.stats
             });
             setFollowersCount(data.followers ? data.followers.length : 0);
         }
@@ -100,7 +130,13 @@ export default function PublicProfileScreen() {
             const vQuery = query(collection(db, 'videos'), where('creatorId', '==', id));
             const vSnapshot = await getDocs(vQuery);
             const videosData = vSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as VideoData));
-            videosData.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            
+            // Tri : épinglées d'abord, puis par date
+            videosData.sort((a, b) => {
+                if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+                return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+            });
+            
             setVideos(videosData);
         } catch (e) { console.error(e); }
     };
@@ -114,12 +150,16 @@ export default function PublicProfileScreen() {
     try {
       const myRef = doc(db, 'users', currentUserId);
       const targetRef = doc(db, 'users', profile.uid);
+      
       if (isFollowing) {
         await updateDoc(myRef, { following: arrayRemove(profile.uid) });
         await updateDoc(targetRef, { followers: arrayRemove(currentUserId) });
       } else {
         await updateDoc(myRef, { following: arrayUnion(profile.uid) });
         await updateDoc(targetRef, { followers: arrayUnion(currentUserId) });
+        
+        // --- NOTIFICATION FOLLOW ---
+        await sendNotification(profile.uid, 'follow');
       }
     } catch (error) { Alert.alert("Info", "Action impossible"); }
   };
@@ -143,6 +183,12 @@ export default function PublicProfileScreen() {
           } else {
               await updateDoc(userRef, { likedVideos: arrayUnion(videoId) });
               await updateDoc(videoRef, { likes: increment(1) });
+              
+              // --- NOTIFICATION LIKE ---
+              await sendNotification(selectedVideo.creatorId, 'like', {
+                  videoId: videoId,
+                  videoTitle: selectedVideo.title
+              });
           }
       } catch (e) { console.error(e); }
   };
@@ -153,8 +199,17 @@ export default function PublicProfileScreen() {
       const isSaved = mySavedVideos.has(videoId);
       try {
           const userRef = doc(db, 'users', currentUserId);
-          if (isSaved) await updateDoc(userRef, { favorites: arrayRemove(videoId) });
-          else await updateDoc(userRef, { favorites: arrayUnion(videoId) });
+          if (isSaved) {
+              await updateDoc(userRef, { favorites: arrayRemove(videoId) });
+              // --- NOTIFICATION SAVE (Optionnel, souvent on notifie pas le save) ---
+              // await sendNotification(selectedVideo.creatorId, 'save', { videoId, videoTitle: selectedVideo.title });
+          } else {
+              await updateDoc(userRef, { favorites: arrayUnion(videoId) });
+              await sendNotification(selectedVideo.creatorId, 'save', { 
+                  videoId: videoId, 
+                  videoTitle: selectedVideo.title 
+              });
+          }
       } catch (e) { console.error(e); }
   };
 
@@ -164,6 +219,8 @@ export default function PublicProfileScreen() {
       setIsPlaying(true);
       if (currentUserRole !== 'formateur') {
           updateDoc(doc(db, 'videos', video.id), { views: increment(1) }).catch(()=>{});
+          // --- NOTIFICATION VIEW (Attention au spam, à activer avec prudence) ---
+          // await sendNotification(video.creatorId, 'view', { videoId: video.id, videoTitle: video.title });
       }
   };
 
@@ -186,7 +243,6 @@ export default function PublicProfileScreen() {
 
   const progressPercentage = duration > 0 ? (progress / duration) * 100 : 0;
   
-  // VÉRIFICATION DYNAMIQUE DES ÉTATS
   const isVideoLiked = selectedVideo ? myLikedVideos.has(selectedVideo.id) : false;
   const isVideoSaved = selectedVideo ? mySavedVideos.has(selectedVideo.id) : false;
   const isViewerFormateur = currentUserRole === 'formateur';
@@ -203,7 +259,13 @@ export default function PublicProfileScreen() {
             </LinearGradient>
             <View style={styles.avatarSection}>
                 <View style={styles.avatarBorder}>
-                    {profile.photoURL ? <Image source={{ uri: profile.photoURL }} style={styles.avatarImg} /> : <View style={styles.avatarCircle}><Text style={styles.avatarInit}>{profile.prenom?.[0]}</Text></View>}
+                    {profile.photoURL ? (
+                        <Image source={{ uri: profile.photoURL }} style={styles.avatarImg} />
+                    ) : (
+                        <View style={styles.avatarCircle}>
+                            <Text style={styles.avatarInit}>{profile.prenom?.[0]}</Text>
+                        </View>
+                    )}
                 </View>
             </View>
         </View>
@@ -228,7 +290,7 @@ export default function PublicProfileScreen() {
             <View style={styles.statCard}><Text style={styles.statNum}>{videos.length}</Text><Text style={styles.statLabel}>Vidéos</Text></View>
         </View>
 
-        {/* GRILLE VIDÉOS (AMÉLIORÉE) */}
+        {/* GRILLE VIDÉOS */}
         <View style={styles.contentSection}>
             <View style={styles.gridContainer}>
                 {videos.map((video) => (
@@ -240,7 +302,13 @@ export default function PublicProfileScreen() {
                                 <Ionicons name="videocam" size={24} color="rgba(255,255,255,0.5)" />
                             </View>
                         )}
-                        {/* Surcouche Play + Vues pour bien montrer que c'est une vidéo */}
+                        
+                        {video.isPinned && (
+                            <View style={styles.pinBadge}>
+                                <Ionicons name="pricetag" size={10} color="white" />
+                            </View>
+                        )}
+
                         <View style={styles.playOverlay}>
                             <Ionicons name="play" size={12} color="white" />
                             <Text style={styles.viewsText}>{video.views}</Text>
@@ -251,7 +319,7 @@ export default function PublicProfileScreen() {
         </View>
       </ScrollView>
 
-      {/* MODAL PLAYER (STYLE HOME) */}
+      {/* MODAL PLAYER */}
       <Modal visible={showPlayer && selectedVideo !== null} animationType="slide" transparent={false} onRequestClose={() => setShowPlayer(false)}>
         <View style={styles.fullScreenContainer}>
             <StatusBar hidden />
@@ -269,7 +337,9 @@ export default function PublicProfileScreen() {
                     />
                     
                     <TouchableOpacity activeOpacity={1} onPress={togglePlayPause} style={styles.touchOverlay}>
-                        {!isPlaying && <View style={styles.playIconContainer}><Ionicons name="play" size={80} color="rgba(255,255,255,0.6)" /></View>}
+                        {!isPlaying && (
+                            <View style={styles.playIconContainer}><Ionicons name="play" size={80} color="rgba(255,255,255,0.6)" /></View>
+                        )}
                     </TouchableOpacity>
 
                     <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={styles.gradientOverlay} />
@@ -284,7 +354,11 @@ export default function PublicProfileScreen() {
                     <View style={styles.leftSide}>
                         <View style={styles.creatorRow}>
                             <View style={styles.miniAvatar}>
-                                {profile?.photoURL ? <Image source={{uri: profile.photoURL}} style={styles.avatarSmall} /> : <Text style={styles.miniAvatarText}>{profile?.prenom?.[0]}</Text>}
+                                {profile?.photoURL ? (
+                                    <Image source={{uri: profile.photoURL}} style={styles.avatarSmall} />
+                                ) : (
+                                    <Text style={styles.miniAvatarText}>{profile?.prenom?.[0]}</Text>
+                                )}
                             </View>
                             <Text style={styles.creatorName}>@{profile?.prenom} {profile?.nom}</Text>
                         </View>
@@ -292,14 +366,17 @@ export default function PublicProfileScreen() {
                         <Text style={styles.videoDescFull} numberOfLines={2}>{selectedVideo.description}</Text>
                     </View>
 
-                    {/* DROITE : ACTIONS (Identiques Home) */}
+                    {/* DROITE : ACTIONS */}
                     <View style={styles.rightSide}>
-                        {/* Avatar + Check/Plus */}
+                        {/* Avatar */}
                         <View style={styles.rightAvatarContainer}>
                              <View style={styles.rightAvatarCircle}>
-                                {profile?.photoURL ? <Image source={{uri: profile.photoURL}} style={{width:'100%', height:'100%'}} /> : <Text style={{color:'white', fontWeight:'bold'}}>{profile?.prenom?.[0]}</Text>}
+                                {profile?.photoURL ? (
+                                    <Image source={{uri: profile.photoURL}} style={{width:'100%', height:'100%'}} />
+                                ) : (
+                                    <Text style={{color:'white', fontWeight:'bold'}}>{profile?.prenom?.[0]}</Text>
+                                )}
                              </View>
-                             {/* Toujours le check car on est sur le profil */}
                              <View style={[styles.plusIcon, {backgroundColor:'#10B981'}]}>
                                 <Ionicons name="checkmark" size={12} color="white" />
                              </View>
@@ -339,9 +416,15 @@ export default function PublicProfileScreen() {
         </View>
       </Modal>
 
-      {/* MODAL COMMENTAIRES */}
+      {/* MODAL COMMENTAIRES CORRIGÉ */}
       {!isViewerFormateur && selectedVideo && (
-        <CommentModal visible={showComments} videoId={selectedVideo.id} onClose={() => setShowComments(false)} />
+        <CommentModal 
+            visible={showComments} 
+            videoId={selectedVideo.id} 
+            creatorId={selectedVideo.creatorId} // ✅ PROPRIÉTÉ AJOUTÉE
+            videoTitle={selectedVideo.title}    // ✅ PROPRIÉTÉ AJOUTÉE
+            onClose={() => setShowComments(false)} 
+        />
       )}
     </View>
   );
@@ -372,23 +455,24 @@ const styles = StyleSheet.create({
   statNum: { fontWeight: 'bold', fontSize: 18, color: '#4B5563' },
   statLabel: { color: '#9CA3AF', fontSize: 12 },
   
-  // GRILLE VIDÉOS AMÉLIORÉE
+  // GRILLE VIDÉOS
   contentSection: { padding: 0 },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', width: '100%' },
   videoCard: { 
     width: ITEM_WIDTH, 
-    height: 180, // Hauteur fixe
+    height: 180, 
     marginRight: GRID_SPACING, 
     marginBottom: GRID_SPACING, 
-    backgroundColor: '#1a1a1a', // Fond sombre
+    backgroundColor: '#1a1a1a', 
     position: 'relative'
   },
   videoThumb: { width: '100%', height: '100%' },
   videoThumbPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  pinBadge: { position: 'absolute', top: 5, left: 5, backgroundColor: '#9333ea', padding: 4, borderRadius: 4 },
   playOverlay: { position: 'absolute', bottom: 5, left: 5, flexDirection: 'row', alignItems: 'center', gap: 4 },
   viewsText: { color: 'white', fontSize: 12, fontWeight: 'bold', textShadowColor:'rgba(0,0,0,0.8)', textShadowRadius:2 },
 
-  // PLAYER STYLES (Identique Home)
+  // PLAYER STYLES
   fullScreenContainer: { flex: 1, backgroundColor: 'black' },
   touchOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   playIconContainer: { opacity: 0.8 },
