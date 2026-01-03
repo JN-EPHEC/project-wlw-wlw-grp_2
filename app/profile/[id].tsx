@@ -1,522 +1,381 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, ActivityIndicator, Dimensions, Share, Modal } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, 
+  Image, Dimensions, ActivityIndicator, Alert, Modal, StatusBar
+} from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { doc, getDoc, collection, query, where, getDocs, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { 
+  doc, getDoc, collection, query, where, getDocs, updateDoc, 
+  arrayUnion, arrayRemove, increment, onSnapshot 
+} from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const VIDEO_SIZE = (SCREEN_WIDTH - 48) / 2 - 6;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-interface CreatorData {
+// --- TYPES ---
+interface UserData {
   uid: string;
-  firstName: string;
-  lastName: string;
-  email: string;
+  prenom: string;
+  nom: string;
   role: 'formateur' | 'apprenant';
   bio?: string;
-  profileImage?: string;
-  coverImage?: string;
+  photoURL?: string;
   followers?: string[];
   following?: string[];
-  interests?: string[];
-  createdAt?: any;
-  stats?: {
-    videosWatched: number;
-    streak: number;
-    totalMinutes: number;
-  };
-  badges?: string[];
+  stats?: { videosWatched: number; }; 
 }
 
 interface VideoData {
   id: string;
   title: string;
-  thumbnailUrl?: string;
   videoUrl: string;
+  thumbnail?: string;
   views: number;
   likes: number;
+  comments: number;
+  description?: string;
   creatorId: string;
+  tags?: string[];
+  isPinned?: boolean;
+  createdAt?: any;
 }
 
-const BADGES_DATA = [
-  { id: 'first_video', name: 'Première Vidéo', icon: '🎬', description: 'A regardé sa première vidéo' },
-  { id: 'streak_7', name: 'Série 7 jours', icon: '🔥', description: '7 jours consécutifs' },
-  { id: 'learner_10', name: '10 Vidéos', icon: '📚', description: 'A regardé 10 vidéos' },
-];
-
-export default function ProfilePage() {
-  const params = useLocalSearchParams();
-  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+export default function PublicProfileScreen() {
+  const { id } = useLocalSearchParams();
   const router = useRouter();
-  const [creator, setCreator] = useState<CreatorData | null>(null);
+  const currentUserId = auth.currentUser?.uid;
+
+  // --- ÉTATS ---
+  const [profile, setProfile] = useState<UserData | null>(null);
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [loading, setLoading] = useState(true);
+  
   const [isFollowing, setIsFollowing] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
-  const [activeTab, setActiveTab] = useState<'videos' | 'popular' | 'badges' | 'activity'>('videos');
-  const [showShareModal, setShowShareModal] = useState(false);
-  const currentUser = auth.currentUser;
+  
+  const [activeTab, setActiveTab] = useState('videos');
+
+  // Player
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState<VideoData | null>(null);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const videoRef = useRef<Video>(null);
+
+  const totalViews = videos.reduce((acc, curr) => acc + (curr.views || 0), 0);
+  const totalLikes = videos.reduce((acc, curr) => acc + (curr.likes || 0), 0);
 
   useEffect(() => {
-    if (id) {
-      loadCreatorProfile();
-      loadCreatorVideos();
-    }
-  }, [id]);
+    if (!id) return;
+    console.log("--- INIT PROFILE PAGE ---");
+    console.log("ID Visité:", id);
+    console.log("Mon ID:", currentUserId);
 
-  const loadCreatorProfile = async () => {
-    try {
-      if (!id) return;
+    setLoading(true);
 
-      const creatorDoc = await getDoc(doc(db, 'users', id));
-      if (creatorDoc.exists()) {
-        const data = creatorDoc.data() as Omit<CreatorData, 'uid'>;
-        setCreator({ 
-          ...data, 
-          uid: id,
-          role: data.role || 'apprenant',
-          stats: data.stats || { videosWatched: 0, streak: 0, totalMinutes: 0 },
-          badges: data.badges || [],
-          interests: data.interests || []
-        });
-        setFollowersCount(data.followers?.length || 0);
-        setActiveTab(data.role === 'formateur' ? 'videos' : 'badges');
+    // 1. ÉCOUTE TEMPS RÉEL DU PROFIL
+    const unsubProfile = onSnapshot(doc(db, 'users', id as string), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            console.log("🔥 DONNÉES FIREBASE REÇUES:", data); // REGARDEZ ICI DANS LE TERMINAL
+            
+            // Vérification stricte du tableau followers
+            const followersArray = Array.isArray(data.followers) ? data.followers : [];
+            console.log("Nombre d'abonnés brut:", followersArray.length);
 
-        if (currentUser) {
-          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setIsFollowing(userData.following?.includes(id) || false);
-          }
+            const userData: UserData = {
+                uid: id as string,
+                prenom: data.prenom || 'Utilisateur',
+                nom: data.nom || '',
+                role: data.role || 'formateur',
+                bio: data.bio || 'Membre de SwipeSkills',
+                photoURL: data.photoURL || null,
+                followers: followersArray,
+                following: data.following || [],
+                stats: data.stats
+            };
+            setProfile(userData);
+            
+            // MISE À JOUR DU COMPTEUR
+            setFollowersCount(followersArray.length);
+        } else {
+            console.log("Document introuvable !");
         }
-      }
-      setLoading(false);
-    } catch (error) {
-      console.error('Error loading creator profile:', error);
-      setLoading(false);
+        setLoading(false);
+    }, (error) => {
+        console.error("ERREUR SNAPSHOT:", error);
+        Alert.alert("Erreur", "Problème de permission Firebase.");
+    });
+
+    // 2. VÉRIFICATION SI JE SUIS ABONNÉ
+    let unsubMe = () => {};
+    if (currentUserId) {
+        unsubMe = onSnapshot(doc(db, 'users', currentUserId), (docSnap) => {
+            if (docSnap.exists()) {
+                const myData = docSnap.data();
+                const myFollowing = Array.isArray(myData.following) ? myData.following : [];
+                const amIFollowing = myFollowing.includes(id);
+                console.log("Est-ce que je le suis ?", amIFollowing);
+                setIsFollowing(amIFollowing);
+            }
+        });
     }
-  };
 
-  const loadCreatorVideos = async () => {
-    try {
-      if (!id) return;
+    // 3. CHARGEMENT VIDÉOS
+    const loadVideos = async () => {
+        try {
+            const vQuery = query(collection(db, 'videos'), where('creatorId', '==', id));
+            const vSnapshot = await getDocs(vQuery);
+            const videosData = vSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as VideoData));
+            videosData.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+            setVideos(videosData);
+        } catch (e) { console.error(e); }
+    };
+    loadVideos();
 
-      const videosQuery = query(
-        collection(db, 'videos'),
-        where('creatorId', '==', id)
-      );
+    return () => {
+        unsubProfile();
+        unsubMe();
+    };
+  }, [id, currentUserId]);
 
-      const snapshot = await getDocs(videosQuery);
-      const videosData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as VideoData[];
 
-      setVideos(videosData);
-    } catch (error) {
-      console.error('Error loading creator videos:', error);
-    }
-  };
-
+  // --- FONCTION DE DEBUG ABONNEMENT ---
   const handleFollow = async () => {
-    try {
-      if (!currentUser || !id) return;
+    if (!currentUserId) return Alert.alert("Erreur", "Non connecté");
+    if (!profile) return;
 
-      if (isFollowing) {
-        await updateDoc(doc(db, 'users', currentUser.uid), {
-          following: arrayRemove(id)
-        });
-        await updateDoc(doc(db, 'users', id), {
-          followers: arrayRemove(currentUser.uid)
-        });
-        setIsFollowing(false);
-        setFollowersCount(prev => prev - 1);
+    // 1. OPTIMISTIC UI (On change tout de suite)
+    const newStatus = !isFollowing;
+    setIsFollowing(newStatus);
+    setFollowersCount(prev => newStatus ? prev + 1 : prev - 1);
+
+    console.log("Tentative de mise à jour Firebase...");
+    console.log("Action:", newStatus ? "S'abonner" : "Se désabonner");
+
+    try {
+      const myRef = doc(db, 'users', currentUserId);
+      const targetRef = doc(db, 'users', profile.uid);
+
+      // On utilise Promise.all pour faire les 2 écritures en parallèle
+      if (newStatus) {
+        // S'abonner
+        await Promise.all([
+            updateDoc(myRef, { following: arrayUnion(profile.uid) }),
+            updateDoc(targetRef, { followers: arrayUnion(currentUserId) })
+        ]);
       } else {
-        await updateDoc(doc(db, 'users', currentUser.uid), {
-          following: arrayUnion(id)
-        });
-        await updateDoc(doc(db, 'users', id), {
-          followers: arrayUnion(currentUser.uid)
-        });
-        setIsFollowing(true);
-        setFollowersCount(prev => prev + 1);
+        // Se désabonner
+        await Promise.all([
+            updateDoc(myRef, { following: arrayRemove(profile.uid) }),
+            updateDoc(targetRef, { followers: arrayRemove(currentUserId) })
+        ]);
       }
-    } catch (error) {
-      console.error('Error toggling follow:', error);
+      console.log("✅ SUCCÈS FIREBASE !");
+    } catch (error: any) { 
+        console.error("❌ ERREUR FIREBASE:", error);
+        Alert.alert("Erreur Technique", error.message);
+        
+        // Rollback en cas d'erreur
+        setIsFollowing(!newStatus);
+        setFollowersCount(prev => newStatus ? prev - 1 : prev + 1);
     }
   };
 
-  const handleShare = async () => {
-    try {
-      await Share.share({
-        message: `Découvrez le profil de ${creator?.firstName} ${creator?.lastName} sur SwipeSkills !`,
-      });
-      setShowShareModal(false);
-    } catch (error) {
-      console.error('Error sharing:', error);
+  // ... (Le reste des fonctions player : openVideo, togglePlayPause, etc. reste identique)
+  const openVideo = (video: VideoData) => {
+      setSelectedVideo(video);
+      setShowPlayer(true);
+      setIsPlaying(true);
+      updateDoc(doc(db, 'videos', video.id), { views: increment(1) }).catch(()=>{});
+  };
+
+  const togglePlayPause = async () => {
+    if (videoRef.current) {
+      if (isPlaying) { await videoRef.current.pauseAsync(); setIsPlaying(false); }
+      else { await videoRef.current.playAsync(); setIsPlaying(true); }
     }
   };
 
-  const handleVideoPress = (video: VideoData) => {
-    console.log('Video clicked:', video.id);
+  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      setProgress(status.positionMillis);
+      setDuration(status.durationMillis || 0);
+    }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#7459F0" />
-      </View>
-    );
-  }
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#9333ea" /></View>;
+  if (!profile) return <View style={styles.center}><Text>Profil introuvable.</Text></View>;
 
-  if (!creator) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Profil introuvable</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Retour</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  const totalLikes = videos.reduce((sum, video) => sum + (video.likes || 0), 0);
-  const totalViews = videos.reduce((sum, video) => sum + (video.views || 0), 0);
-  const earnedBadges = BADGES_DATA.filter(b => creator.badges?.includes(b.id));
-  const level = Math.ceil(((creator.stats?.videosWatched || 0) / 10) + 1);
-  const progressToNextLevel = ((creator.stats?.videosWatched || 0) % 10) * 10;
-  const sortedVideos = [...videos].sort((a, b) => b.likes - a.likes);
+  const progressPercentage = duration > 0 ? (progress / duration) * 100 : 0;
 
   return (
-    <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Cover with decorative circles */}
-        <View style={styles.coverContainer}>
-          <LinearGradient colors={['#7459F0', '#9D8DF1']} style={styles.coverGradient}>
-            <View style={styles.decorativeCircles}>
-              <View style={[styles.circle, styles.circle1]} />
-              <View style={[styles.circle, styles.circle2]} />
-              <View style={[styles.circle, styles.circle3]} />
+    <View style={{flex: 1, backgroundColor: '#FFFFFF'}}>
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        
+        {/* HEADER */}
+        <View style={styles.headerWrapper}>
+            <LinearGradient colors={['#9333ea', '#7e22ce']} style={styles.headerGradient}>
+                <View style={styles.topIcons}>
+                    <TouchableOpacity style={styles.glassIcon} onPress={() => router.back()}>
+                        <Ionicons name="arrow-back" size={20} color="white" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.glassIcon}>
+                        <Ionicons name="share-social-outline" size={20} color="white" />
+                    </TouchableOpacity>
+                </View>
+            </LinearGradient>
+
+            <View style={styles.avatarSection}>
+                <View style={styles.avatarContainer}>
+                    <View style={styles.avatarBorder}>
+                        {profile.photoURL ? (
+                            <Image source={{ uri: profile.photoURL }} style={styles.avatarImg} />
+                        ) : (
+                            <View style={styles.avatarCircle}>
+                                <Text style={styles.avatarInit}>{profile.prenom?.[0] || 'U'}</Text>
+                            </View>
+                        )}
+                    </View>
+                    <View style={styles.roleBadge}>
+                        <Ionicons name="school" size={10} color="#9333ea" />
+                        <Text style={styles.roleText}>
+                            {profile.role === 'formateur' ? 'Formateur' : 'Apprenant'}
+                        </Text>
+                    </View>
+                </View>
             </View>
-          </LinearGradient>
-          
-          <View style={styles.coverActions}>
-            <TouchableOpacity style={styles.coverButton} onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={20} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.coverButton} onPress={() => setShowShareModal(true)}>
-              <Ionicons name="share-social" size={20} color="#fff" />
-            </TouchableOpacity>
-          </View>
         </View>
 
-        <View style={styles.profileSection}>
-          {/* Avatar with role badge */}
-          <View style={styles.avatarWrapper}>
-            <View style={styles.avatarContainer}>
-              {creator.profileImage ? (
-                <Image source={{ uri: creator.profileImage }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>
-                    {creator.firstName?.charAt(0)}{creator.lastName?.charAt(0)}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <View style={[styles.roleBadge, creator.role === 'formateur' ? styles.formateurBadge : styles.apprenantBadge]}>
-              <Ionicons 
-                name={creator.role === 'formateur' ? 'school' : 'trophy'} 
-                size={12} 
-                color={creator.role === 'formateur' ? '#7459F0' : '#FB923C'} 
-              />
-              <Text style={[styles.roleBadgeText, creator.role === 'formateur' ? styles.formateurText : styles.apprenantText]}>
-                {creator.role === 'formateur' ? 'Formateur' : 'Apprenant'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Name and Follow button */}
-          <View style={styles.nameRow}>
-            <View style={styles.nameContainer}>
-              <Text style={styles.name}>{creator.firstName} {creator.lastName}</Text>
-              {creator.role === 'apprenant' && (
-                <Text style={styles.level}>Niveau {level}</Text>
-              )}
-            </View>
+        {/* INFOS */}
+        <View style={styles.identitySection}>
+            <Text style={styles.name}>{profile.prenom} {profile.nom}</Text>
+            <Text style={styles.bio}>{profile.bio}</Text>
             
-            {currentUser?.uid !== id && (
-              <TouchableOpacity
-                style={[styles.followButton, isFollowing && styles.followingButton]}
-                onPress={handleFollow}
-              >
-                <Ionicons 
-                  name={isFollowing ? 'checkmark' : 'person-add'} 
-                  size={16} 
-                  color={isFollowing ? '#7459F0' : '#fff'} 
-                />
-                <Text style={[styles.followButtonText, isFollowing && styles.followingButtonText]}>
-                  {isFollowing ? 'Abonné' : 'Suivre'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Bio */}
-          {creator.bio && <Text style={styles.bio}>{creator.bio}</Text>}
-
-          {/* Member since */}
-          {creator.createdAt && (
-            <Text style={styles.memberSince}>
-              Membre depuis {new Date(creator.createdAt.toDate ? creator.createdAt.toDate() : creator.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}
+            {/* COMPTEUR */}
+            <Text style={{color:'#6B7280', fontSize:12, marginTop:4}}>
+                <Text style={{fontWeight:'bold', color:'#333'}}>{followersCount}</Text> Abonnés
             </Text>
-          )}
-
-          {/* Stats - Different for formateur vs apprenant */}
-          <View style={styles.statsGrid}>
-            {creator.role === 'formateur' ? (
-              <>
-                <View style={styles.statCard}>
-                  <Text style={[styles.statNumber, { color: '#7459F0' }]}>{videos.length}</Text>
-                  <Text style={styles.statLabel}>Vidéos</Text>
-                </View>
-                <View style={styles.statCard}>
-                  <Text style={[styles.statNumber, { color: '#FB923C' }]}>
-                    {totalLikes >= 1000 ? `${(totalLikes / 1000).toFixed(1)}k` : totalLikes}
-                  </Text>
-                  <Text style={styles.statLabel}>J'aime</Text>
-                </View>
-                <View style={styles.statCard}>
-                  <Text style={[styles.statNumber, { color: '#3B82F6' }]}>
-                    {totalViews >= 1000 ? `${(totalViews / 1000).toFixed(1)}k` : totalViews}
-                  </Text>
-                  <Text style={styles.statLabel}>Vues</Text>
-                </View>
-              </>
-            ) : (
-              <>
-                <View style={styles.statCard}>
-                  <Text style={[styles.statNumber, { color: '#7459F0' }]}>{creator.stats?.videosWatched || 0}</Text>
-                  <Text style={styles.statLabel}>Vues</Text>
-                </View>
-                <View style={styles.statCard}>
-                  <Text style={[styles.statNumber, { color: '#FB923C' }]}>{creator.stats?.streak || 0} 🔥</Text>
-                  <Text style={styles.statLabel}>Série</Text>
-                </View>
-                <View style={styles.statCard}>
-                  <Text style={[styles.statNumber, { color: '#3B82F6' }]}>{earnedBadges.length}</Text>
-                  <Text style={styles.statLabel}>Badges</Text>
-                </View>
-              </>
-            )}
-          </View>
-
-          {/* Interests */}
-          {creator.interests && creator.interests.length > 0 && (
-            <View style={styles.interestsContainer}>
-              {creator.interests.map((interest, index) => (
-                <View key={index} style={styles.interestTag}>
-                  <Text style={styles.interestText}>#{interest}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* Tabs */}
-          <View style={styles.tabsContainer}>
-            <View style={styles.tabsList}>
-              {creator.role === 'formateur' ? (
-                <>
-                  <TouchableOpacity 
-                    style={[styles.tab, activeTab === 'videos' && styles.tabActive]}
-                    onPress={() => setActiveTab('videos')}
-                  >
-                    <Text style={styles.tabEmoji}>🎬</Text>
-                    <Text style={[styles.tabText, activeTab === 'videos' && styles.tabTextActive]}>
-                      Vidéos ({videos.length})
+            
+            {/* BOUTON SUIVRE */}
+            {currentUserId !== profile.uid && (
+                <TouchableOpacity 
+                    style={[styles.modifyBtn, isFollowing && {backgroundColor:'#E5E7EB', borderColor:'#D1D5DB'}]} 
+                    onPress={handleFollow}
+                >
+                    <Ionicons name={isFollowing ? "checkmark" : "person-add-outline"} size={16} color={isFollowing ? "#374151" : "#9333ea"} />
+                    <Text style={[styles.modifyText, isFollowing && {color:'#374151'}]}>
+                        {isFollowing ? "Abonné" : "S'abonner"}
                     </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.tab, activeTab === 'popular' && styles.tabActive]}
-                    onPress={() => setActiveTab('popular')}
-                  >
-                    <Text style={styles.tabEmoji}>🔥</Text>
-                    <Text style={[styles.tabText, activeTab === 'popular' && styles.tabTextActive]}>
-                      Populaires
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <TouchableOpacity 
-                    style={[styles.tab, activeTab === 'badges' && styles.tabActive]}
-                    onPress={() => setActiveTab('badges')}
-                  >
-                    <Text style={styles.tabEmoji}>🏆</Text>
-                    <Text style={[styles.tabText, activeTab === 'badges' && styles.tabTextActive]}>
-                      Badges ({earnedBadges.length})
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.tab, activeTab === 'activity' && styles.tabActive]}
-                    onPress={() => setActiveTab('activity')}
-                  >
-                    <Text style={styles.tabEmoji}>📊</Text>
-                    <Text style={[styles.tabText, activeTab === 'activity' && styles.tabTextActive]}>
-                      Activité
-                    </Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </View>
-
-          {/* Tab Content */}
-          <View style={styles.tabContent}>
-            {/* Videos Tab - Formateur */}
-            {creator.role === 'formateur' && activeTab === 'videos' && (
-              <View style={styles.videosGrid}>
-                {videos.map((video) => (
-                  <TouchableOpacity
-                    key={video.id}
-                    style={styles.videoCard}
-                    onPress={() => handleVideoPress(video)}
-                  >
-                    {video.thumbnailUrl ? (
-                      <Image source={{ uri: video.thumbnailUrl }} style={styles.videoThumbnail} />
-                    ) : (
-                      <View style={styles.videoPlaceholder}>
-                        <Ionicons name="play-circle" size={40} color="#7459F0" />
-                      </View>
-                    )}
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.8)']}
-                      style={styles.videoGradient}
-                    />
-                    <View style={styles.videoInfo}>
-                      <Text style={styles.videoTitle} numberOfLines={2}>{video.title}</Text>
-                      <View style={styles.videoStats}>
-                        <Ionicons name="heart" size={12} color="#fff" />
-                        <Text style={styles.videoStatText}>{video.likes}</Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
+                </TouchableOpacity>
             )}
-
-            {/* Popular Tab - Formateur */}
-            {creator.role === 'formateur' && activeTab === 'popular' && (
-              <View style={styles.videosGrid}>
-                {sortedVideos.map((video) => (
-                  <TouchableOpacity
-                    key={video.id}
-                    style={styles.videoCard}
-                    onPress={() => handleVideoPress(video)}
-                  >
-                    {video.thumbnailUrl ? (
-                      <Image source={{ uri: video.thumbnailUrl }} style={styles.videoThumbnail} />
-                    ) : (
-                      <View style={styles.videoPlaceholder}>
-                        <Ionicons name="play-circle" size={40} color="#7459F0" />
-                      </View>
-                    )}
-                    <LinearGradient
-                      colors={['transparent', 'rgba(0,0,0,0.8)']}
-                      style={styles.videoGradient}
-                    />
-                    <View style={styles.videoInfo}>
-                      <Text style={styles.videoTitle} numberOfLines={2}>{video.title}</Text>
-                      <Text style={styles.videoStatText}>🔥 {video.likes} likes</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Badges Tab - Apprenant */}
-            {creator.role === 'apprenant' && activeTab === 'badges' && (
-              <View style={styles.badgesContainer}>
-                {earnedBadges.length > 0 ? (
-                  <View style={styles.badgesGrid}>
-                    {earnedBadges.map((badge) => (
-                      <View key={badge.id} style={styles.badgeCard}>
-                        <Text style={styles.badgeIcon}>{badge.icon}</Text>
-                        <Text style={styles.badgeName}>{badge.name}</Text>
-                        <Text style={styles.badgeDescription}>{badge.description}</Text>
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <View style={styles.emptyState}>
-                    <Text style={styles.emptyIcon}>🌱</Text>
-                    <Text style={styles.emptyTitle}>Aucun badge débloqué</Text>
-                    <Text style={styles.emptySubtitle}>Cet apprenant commence son voyage</Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Activity Tab - Apprenant */}
-            {creator.role === 'apprenant' && activeTab === 'activity' && (
-              <View style={styles.activityContainer}>
-                <View style={styles.activityCard}>
-                  <View style={styles.activityHeader}>
-                    <Text style={styles.activityEmoji}>⏱️</Text>
-                    <Text style={styles.activityTitle}>Temps d'apprentissage</Text>
-                  </View>
-                  <View style={styles.activityContent}>
-                    <Text style={styles.activityNumber}>{creator.stats?.totalMinutes || 0}</Text>
-                    <Text style={styles.activityLabel}>minutes totales</Text>
-                  </View>
-                </View>
-
-                <View style={styles.activityCard}>
-                  <View style={styles.activityHeader}>
-                    <Text style={styles.activityEmoji}>🎓</Text>
-                    <Text style={styles.activityTitle}>Progression</Text>
-                  </View>
-                  <View style={styles.progressBarContainer}>
-                    <View style={styles.progressBarBackground}>
-                      <View style={[styles.progressBarFill, { width: `${progressToNextLevel}%` }]} />
-                    </View>
-                    <Text style={styles.progressText}>
-                      En route vers le niveau {level + 1}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            )}
-          </View>
         </View>
+
+        {/* STATS */}
+        <View style={styles.statsRow}>
+            <View style={styles.statCard}><Text style={styles.statNum}>{totalViews}</Text><Text style={styles.statLabel}>Vues</Text></View>
+            <View style={styles.statCard}><Text style={styles.statNum}>{totalLikes} ❤️</Text><Text style={styles.statLabel}>J'aime</Text></View>
+            <View style={styles.statCard}><Text style={styles.statNum}>{videos.length}</Text><Text style={styles.statLabel}>Vidéos</Text></View>
+        </View>
+
+        {/* TABS */}
+        <View style={styles.tabBar}>
+            <TouchableOpacity style={[styles.tab, activeTab === 'videos' && styles.activeTab]}>
+                <Text style={[styles.tabLabel, activeTab === 'videos' && styles.activeLabel]}>🎬 Vidéos</Text>
+            </TouchableOpacity>
+        </View>
+
+        {/* CONTENU */}
+        <View style={styles.contentSection}>
+            {profile.role === 'formateur' ? (
+                <View style={styles.gridContainer}>
+                    {videos.length === 0 ? (
+                        <View style={styles.emptyCard}><Text style={styles.emptyText}>Aucune vidéo publiée.</Text></View>
+                    ) : (
+                        videos.map((video) => (
+                            <TouchableOpacity key={video.id} style={[styles.videoCard, video.isPinned && styles.videoCardPinned]} onPress={() => openVideo(video)}>
+                                <View style={styles.videoThumb}>
+                                    {video.thumbnail ? (
+                                        <Image source={{ uri: video.thumbnail }} style={styles.thumbImage} resizeMode="cover" />
+                                    ) : (
+                                        <View style={[styles.center, {backgroundColor:'#333'}]}><Ionicons name="play-circle" size={30} color="white" /></View>
+                                    )}
+                                    {video.isPinned && <View style={styles.pinBadge}><Ionicons name="pricetag" size={10} color="white" /></View>}
+                                    <View style={styles.overlayBottomRight}>
+                                        <Ionicons name="play" size={10} color="white" />
+                                        <Text style={styles.overlayTextSm}>{video.views}</Text>
+                                    </View>
+                                </View>
+                                <View style={styles.videoInfoBlock}>
+                                    <Text numberOfLines={1} style={styles.videoTitle}>{video.title}</Text>
+                                </View>
+                            </TouchableOpacity>
+                        ))
+                    )}
+                </View>
+            ) : (
+                <View style={styles.emptyCard}><Text style={styles.emptyText}>Profil Apprenant</Text></View>
+            )}
+        </View>
+        <View style={{height: 50}} />
       </ScrollView>
 
-      {/* Share Modal */}
-      <Modal
-        visible={showShareModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowShareModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Partager le profil</Text>
-              <TouchableOpacity onPress={() => setShowShareModal(false)}>
-                <Ionicons name="close" size={24} color="#000" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.modalSubtitle}>Partagez le profil de {creator.firstName} {creator.lastName}</Text>
-            
-            <TouchableOpacity style={styles.shareOption} onPress={handleShare}>
-              <View style={styles.shareIconContainer}>
-                <Ionicons name="share-social" size={20} color="#7459F0" />
-              </View>
-              <Text style={styles.shareOptionText}>Partager le profil</Text>
-            </TouchableOpacity>
-          </View>
+      {/* PLAYER MODAL */}
+      <Modal visible={showPlayer && selectedVideo !== null} animationType="slide" transparent={false} onRequestClose={() => setShowPlayer(false)}>
+        <View style={styles.fullScreenPlayerContainer}>
+            <StatusBar hidden />
+            {selectedVideo && (
+                <>
+                    <TouchableOpacity activeOpacity={1} onPress={togglePlayPause} style={styles.videoWrapper}>
+                        <Video
+                            ref={videoRef}
+                            source={{ uri: selectedVideo.videoUrl }}
+                            style={StyleSheet.absoluteFill}
+                            resizeMode={ResizeMode.COVER}
+                            shouldPlay={true}
+                            isLooping
+                            useNativeControls={false}
+                            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+                        />
+                        {!isPlaying && (
+                            <View style={styles.playPauseIcon}><Ionicons name="play" size={80} color="rgba(255,255,255,0.8)" /></View>
+                        )}
+                    </TouchableOpacity>
+
+                    <LinearGradient colors={['transparent', 'rgba(0,0,0,0.9)']} style={styles.playerGradient}>
+                        <View style={styles.progressBarContainer}>
+                            <View style={styles.progressBarBackground}>
+                                <View style={[styles.progressBarFill, { width: `${progressPercentage}%` }]} />
+                            </View>
+                        </View>
+
+                        <View style={styles.playerInfoRow}>
+                            <View style={{flex: 1, marginRight: 20}}>
+                                <View style={styles.creatorRow}>
+                                    <View style={styles.miniAvatar}><Text style={styles.miniAvatarText}>{profile?.prenom[0]}</Text></View>
+                                    <Text style={styles.creatorName}>@{profile?.prenom} {profile?.nom}</Text>
+                                </View>
+                                <Text style={styles.playerTitle}>{selectedVideo.title}</Text>
+                                <Text style={styles.playerDesc} numberOfLines={2}>{selectedVideo.description}</Text>
+                            </View>
+
+                            <View style={styles.playerActions}>
+                                <View style={styles.actionBtn}><Ionicons name="heart" size={32} color="white" /><Text style={styles.actionText}>{selectedVideo.likes}</Text></View>
+                                <View style={styles.actionBtn}><Ionicons name="chatbubble-ellipses" size={32} color="white" /><Text style={styles.actionText}>{selectedVideo.comments || 0}</Text></View>
+                                <View style={styles.actionBtn}><Ionicons name="share-social" size={32} color="white" /><Text style={styles.actionText}>Partager</Text></View>
+                            </View>
+                        </View>
+                    </LinearGradient>
+
+                    <TouchableOpacity onPress={() => setShowPlayer(false)} style={styles.closePlayerBtn}>
+                        <Ionicons name="close" size={30} color="white" />
+                    </TouchableOpacity>
+                </>
+            )}
         </View>
       </Modal>
     </View>
@@ -524,487 +383,63 @@ export default function ProfilePage() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 32,
-  },
-  errorText: {
-    color: '#000',
-    fontSize: 18,
-    marginBottom: 24,
-  },
-  backButton: {
-    backgroundColor: '#7459F0',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  coverContainer: {
-    height: 160,
-    position: 'relative',
-  },
-  coverGradient: {
-    width: '100%',
-    height: '100%',
-  },
-  decorativeCircles: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-  },
-  circle: {
-    position: 'absolute',
-    borderRadius: 1000,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  circle1: {
-    width: 120,
-    height: 120,
-    top: 30,
-    left: 50,
-  },
-  circle2: {
-    width: 160,
-    height: 160,
-    bottom: 20,
-    right: -30,
-  },
-  circle3: {
-    width: 80,
-    height: 80,
-    top: 20,
-    right: 200,
-  },
-  coverActions: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  coverButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileSection: {
-    paddingHorizontal: 24,
-    marginTop: -60,
-  },
-  avatarWrapper: {
-    position: 'relative',
-    alignSelf: 'flex-start',
-  },
-  avatarContainer: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
-    borderWidth: 4,
-    borderColor: '#fff',
-    backgroundColor: '#f4f4f5',
-    overflow: 'hidden',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#7459F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  roleBadge: {
-    position: 'absolute',
-    bottom: -8,
-    right: -8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  formateurBadge: {
-    backgroundColor: '#EDE9FE',
-  },
-  apprenantBadge: {
-    backgroundColor: '#FED7AA',
-  },
-  roleBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  formateurText: {
-    color: '#7459F0',
-  },
-  apprenantText: {
-    color: '#FB923C',
-  },
-  nameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginTop: 16,
-  },
-  nameContainer: {
-    flex: 1,
-  },
-  name: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#18181b',
-  },
-  level: {
-    fontSize: 12,
-    color: '#71717a',
-    marginTop: 2,
-  },
-  followButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#7459F0',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  followingButton: {
-    backgroundColor: '#e4e4e7',
-  },
-  followButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  followingButtonText: {
-    color: '#52525b',
-  },
-  bio: {
-    fontSize: 14,
-    color: '#52525b',
-    lineHeight: 20,
-    marginTop: 8,
-  },
-  memberSince: {
-    fontSize: 12,
-    color: '#a1a1aa',
-    marginTop: 8,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 24,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#71717a',
-    marginTop: 4,
-  },
-  interestsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 24,
-  },
-  interestTag: {
-    backgroundColor: '#f4f4f5',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  interestText: {
-    fontSize: 14,
-    color: '#52525b',
-  },
-  tabsContainer: {
-    marginTop: 32,
-  },
-  tabsList: {
-    flexDirection: 'row',
-    backgroundColor: '#f4f4f5',
-    borderRadius: 8,
-    padding: 4,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'column',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    borderRadius: 6,
-    gap: 4,
-  },
-  tabActive: {
-    backgroundColor: '#fff',
-  },
-  tabEmoji: {
-    fontSize: 16,
-  },
-  tabText: {
-    fontSize: 12,
-    color: '#71717a',
-  },
-  tabTextActive: {
-    color: '#18181b',
-    fontWeight: '600',
-  },
-  tabContent: {
-    marginTop: 24,
-  },
-  videosGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  videoCard: {
-    width: VIDEO_SIZE,
-    height: VIDEO_SIZE * 1.6,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-    position: 'relative',
-  },
-  videoThumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-  videoPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  videoGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '50%',
-  },
-  videoInfo: {
-    position: 'absolute',
-    bottom: 8,
-    left: 8,
-    right: 8,
-  },
-  videoTitle: {
-    color: '#fff',
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  videoStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  videoStatText: {
-    color: '#fff',
-    fontSize: 12,
-  },
-  badgesContainer: {
-    flex: 1,
-  },
-  badgesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  badgeCard: {
-    width: (SCREEN_WIDTH - 60) / 2,
-    backgroundColor: '#FAF5FF',
-    borderWidth: 1,
-    borderColor: '#E9D5FF',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  badgeIcon: {
-    fontSize: 36,
-    marginBottom: 8,
-  },
-  badgeName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B21A8',
-    marginBottom: 4,
-  },
-  badgeDescription: {
-    fontSize: 12,
-    color: '#9333EA',
-    textAlign: 'center',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 48,
-    backgroundColor: '#fafafa',
-    borderRadius: 12,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    color: '#52525b',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#a1a1aa',
-  },
-  activityContainer: {
-    gap: 16,
-  },
-  activityCard: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-    borderRadius: 12,
-    padding: 16,
-  },
-  activityHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  activityEmoji: {
-    fontSize: 20,
-  },
-  activityTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#18181b',
-  },
-  activityContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  activityNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#18181b',
-  },
-  activityLabel: {
-    fontSize: 14,
-    color: '#71717a',
-    marginBottom: 4,
-  },
-  progressBarContainer: {
-    gap: 8,
-  },
-  progressBarBackground: {
-    width: '100%',
-    height: 10,
-    backgroundColor: '#f4f4f5',
-    borderRadius: 5,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    backgroundColor: '#7459F0',
-    borderRadius: 5,
-  },
-  progressText: {
-    fontSize: 12,
-    color: '#71717a',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#18181b',
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: '#71717a',
-    marginBottom: 24,
-  },
-  shareOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    backgroundColor: '#f4f4f5',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e4e4e7',
-  },
-  shareIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FAF5FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  shareOptionText: {
-    fontSize: 16,
-    color: '#18181b',
-  },
+  container: { flex: 1, backgroundColor: '#FFF' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  headerWrapper: { marginBottom: 60 },
+  headerGradient: { height: 140, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, paddingTop: 50, paddingHorizontal: 20 },
+  topIcons: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  glassIcon: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 20 },
+  avatarSection: { position: 'absolute', bottom: -40, width: SCREEN_WIDTH, alignItems: 'center' },
+  avatarContainer: { position: 'relative' },
+  avatarBorder: { width: 100, height: 100, borderRadius: 50, borderWidth: 4, borderColor: '#FFF', backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  avatarImg: { width: '100%', height: '100%', borderRadius: 50 },
+  avatarCircle: { width: '100%', height: '100%', borderRadius: 50, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center' },
+  avatarInit: { fontSize: 40, color: '#FFF', fontWeight: 'bold' },
+  roleBadge: { position: 'absolute', bottom: -5, alignSelf: 'center', backgroundColor: '#FFF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, flexDirection: 'row', alignItems: 'center', elevation: 2 },
+  roleText: { fontSize: 10, fontWeight: 'bold', color: '#9333ea', marginLeft: 4 },
+  identitySection: { alignItems: 'center', marginTop: 10, paddingHorizontal: 20 },
+  name: { fontSize: 22, fontWeight: 'bold', color: '#1F2937' },
+  bio: { fontSize: 13, color: '#6B7280', textAlign: 'center', marginTop: 4 },
+  modifyBtn: { marginTop: 12, flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 24, borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB' },
+  modifyText: { fontSize: 13, color: '#333', fontWeight: '600', marginLeft: 6 },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 20 },
+  statCard: { width: '31%', backgroundColor: '#FFF', padding: 15, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#F3F4F6', elevation: 1 },
+  statNum: { fontSize: 18, fontWeight: 'bold', color: '#4B5563' },
+  statLabel: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+  tabBar: { flexDirection: 'row', marginHorizontal: 20, marginTop: 25, backgroundColor: '#F9FAFB', padding: 4, borderRadius: 16 },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12 },
+  activeTab: { backgroundColor: '#FFF', elevation: 2 },
+  tabLabel: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
+  activeLabel: { color: '#111827' },
+  contentSection: { padding: 20 },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  emptyCard: { padding: 40, alignItems: 'center', width: '100%' },
+  emptyText: { color: '#71717A' },
+  videoCard: { width: '48%', marginBottom: 15 },
+  videoCardPinned: { borderColor: '#9333ea', borderWidth: 2, borderRadius: 14 },
+  videoThumb: { width: '100%', height: 120, backgroundColor: '#333', borderRadius: 12, overflow: 'hidden', position: 'relative' },
+  thumbImage: { width: '100%', height: '100%' },
+  pinBadge: { position: 'absolute', top: 5, left: 5, backgroundColor: '#9333ea', padding: 4, borderRadius: 4 },
+  overlayBottomRight: { position: 'absolute', bottom: 5, right: 5, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  overlayTextSm: { color: 'white', fontSize: 10, marginLeft: 3 },
+  videoInfoBlock: { padding: 5 },
+  videoTitle: { fontSize: 12, fontWeight: '600', color: '#374151' },
+  fullScreenPlayerContainer: { flex: 1, backgroundColor: 'black' },
+  videoWrapper: { flex: 1 },
+  playPauseIcon: { position: 'absolute', top: '50%', left: '50%', marginTop: -40, marginLeft: -40, zIndex: 10 },
+  playerGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%', zIndex: 10, paddingHorizontal: 20, paddingBottom: 40, justifyContent: 'flex-end' },
+  progressBarContainer: { marginBottom: 20, width: '100%' },
+  progressBarBackground: { height: 2, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 1, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: '#9333ea', borderRadius: 1 },
+  playerInfoRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  creatorRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  miniAvatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#9333ea', justifyContent:'center', alignItems:'center', marginRight: 10, borderWidth: 1, borderColor:'#fff' },
+  miniAvatarText: { color:'white', fontWeight:'bold' },
+  creatorName: { color: 'white', fontWeight: 'bold', fontSize: 16 },
+  playerTitle: { color: 'white', fontSize: 16, marginBottom: 5, fontWeight: '600' },
+  playerDesc: { color: '#ddd', fontSize: 13 },
+  playerActions: { alignItems: 'center', gap: 20 },
+  actionBtn: { alignItems: 'center' },
+  actionText: { color: 'white', fontSize: 12, marginTop: 5, fontWeight: '600' },
+  closePlayerBtn: { position: 'absolute', top: 50, left: 20, padding: 8, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 20, zIndex: 999 },
 });

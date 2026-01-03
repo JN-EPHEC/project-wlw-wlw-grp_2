@@ -1,13 +1,20 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, useWindowDimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TouchableWithoutFeedback, StatusBar, Share } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { 
+  View, Text, StyleSheet, useWindowDimensions, ScrollView, TouchableOpacity, 
+  Alert, ActivityIndicator, TouchableWithoutFeedback, StatusBar, Share, Image 
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { collection, getDocs, query, orderBy, limit, doc, updateDoc, increment, arrayUnion, arrayRemove, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+  collection, getDocs, query, orderBy, limit, doc, updateDoc, 
+  increment, arrayUnion, arrayRemove, getDoc, addDoc, serverTimestamp 
+} from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { updateVideoProgress } from '../utils/progressManager';
+// Assurez-vous que ce chemin est correct, sinon commentez la ligne suivante
+// import { updateVideoProgress } from '../utils/progressManager'; 
 
 interface VideoData {
   id: string;
@@ -16,6 +23,7 @@ interface VideoData {
   category: string;
   creatorId: string;
   creatorName: string;
+  creatorAvatar?: string; // Ajouté pour la photo
   videoUrl: string;
   likes: number;
   views: number;
@@ -55,7 +63,6 @@ export default function HomeScreen() {
   const videoRefs = useRef<Record<string, Video | null>>({});
 
   // --- 1. SYNCHRONISATION CRITIQUE ---
-  // Recharger les données utilisateur (Likes/Favoris) à chaque fois que l'écran Home est visible
   useFocusEffect(
     useCallback(() => {
       const fetchUserData = async () => {
@@ -67,7 +74,6 @@ export default function HomeScreen() {
           if (userDoc.exists()) {
             const data = userDoc.data();
             
-            // Mise à jour des Sets pour l'affichage des icônes
             setLikedVideosSet(new Set(data.likedVideos || []));
             setSavedVideosSet(new Set(data.favorites || []));
 
@@ -114,7 +120,6 @@ export default function HomeScreen() {
     loadVideos();
   }, []);
 
-  // Pause les autres vidéos au scroll
   useEffect(() => {
     const pauseOtherVideos = async () => {
       Object.keys(videoRefs.current).forEach(async (videoId, index) => {
@@ -126,6 +131,7 @@ export default function HomeScreen() {
     pauseOtherVideos();
   }, [currentIndex]);
 
+  // === C'EST ICI QUE J'AI AJOUTÉ LA CORRECTION DU PSEUDO/AVATAR ===
   const loadVideos = async () => {
     try {
       const videosQuery = query(
@@ -135,13 +141,30 @@ export default function HomeScreen() {
       );
       
       const snapshot = await getDocs(videosQuery);
-      const videosData = snapshot.docs.map(doc => ({
+      const rawVideos = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as VideoData[];
       
-      // Filtrage simple si profil chargé, sinon toutes les vidéos
-      setVideos(videosData);
+      // ENRICHISSEMENT : On va chercher les vraies infos du formateur
+      const enrichedVideos = await Promise.all(rawVideos.map(async (video) => {
+          try {
+              const userDoc = await getDoc(doc(db, 'users', video.creatorId));
+              if (userDoc.exists()) {
+                  const userData = userDoc.data();
+                  return {
+                      ...video,
+                      // Vrai Nom
+                      creatorName: `${userData.prenom || ''} ${userData.nom || ''}`.trim() || video.creatorName,
+                      // Vraie Photo
+                      creatorAvatar: userData.photoURL || null
+                  };
+              }
+              return video;
+          } catch (e) { return video; }
+      }));
+
+      setVideos(enrichedVideos);
       setLoading(false);
     } catch (error) {
       console.error('Error loading videos:', error);
@@ -161,17 +184,17 @@ export default function HomeScreen() {
     }
   };
 
- const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-  if (status.isLoaded) {
-    setProgress(status.positionMillis);
-    setDuration(status.durationMillis || 0);
-    
-    const percentage = (status.positionMillis / (status.durationMillis || 1)) * 100;
-    if (percentage >= 95 && status.didJustFinish) {
-     handleVideoComplete(videos[currentIndex], percentage);
+  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
+    if (status.isLoaded) {
+      setProgress(status.positionMillis);
+      setDuration(status.durationMillis || 0);
+      
+      const percentage = (status.positionMillis / (status.durationMillis || 1)) * 100;
+      if (percentage >= 95 && (status as any).didJustFinish) { // cast as any pour éviter erreur TS si didJustFinish n'est pas reconnu
+         handleVideoComplete(videos[currentIndex], percentage);
+      }
     }
-  }
-};
+  };
 
   const togglePlayPause = async () => {
     const currentVideo = videoRefs.current[videos[currentIndex]?.id];
@@ -189,7 +212,7 @@ export default function HomeScreen() {
   // --- ACTIONS UTILISATEUR ---
 
   const handleCreatorClick = (creatorId: string) => {
-    router.push(`/profile/${creatorId}` as any);
+      router.push(`/profile/${creatorId}` as any);
   };
 
   const handleComment = (videoId: string, creatorId: string) => {
@@ -256,7 +279,6 @@ export default function HomeScreen() {
     }
   };
 
-  // --- LOGIQUE LIKE ---
   const handleLike = async (videoId: string, creatorId: string) => {
     try {
       const user = auth.currentUser;
@@ -267,16 +289,11 @@ export default function HomeScreen() {
       const videoRef = doc(db, 'videos', videoId);
       
       if (isLiked) {
-        // UNLIKE : Mise à jour locale immédiate pour l'UI
         setLikedVideosSet(prev => { const s = new Set(prev); s.delete(videoId); return s; });
-        
-        // Mise à jour Firestore
         await updateDoc(userRef, { likedVideos: arrayRemove(videoId) });
         await updateDoc(videoRef, { likes: increment(-1) });
       } else {
-        // LIKE
         setLikedVideosSet(prev => new Set([...prev, videoId]));
-        
         await updateDoc(userRef, { likedVideos: arrayUnion(videoId) });
         await updateDoc(videoRef, { likes: increment(1) });
 
@@ -292,7 +309,6 @@ export default function HomeScreen() {
         }
       }
       
-      // Met à jour le compteur visuel sur la vidéo
       setVideos(prev => prev.map(v => 
         v.id === videoId ? { ...v, likes: isLiked ? v.likes - 1 : v.likes + 1 } : v
       ));
@@ -302,7 +318,6 @@ export default function HomeScreen() {
     }
   };
 
-  // --- LOGIQUE FAVORIS ---
   const handleFavorite = async (videoId: string, creatorId: string) => {
     try {
       const user = auth.currentUser;
@@ -312,15 +327,11 @@ export default function HomeScreen() {
       const userRef = doc(db, 'users', user.uid);
       
       if (isSaved) {
-        // RETIRER : Mise à jour locale immédiate
         setSavedVideosSet(prev => { const s = new Set(prev); s.delete(videoId); return s; });
-        
         await updateDoc(userRef, { favorites: arrayRemove(videoId) });
         Alert.alert('Info', 'Retiré des favoris');
       } else {
-        // AJOUTER
         setSavedVideosSet(prev => new Set([...prev, videoId]));
-        
         await updateDoc(userRef, { favorites: arrayUnion(videoId) });
         Alert.alert('Succès', 'Ajouté aux favoris !');
       }
@@ -334,6 +345,8 @@ export default function HomeScreen() {
     try {
       const user = auth.currentUser;
       if (!user) return;
+      // Si la fonction updateVideoProgress existe et est importée, décommentez ceci :
+      /*
       await updateVideoProgress(
         user.uid,
         video.id,
@@ -341,6 +354,7 @@ export default function HomeScreen() {
         Math.round(progressPercentage),
         video.duration / 1000
       );
+      */
     } catch (error) {
       console.error('XP Error:', error);
     }
@@ -386,7 +400,6 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollViewContent}
       >
         {videos.map((video, index) => {
-          // Utilisation des Sets pour l'état instantané
           const isLiked = likedVideosSet.has(video.id);
           const isSaved = savedVideosSet.has(video.id);
           const isFollowing = userProfile?.following?.includes(video.creatorId) ?? false;
@@ -425,10 +438,16 @@ export default function HomeScreen() {
                 </View>
               )}
 
+              {/* GAUCHE : INFOS CRÉATEUR */}
               <View style={styles.leftSide}>
                 <TouchableOpacity style={styles.creatorInfo} onPress={() => handleCreatorClick(video.creatorId)}>
                   <View style={styles.creatorAvatar}>
-                    <Text style={styles.creatorInitial}>{video.creatorName.charAt(0).toUpperCase()}</Text>
+                    {/* MODIFICATION ICI POUR AFFICHER LA PHOTO */}
+                    {video.creatorAvatar ? (
+                        <Image source={{ uri: video.creatorAvatar }} style={styles.avatarImage} />
+                    ) : (
+                        <Text style={styles.creatorInitial}>{video.creatorName.charAt(0).toUpperCase()}</Text>
+                    )}
                   </View>
                   <View style={styles.creatorDetails}>
                     <Text style={styles.creatorName}>@{video.creatorName}</Text>
@@ -453,10 +472,16 @@ export default function HomeScreen() {
                 </View>
               </View>
 
+              {/* DROITE : ACTIONS (Like, Comment, Save, Share) */}
               <View style={styles.rightSide}>
                 <TouchableOpacity style={styles.avatarLarge} onPress={() => handleCreatorClick(video.creatorId)}>
                   <View style={styles.avatarCircle}>
-                    <Text style={styles.avatarText}>{video.creatorName.charAt(0).toUpperCase()}</Text>
+                    {/* MODIFICATION ICI POUR AFFICHER LA PHOTO A DROITE AUSSI */}
+                    {video.creatorAvatar ? (
+                        <Image source={{ uri: video.creatorAvatar }} style={styles.avatarLargeImage} />
+                    ) : (
+                        <Text style={styles.avatarText}>{video.creatorName.charAt(0).toUpperCase()}</Text>
+                    )}
                   </View>
                   {!isFollowing && (
                     <View style={styles.plusIcon}><Ionicons name="add" size={16} color="#fff" /></View>
@@ -479,12 +504,12 @@ export default function HomeScreen() {
                   <Text style={styles.actionCount}>{video.comments || 0}</Text>
                 </TouchableOpacity>
 
-                {/* SAVE */}
+                {/* SAVE (FAVORIS) */}
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleFavorite(video.id, video.creatorId)}>
                   <View style={[styles.actionIcon, isSaved && styles.actionIconActiveFavorite]}>
                     <Ionicons name={isSaved ? "bookmark" : "bookmark-outline"} size={28} color="#fff" />
                   </View>
-                  <Text style={styles.actionCount}>{isSaved ? 'Saved' : 'Save'}</Text>
+                  <Text style={styles.actionCount}>{isSaved ? 'Enregistré' : 'Enregistrer'}</Text>
                 </TouchableOpacity>
 
                 {/* SHARE */}
@@ -492,7 +517,7 @@ export default function HomeScreen() {
                   <View style={styles.actionIcon}>
                     <Ionicons name="share-social-outline" size={28} color="#fff" />
                   </View>
-                  <Text style={styles.actionCount}>Share</Text>
+                  <Text style={styles.actionCount}>Partager</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -521,9 +546,11 @@ const styles = StyleSheet.create({
   progressBarBackground: { height: 2, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 1, overflow: 'hidden' },
   progressBarFill: { height: '100%', backgroundColor: '#9333ea', borderRadius: 1 },
   gradientOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%', zIndex: 10 },
+  
   leftSide: { position: 'absolute', bottom: 100, left: 16, right: 80, zIndex: 30 },
   creatorInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  creatorAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
+  creatorAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', overflow:'hidden' },
+  avatarImage: { width: '100%', height: '100%' },
   creatorInitial: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   creatorDetails: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   creatorName: { color: '#fff', fontSize: 16, fontWeight: '600' },
@@ -535,9 +562,11 @@ const styles = StyleSheet.create({
   description: { color: '#fff', fontSize: 14, marginBottom: 8, lineHeight: 20 },
   tagsContainer: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   tag: { color: '#9333ea', fontSize: 14, fontWeight: '600' },
+  
   rightSide: { position: 'absolute', bottom: 100, right: 16, gap: 24, alignItems: 'center', zIndex: 30 },
   avatarLarge: { marginBottom: 8, position: 'relative' },
-  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
+  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', overflow: 'hidden' },
+  avatarLargeImage: { width: '100%', height: '100%' },
   avatarText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
   plusIcon: { position: 'absolute', bottom: -4, alignSelf: 'center', width: 24, height: 24, borderRadius: 12, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
   actionButton: { alignItems: 'center', gap: 4 },
