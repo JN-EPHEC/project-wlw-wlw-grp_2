@@ -20,14 +20,13 @@ interface CommentModalProps {
   videoTitle: string; 
 }
 
-// Définition de l'interface pour corriger les erreurs TS2339
 interface CommentData {
   id: string;
   text: string;
   userId: string;
   userName: string;
   userAvatar?: string;
-  createdAt?: { seconds: number; nanoseconds: number } | any;
+  createdAt?: any;
   replyToId?: string;
   replyToName?: string;
 }
@@ -45,30 +44,15 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
     if (!videoId || !visible) return;
     setLoading(true);
 
-    // Requête simplifiée sans orderBy pour éviter le besoin d'index composite
-    const q = query(
-      collection(db, 'comments'), 
-      where('videoId', '==', videoId)
-    );
+    const q = query(collection(db, 'comments'), where('videoId', '==', videoId));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      // Correction de l'erreur TS : On définit le type lors du map
-      const fetchedComments = snapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data() 
-      } as CommentData));
-      
-      // Tri manuel en JavaScript pour garantir l'ordre chronologique
-      const sortedComments = fetchedComments.sort((a, b) => {
-        const dateA = a.createdAt?.seconds || 0;
-        const dateB = b.createdAt?.seconds || 0;
-        return dateA - dateB;
-      });
-
-      setComments(sortedComments);
+      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CommentData));
+      // Tri manuel pour éviter les erreurs d'index composite sur le tri
+      setComments(fetched.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)));
       setLoading(false);
     }, (err) => { 
-      console.error("Erreur Firestore : ", err);
+      console.error("ERREUR SNAPSHOT:", err);
       setLoading(false); 
     });
     return () => unsubscribe();
@@ -77,77 +61,73 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
   const handleSend = async () => {
     const user = auth.currentUser;
     if (!newComment.trim() || !user) return;
-
     try {
       if (editingCommentId) {
-        // Logique de modification
         await updateDoc(doc(db, 'comments', editingCommentId), {
           text: newComment.trim(),
           updatedAt: serverTimestamp()
         });
         setEditingCommentId(null);
-        Alert.alert("Succès", "Commentaire modifié");
       } else {
-        // Nouveau commentaire ou réponse
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         const userData = userDoc.data();
-        const fullName = `${userData?.prenom || ''} ${userData?.nom || ''}`.trim() || "Utilisateur";
-
+        const name = `${userData?.prenom || ''} ${userData?.nom || ''}`.trim();
         await addDoc(collection(db, 'comments'), {
-          videoId,
-          text: newComment.trim(),
-          userId: user.uid,
-          userName: fullName,
-          userAvatar: userData?.photoURL || null,
-          replyToId: replyingTo?.id || null,
-          replyToName: replyingTo?.userName || null,
+          videoId, text: newComment.trim(), userId: user.uid, userName: name || "Anonyme",
+          userAvatar: userData?.photoURL || null, replyToId: replyingTo?.id || null, replyToName: replyingTo?.userName || null,
           createdAt: serverTimestamp()
         });
-
         await sendNotification(replyingTo ? replyingTo.userId : creatorId, 'comment', {
-          videoId,
-          videoTitle,
-          commentText: newComment.substring(0, 30),
-          senderName: fullName,
-          senderId: user.uid
+          videoId, videoTitle, commentText: newComment.substring(0, 30), senderName: name, senderId: user.uid
         });
-
         await updateDoc(doc(db, 'videos', videoId), { comments: increment(1) });
       }
+      setNewComment(''); setReplyingTo(null); Keyboard.dismiss();
+    } catch (e) { console.error(e); }
+  };
 
-      setNewComment('');
-      setReplyingTo(null);
-      Keyboard.dismiss();
-    } catch (e) {
-      Alert.alert("Erreur", "Action impossible");
-    }
+  // --- SUPPRESSION AVEC COMPATIBILITÉ WEB ---
+  const performDelete = async (commentId: string) => {
+    try {
+        console.log("🔥 Suppression Firestore en cours pour:", commentId);
+        await deleteDoc(doc(db, 'comments', commentId));
+        await updateDoc(doc(db, 'videos', videoId), { comments: increment(-1) });
+        console.log("✅ Supprimé !");
+      } catch (e: any) {
+        console.error("❌ ERREUR FIRESTORE:", e.code, e.message);
+        Alert.alert("Erreur", "Action refusée par Firebase (Permissions ?)");
+      }
   };
 
   const handleDelete = (commentId: string) => {
-    Alert.alert("Supprimer", "Voulez-vous supprimer ce commentaire ?", [
-      { text: "Annuler", style: "cancel" },
-      { text: "Supprimer", style: "destructive", onPress: async () => {
-          await deleteDoc(doc(db, 'comments', commentId));
-          await updateDoc(doc(db, 'videos', videoId), { comments: increment(-1) });
-      }}
-    ]);
+    if (Platform.OS === 'web') {
+        if (window.confirm("Voulez-vous supprimer ce commentaire ?")) {
+            performDelete(commentId);
+        }
+    } else {
+        Alert.alert("Supprimer", "Voulez-vous supprimer ce commentaire ?", [
+            { text: "Annuler", style: "cancel" },
+            { text: "Supprimer", style: "destructive", onPress: () => performDelete(commentId) }
+        ]);
+    }
   };
 
-  const handleNavigate = (uid: string) => {
+  const handleNavigate = async (uid: string) => {
     onClose();
-    router.push(uid === auth.currentUser?.uid ? '/(tabs-formateur)/profile' : `/profile/${uid}`);
+    const userDoc = await getDoc(doc(db, 'users', uid));
+    const role = userDoc.data()?.role;
+    router.push(role === 'formateur' ? '/(tabs-formateur)/profile' : '/(tabs-apprenant)/profile');
   };
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true}>
       <View style={styles.overlay}>
         <TouchableOpacity style={styles.backdrop} onPress={onClose} />
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalContent}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContent}>
           <View style={styles.header}>
             <Text style={styles.title}>{comments.length} Commentaires</Text>
             <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} /></TouchableOpacity>
           </View>
-          
           <FlatList
             data={comments}
             keyExtractor={item => item.id}
@@ -158,11 +138,11 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                 </TouchableOpacity>
                 <View style={{flex:1}}>
                   <View style={styles.commentHeader}>
-                    <Text style={styles.username} onPress={() => handleNavigate(item.userId)}>{item.userName}</Text>
+                    <Text style={styles.username}>{item.userName}</Text>
                     {item.userId === auth.currentUser?.uid && (
-                      <View style={styles.commentActions}>
+                      <View style={{flexDirection:'row', gap: 15}}>
                         <TouchableOpacity onPress={() => { setEditingCommentId(item.id); setNewComment(item.text); inputRef.current?.focus(); }}>
-                          <Ionicons name="pencil" size={16} color="#9333ea" style={{marginRight: 15}} />
+                          <Ionicons name="pencil" size={16} color="#9333ea" />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => handleDelete(item.id)}>
                           <Ionicons name="trash" size={16} color="#EF4444" />
@@ -170,27 +150,15 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                       </View>
                     )}
                   </View>
-                  {item.replyToName && <Text style={styles.replyLabel}>En réponse à @{item.replyToName}</Text>}
                   <Text style={styles.text}>{item.text}</Text>
-                  <TouchableOpacity onPress={() => { setReplyingTo(item); setEditingCommentId(null); inputRef.current?.focus(); }}>
-                    <Text style={styles.replyBtn}>Répondre</Text>
-                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setReplyingTo(item); inputRef.current?.focus(); }}><Text style={styles.replyBtn}>Répondre</Text></TouchableOpacity>
                 </View>
               </View>
             )}
           />
-
           <View style={styles.inputArea}>
-            <TextInput 
-              ref={inputRef}
-              style={styles.input} 
-              value={newComment} 
-              onChangeText={setNewComment} 
-              placeholder={editingCommentId ? "Modifier..." : (replyingTo ? `Répondre à ${replyingTo.userName}` : "Écrire...")} 
-            />
-            <TouchableOpacity onPress={handleSend}>
-              <Ionicons name={editingCommentId ? "checkmark-circle" : "send"} size={28} color="#9333ea" />
-            </TouchableOpacity>
+            <TextInput ref={inputRef} style={styles.input} value={newComment} onChangeText={setNewComment} placeholder="Écrire..." />
+            <TouchableOpacity onPress={handleSend}><Ionicons name={editingCommentId ? "checkmark-circle" : "send"} size={28} color="#9333ea" /></TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -206,11 +174,9 @@ const styles = StyleSheet.create({
   title: { fontWeight: 'bold' },
   commentItem: { flexDirection: 'row', padding: 15 },
   commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  commentActions: { flexDirection: 'row' },
   replyItem: { marginLeft: 40, borderLeftWidth: 2, borderColor: '#eee' },
   avatar: { width: 36, height: 36, borderRadius: 18, marginRight: 10 },
   username: { fontWeight: 'bold', fontSize: 13 },
-  replyLabel: { fontSize: 11, color: '#9333ea', fontStyle: 'italic' },
   text: { fontSize: 14, color: '#333' },
   replyBtn: { fontSize: 12, color: '#666', marginTop: 5, fontWeight: 'bold' },
   inputArea: { flexDirection: 'row', padding: 15, borderTopWidth: 1, borderColor: '#eee', alignItems: 'center' },
