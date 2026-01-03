@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, Modal, TouchableOpacity, TextInput, 
   FlatList, Image, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Keyboard 
@@ -6,17 +6,18 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { 
   collection, addDoc, query, where, orderBy, onSnapshot, serverTimestamp, 
-  doc, updateDoc, increment, getDoc, deleteDoc 
+  doc, updateDoc, increment, getDoc 
 } from 'firebase/firestore';
 import { db, auth } from '../firebaseConfig';
-import { sendNotification } from '../app/utils/notificationService'; // Assurez-vous que ce fichier existe
+import { sendNotification } from '../app/utils/notificationService';
+import { useRouter } from 'expo-router';
 
 interface CommentModalProps {
   visible: boolean;
   onClose: () => void;
   videoId: string;
-  creatorId: string; // OBLIGATOIRE pour les notifications
-  videoTitle: string; // OBLIGATOIRE pour le message de notification
+  creatorId: string; 
+  videoTitle: string; 
   onCountChange?: (videoId: string, delta: number) => void;
 }
 
@@ -24,223 +25,175 @@ interface CommentData {
   id: string;
   text: string;
   userId: string;
-  userName: string;
+  userName?: string; // Optionnel car on va le chercher en live
   userAvatar?: string;
   createdAt: any;
+  replyToId?: string;
+  replyToName?: string;
+  videoId: string;
 }
 
+// Composant interne pour gérer l'affichage d'un auteur de commentaire en temps réel
+const CommentAuthor = ({ userId, isCreator, creatorId, onNavigate }: { userId: string, isCreator: boolean, creatorId: string, onNavigate: (uid: string) => void }) => {
+  const [userData, setUserData] = useState<{name: string, avatar: string | null} | null>(null);
+
+  useEffect(() => {
+    const fetchAuthor = async () => {
+      const uDoc = await getDoc(doc(db, 'users', userId));
+      if (uDoc.exists()) {
+        const data = uDoc.data();
+        setUserData({
+          name: `${data.prenom || ''} ${data.nom || ''}`.trim() || "Utilisateur",
+          avatar: data.photoURL || null
+        });
+      }
+    };
+    fetchAuthor();
+  }, [userId]);
+
+  if (!userData) return <View style={styles.skeletonAvatar} />;
+
+  return (
+    <View style={styles.authorRow}>
+      <TouchableOpacity onPress={() => onNavigate(userId)} style={styles.avatarContainer}>
+        {userData.avatar ? (
+          <Image source={{ uri: userData.avatar }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarPlaceholder]}>
+            <Text style={styles.avatarInitial}>{userData.name.charAt(0)}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => onNavigate(userId)}>
+        <Text style={styles.username}>
+          {userData.name} {userId === creatorId && <Text style={styles.authorBadge}> (Auteur)</Text>}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
 export default function CommentModal({ visible, onClose, videoId, creatorId, videoTitle, onCountChange }: CommentModalProps) {
+  const router = useRouter();
   const [comments, setComments] = useState<CommentData[]>([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<CommentData | null>(null);
+  
+  const inputRef = useRef<TextInput>(null);
   const currentUser = auth.currentUser;
 
   useEffect(() => {
     if (!videoId || !visible) return;
     setLoading(true);
-
-    const q = query(
-        collection(db, 'comments'), 
-        where('videoId', '==', videoId), 
-        orderBy('createdAt', 'desc')
-    );
-
+    const q = query(collection(db, 'comments'), where('videoId', '==', videoId), orderBy('createdAt', 'asc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
         const loadedComments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as CommentData[];
         setComments(loadedComments);
         setLoading(false);
-    }, (error) => {
-        console.error("Erreur comments:", error);
-        setLoading(false);
     });
-
     return () => unsubscribe();
   }, [videoId, visible]);
 
   const handleSend = async () => {
     if (!newComment.trim() || !currentUser) return;
-
     setSending(true);
     const commentText = newComment;
-    setNewComment(''); 
-    Keyboard.dismiss();
-
+    const isReply = !!replyingTo;
+    
     try {
-      // 1. Ajouter le commentaire
       await addDoc(collection(db, 'comments'), {
-        videoId: videoId,
+        videoId,
         text: commentText,
         userId: currentUser.uid,
-        userName: currentUser.displayName || "Anonyme",
-        userAvatar: currentUser.photoURL || null,
+        replyToId: replyingTo?.id || null,
+        replyToName: replyingTo?.userName || null, // Gardé pour la trace mais l'affichage live est prioritaire
         createdAt: serverTimestamp()
       });
 
-      // 2. Compteur +1
-      await updateDoc(doc(db, 'videos', videoId), { comments: increment(1) });
-      
-      // 3. ENVOI NOTIFICATION (Seulement si l'apprenant commente chez un formateur)
-      if (currentUser.uid !== creatorId) {
-          await sendNotification(creatorId, 'comment', {
-              videoId: videoId,
-              videoTitle: videoTitle,
-              commentText: commentText
-          });
+      const targetId = isReply ? replyingTo!.userId : creatorId;
+      if (currentUser.uid !== targetId) {
+          await sendNotification(targetId, 'comment', { videoId, videoTitle, commentText });
       }
 
-      if (onCountChange) onCountChange(videoId, 1);
+      await updateDoc(doc(db, 'videos', videoId), { comments: increment(1) });
+      setNewComment('');
+      setReplyingTo(null);
+      Keyboard.dismiss();
     } catch (error) {
-      Alert.alert("Erreur", "Envoi impossible");
-      setNewComment(commentText); 
+      Alert.alert("Erreur", "Impossible de publier.");
     } finally {
       setSending(false);
     }
   };
 
-  // ... (Gardez le reste de la fonction handleDelete et le return du JSX inchangé)
-
-  // 3. SUPPRESSION DU COMMENTAIRE (CORRIGÉE POUR WEB & MOBILE)
-  const handleDelete = async (commentId: string) => {
-    
-    const performDelete = async () => {
-        try {
-            console.log("🗑️ Suppression commentaire:", commentId);
-            
-            // Mise à jour optimiste (suppression visuelle immédiate)
-            setComments(prev => prev.filter(c => c.id !== commentId));
-
-            // Suppression Firestore
-            await deleteDoc(doc(db, 'comments', commentId));
-            
-            // Compteur Vidéo -1
-            const videoRef = doc(db, 'videos', videoId);
-            await updateDoc(videoRef, { comments: increment(-1) });
-
-            if (onCountChange) onCountChange(videoId, -1);
-            
-            console.log("✅ Commentaire supprimé");
-
-        } catch (error: any) {
-            console.error("❌ Erreur suppression:", error);
-            Alert.alert("Erreur", "Impossible de supprimer : " + error.message);
-        }
-    };
-
-    // Gestion différente selon la plateforme
-    if (Platform.OS === 'web') {
-        if (confirm("Voulez-vous vraiment supprimer ce commentaire ?")) {
-            await performDelete();
-        }
+  // LOGIQUE DE NAVIGATION CORRIGÉE
+  const handleNavigate = (userId: string) => {
+    onClose();
+    if (userId === currentUser?.uid) {
+      // Si c'est mon commentaire, je vais sur mon espace privé (tabs-formateur)
+      router.push('/(tabs-formateur)/profile');
     } else {
-        Alert.alert(
-            "Supprimer",
-            "Voulez-vous vraiment supprimer ce commentaire ?",
-            [
-                { text: "Annuler", style: "cancel" },
-                { text: "Supprimer", style: "destructive", onPress: performDelete }
-            ]
-        );
+      // Sinon, profil public de l'autre personne
+      router.push(`/profile/${userId}` as any);
     }
   };
 
-  const formatDate = (timestamp: any) => {
-    if (!timestamp) return "À l'instant";
-    const date = new Date(timestamp.seconds * 1000);
-    return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const startReply = (comment: CommentData) => {
+      setReplyingTo(comment);
+      setNewComment(`@Réponse `); // On peut personnaliser ici
+      setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent={true}>
       <View style={styles.overlay}>
         <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
-        
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
-          style={styles.modalContent}
-        >
-          {/* Header */}
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalContent}>
           <View style={styles.header}>
-            <Text style={styles.title}>{comments.length} commentaire{comments.length > 1 ? 's' : ''}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={24} color="#333" />
-            </TouchableOpacity>
+            <Text style={styles.title}>{comments.length} Commentaires</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn}><Ionicons name="close" size={24} color="#333" /></TouchableOpacity>
           </View>
 
-          {/* Liste */}
           {loading ? (
-            <View style={styles.centerLoading}>
-                <ActivityIndicator size="large" color="#9333ea" />
-            </View>
+            <ActivityIndicator size="large" color="#9333ea" style={{marginTop: 50}} />
           ) : (
             <FlatList
               data={comments}
               keyExtractor={item => item.id}
-              contentContainerStyle={{paddingBottom: 20}}
-              ListEmptyComponent={
-                <View style={styles.emptyState}>
-                    <Text style={styles.emptyText}>Soyez le premier à commenter ! 👇</Text>
-                </View>
-              }
               renderItem={({ item }) => (
-                <View style={styles.commentItem}>
-                  {item.userAvatar ? (
-                    <Image source={{ uri: item.userAvatar }} style={styles.avatar} />
-                  ) : (
-                    <View style={styles.avatarPlaceholder}>
-                      <Text style={styles.avatarInit}>
-                        {(item.userName && item.userName[0]) ? item.userName[0].toUpperCase() : '?'}
-                      </Text>
-                    </View>
-                  )}
+                <View style={[styles.commentItem, item.replyToId ? styles.replyItem : null]}>
+                  <CommentAuthor 
+                    userId={item.userId} 
+                    isCreator={item.userId === creatorId} 
+                    creatorId={creatorId}
+                    onNavigate={handleNavigate} 
+                  />
                   <View style={styles.textContainer}>
-                    <View style={styles.nameRow}>
-                        <Text style={styles.username}>{item.userName}</Text>
-                        <Text style={styles.date}>{formatDate(item.createdAt)}</Text>
-                    </View>
                     <Text style={styles.commentText}>{item.text}</Text>
-                  </View>
-                  
-                  {/* BOUTON SUPPRIMER (Visible seulement pour l'auteur) */}
-                  {currentUser && item.userId === currentUser.uid && (
-                    <TouchableOpacity 
-                        onPress={() => handleDelete(item.id)} 
-                        style={styles.deleteBtn}
-                        hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
-                    >
-                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                    <TouchableOpacity onPress={() => startReply(item)}>
+                        <Text style={styles.replyButton}>Répondre</Text>
                     </TouchableOpacity>
-                  )}
+                  </View>
                 </View>
               )}
             />
           )}
 
-          {/* Input Zone */}
+          {replyingTo && (
+              <View style={styles.replyBar}>
+                  <Text style={styles.replyBarText}>Réponse en cours...</Text>
+                  <TouchableOpacity onPress={() => setReplyingTo(null)}><Ionicons name="close-circle" size={20} color="#666" /></TouchableOpacity>
+              </View>
+          )}
+
           <View style={styles.inputArea}>
-            <TextInput
-              style={styles.input}
-              placeholder="Ajouter un commentaire..."
-              placeholderTextColor="#999"
-              value={newComment}
-              onChangeText={setNewComment}
-              multiline
-              maxLength={500}
-            />
-            <TouchableOpacity 
-                onPress={handleSend} 
-                style={[styles.sendBtn, (!newComment.trim() || sending) && styles.sendBtnDisabled]}
-                disabled={!newComment.trim() || sending}
-            >
-              {sending ? (
-                  <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                  <Ionicons name="send" size={18} color="white" />
-              )}
+            <TextInput ref={inputRef} style={styles.input} placeholder="Écrire un commentaire..." value={newComment} onChangeText={setNewComment} multiline />
+            <TouchableOpacity onPress={handleSend} style={styles.sendBtn} disabled={sending || !newComment.trim()}>
+              {sending ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="send" size={18} color="white" />}
             </TouchableOpacity>
           </View>
-          
-          <View style={{height: Platform.OS === 'ios' ? 20 : 0, backgroundColor: 'white'}} />
         </KeyboardAvoidingView>
       </View>
     </Modal>
@@ -250,43 +203,26 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   backdrop: { flex: 1 },
-  modalContent: { 
-    height: '70%', 
-    backgroundColor: 'white', 
-    borderTopLeftRadius: 20, 
-    borderTopRightRadius: 20,
-    shadowColor: "#000", shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5,
-  },
-  header: { 
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', 
-    padding: 15, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', position: 'relative'
-  },
-  title: { fontWeight: 'bold', fontSize: 16, color: '#333' },
-  closeBtn: { position: 'absolute', right: 15, top: 15 },
-  centerLoading: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, marginTop: 50 },
-  emptyText: { color: '#999', fontSize: 16 },
-
-  commentItem: { flexDirection: 'row', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f9f9f9', alignItems: 'flex-start' },
-  avatar: { width: 36, height: 36, borderRadius: 18, marginRight: 12, backgroundColor: '#eee' },
-  avatarPlaceholder: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E0E7FF', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-  avatarInit: { fontWeight: 'bold', color: '#4F46E5', fontSize: 16 },
-  
-  textContainer: { flex: 1, marginRight: 10 },
-  nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  username: { fontWeight: '600', fontSize: 13, color: '#333' },
-  date: { color: '#bbb', fontSize: 10 },
-  commentText: { color: '#444', fontSize: 14, lineHeight: 20 },
-  deleteBtn: { padding: 5 },
-  
-  inputArea: { 
-    flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: '#f0f0f0', 
-    alignItems: 'center', backgroundColor: 'white'
-  },
-  input: { 
-    flex: 1, backgroundColor: '#f5f5f5', borderRadius: 20, paddingHorizontal: 15, 
-    paddingVertical: 10, marginRight: 10, color: '#333', maxHeight: 100
-  },
-  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center' },
-  sendBtnDisabled: { backgroundColor: '#d8b4fe' }
+  modalContent: { height: '85%', backgroundColor: 'white', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  header: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee', position: 'relative' },
+  closeBtn: { position: 'absolute', right: 15 },
+  title: { fontWeight: 'bold', fontSize: 16 },
+  commentItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#f9f9f9' },
+  replyItem: { marginLeft: 45, borderLeftWidth: 2, borderLeftColor: '#E9D5FF', backgroundColor: '#FAF5FF' },
+  authorRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+  avatarContainer: { marginRight: 10 },
+  avatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#f0f0f0' },
+  avatarPlaceholder: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#9333ea' },
+  avatarInitial: { color: 'white', fontWeight: 'bold', fontSize: 14 },
+  skeletonAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#eee', marginRight: 10 },
+  textContainer: { paddingLeft: 44 },
+  username: { fontWeight: 'bold', fontSize: 13, color: '#333' },
+  authorBadge: { color: '#9333ea', fontSize: 11, fontWeight: 'bold' },
+  commentText: { fontSize: 14, color: '#444' },
+  replyButton: { fontSize: 12, color: '#666', fontWeight: 'bold', marginTop: 8 },
+  replyBar: { flexDirection: 'row', justifyContent: 'space-between', padding: 10, backgroundColor: '#f0f0f0', alignItems: 'center' },
+  replyBarText: { fontSize: 12, color: '#666' },
+  inputArea: { flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: '#eee', alignItems: 'center', backgroundColor: 'white' },
+  input: { flex: 1, backgroundColor: '#f5f5f5', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, marginRight: 10, maxHeight: 100 },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center' }
 });
