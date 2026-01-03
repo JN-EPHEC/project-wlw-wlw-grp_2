@@ -9,13 +9,14 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Video, ResizeMode } from 'expo-av';
 
+// ===== IMPORTS FIREBASE & AUTH =====
 import { auth, db, storage } from '../../firebaseConfig'; 
 import { 
-  doc, getDoc, updateDoc, collection, setDoc, 
+  doc, getDoc, updateDoc, collection, addDoc,
   arrayRemove, query, where, orderBy, serverTimestamp, getDocs
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { signOut as firebaseSignOut } from 'firebase/auth';
+import { signOut as firebaseSignOut } from 'firebase/auth'; // Import renommé pour clarté
 import { useUserProgress } from '../../hooks/useuserprogress';
 
 const { width } = Dimensions.get('window');
@@ -35,7 +36,7 @@ interface BadgeDisplay {
   name: string;
   icon: string;
   description: string;
-  unlocked?: boolean;
+  unlocked: boolean;
 }
 
 // --- CONFIGURATION ---
@@ -48,12 +49,11 @@ const INTEREST_CONFIG: Record<string, { icon: string, color: string, label: stri
   'business': { icon: '📊', color: '#FFEDD5', textColor: '#EA580C', label: 'Business' },
 };
 
-// Liste de référence de TOUS les badges possibles (pour afficher ceux qui sont verrouillés)
 const BADGE_DEFINITIONS: Record<string, BadgeDisplay> = {
-  'premier-pas': { id: 'premier-pas', name: 'Premier Pas', icon: '🎬', description: 'Regardez votre première vidéo' },
-  'apprenant-assidu': { id: 'apprenant-assidu', name: 'Apprenant Assidu', icon: '📚', description: 'Regardez 10 vidéos' },
-  'en-serie': { id: 'en-serie', name: 'En Série', icon: '🔥', description: '3 jours consécutifs' },
-  'expert': { id: 'expert', name: 'Expert', icon: '🎓', description: 'Atteignez le niveau 5' },
+  'premier-pas': { id: 'premier-pas', name: 'Premier Pas', icon: '🎬', description: 'Regardez votre première vidéo', unlocked: false },
+  'apprenant-assidu': { id: 'apprenant-assidu', name: 'Apprenant Assidu', icon: '📚', description: 'Regardez 10 vidéos', unlocked: false },
+  'en-serie': { id: 'en-serie', name: 'En Série', icon: '🔥', description: '3 jours consécutifs', unlocked: false },
+  'expert': { id: 'expert', name: 'Expert', icon: '🎓', description: 'Atteignez le niveau 5', unlocked: false },
 };
 
 // --- COMPOSANT VIDEOGRID ---
@@ -134,25 +134,26 @@ const VideoGrid = ({
 export default function ProfileApprenantScreen() {
   const router = useRouter();
   
+  // --- ÉTATS ---
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('progress'); 
   
+  // Édition
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState('');
   const [editedBio, setEditedBio] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
+  // Données Listes
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [favorites, setFavorites] = useState<SimpleVideo[]>([]);   
   const [history, setHistory] = useState<SimpleVideo[]>([]);       
   const [likedVideos, setLikedVideos] = useState<SimpleVideo[]>([]);
-  
-  // Badges
   const [unlockedBadges, setUnlockedBadges] = useState<BadgeDisplay[]>([]);
-  const [lockedBadges, setLockedBadges] = useState<BadgeDisplay[]>([]);
   
+  // Statistiques
   const [stats, setStats] = useState({
     videosWatched: 0,
     streak: 0,
@@ -160,6 +161,7 @@ export default function ProfileApprenantScreen() {
     followers: 0,
   });
 
+  // Modals
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
@@ -167,18 +169,29 @@ export default function ProfileApprenantScreen() {
   const [selectedPlaylistVideos, setSelectedPlaylistVideos] = useState<any[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<SimpleVideo | null>(null);
 
+  // Hooks Progression
   const { stats: progressStats, getXPProgressPercentage } = useUserProgress();
   const xpPercentage = getXPProgressPercentage ? getXPProgressPercentage() : 0;
-  // Fallback si stats.videosWatched est undefined
-  const currentVideoCount = stats.videosWatched || 0;
-  const currentLevel = userProfile?.progressData?.level || Math.floor(currentVideoCount / 10) + 1;
-  const nextLevelVideos = (currentLevel * 10) - currentVideoCount;
+  const currentLevel = userProfile?.progressData?.level || Math.floor((stats.videosWatched || 0) / 10) + 1;
+  const nextLevelVideos = (currentLevel * 10) - (stats.videosWatched || 0);
 
+  // --- EFFETS ---
   useFocusEffect(
     useCallback(() => {
       loadProfile();
     }, [activeTab])
   );
+
+  // ===== FONCTION DE DÉCONNEXION (Votre code intégré) =====
+  const signOut = async () => {
+    try {
+      await firebaseSignOut(auth);
+      router.replace('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      Alert.alert('Erreur', 'Impossible de se déconnecter');
+    }
+  };
 
   const fetchVideosByIds = async (videoIds: string[]) => {
     if (!videoIds || videoIds.length === 0) return [];
@@ -226,33 +239,18 @@ export default function ProfileApprenantScreen() {
         if (activeTab === 'history') setHistory(await fetchVideosByIds(data.watchHistory || []));
         if (activeTab === 'liked') setLikedVideos(await fetchVideosByIds(data.likedVideos || []));
         
-        // --- LOGIQUE BADGES (Adaptée au Service) ---
-        let myBadges: BadgeDisplay[] = [];
-        
-        // Cas 1 : Format "Service" (Objets complets dans unlockedBadges)
-        if (data.unlockedBadges && Array.isArray(data.unlockedBadges)) {
-            myBadges = data.unlockedBadges.map((b: any) => ({
-                id: b.badgeId,
-                name: b.badgeName,
-                icon: b.badgeIcon,
-                description: 'Débloqué',
-                unlocked: true
+        let badgesList: BadgeDisplay[] = [];
+        if (data.unlockedBadges && data.unlockedBadges.length > 0) {
+            badgesList = data.unlockedBadges.map((b: any) => ({
+                id: b.badgeId, name: b.badgeName, icon: b.badgeIcon, description: 'Débloqué', unlocked: true
             }));
-        } 
-        // Cas 2 : Format Legacy (Tableau d'IDs dans badges)
-        else if (data.badges && Array.isArray(data.badges)) {
-            myBadges = data.badges.map((id: string) => ({
+        } else if (data.badges && data.badges.length > 0) {
+            badgesList = data.badges.map((id: string) => ({
                 ...(BADGE_DEFINITIONS[id] || { id, name: id, icon: '🏆', description: 'Badge débloqué' }),
                 unlocked: true
             }));
         }
-        
-        setUnlockedBadges(myBadges);
-
-        // Calcul des badges restants (Verrouillés)
-        const unlockedIds = myBadges.map(b => b.id);
-        const locked = Object.values(BADGE_DEFINITIONS).filter(def => !unlockedIds.includes(def.id));
-        setLockedBadges(locked);
+        setUnlockedBadges(badgesList);
       }
     } catch (error) {
       console.error("Erreur chargement profil:", error);
@@ -270,12 +268,6 @@ export default function ProfileApprenantScreen() {
       const playlistsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setPlaylists(playlistsData);
     } catch (error) { console.error('Erreur playlists:', error); }
-  };
-
-  const signOut = async () => {
-    await firebaseSignOut(auth);
-    setShowSettings(false);
-    router.replace('/login');
   };
 
   const saveProfile = async () => {
@@ -334,7 +326,6 @@ export default function ProfileApprenantScreen() {
 
   const handleRemoveAction = (type: 'favorites' | 'watchHistory' | 'likedVideos', videoId: string) => {
     if (type === 'favorites' || type === 'likedVideos') {
-        // Suppression immédiate (déclic)
         removeFromList(type, videoId);
         return;
     }
@@ -353,7 +344,7 @@ export default function ProfileApprenantScreen() {
     try {
       const user = auth.currentUser;
       if (!user) return;
-      await setDoc(doc(collection(db, 'playlists')), {
+      await addDoc(collection(db, 'playlists'), {
         name: newPlaylistName, userId: user.uid, videoIds: [],
         createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
       });
@@ -388,6 +379,9 @@ export default function ProfileApprenantScreen() {
     return <View style={styles.center}><ActivityIndicator size="large" color="#9333ea" /></View>;
   }
 
+  const unlockedOnly = unlockedBadges ? unlockedBadges : []; 
+  const lockedOnly = Object.values(BADGE_DEFINITIONS).filter(def => !unlockedBadges.some(b => b.id === def.id));
+
   return (
     <View style={{flex: 1, backgroundColor: '#FFFFFF'}}>
       <ScrollView 
@@ -395,17 +389,27 @@ export default function ProfileApprenantScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {setRefreshing(true); loadProfile();}} />}
       >
-        {/* HEADER */}
+        {/* HEADER (Modifié avec votre style) */}
         <View style={styles.headerWrapper}>
             <LinearGradient colors={['#9333ea', '#7e22ce']} style={styles.headerGradient}>
-                <View style={styles.headerTopRow}>
+                <View style={styles.topIcons}>
+                    
+                    {/* Bouton Paramètres (Glass Style) */}
                     <TouchableOpacity 
-                        style={[styles.iconButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                        style={styles.glassIcon}
                         onPress={() => setShowSettings(true)}
                     >
                         <Ionicons name="settings-outline" size={20} color="white" />
-                        <Text style={{color:'white', fontWeight:'600', marginLeft:5, fontSize:12}}>Paramètres</Text>
                     </TouchableOpacity>
+
+                    {/* BOUTON DÉCONNEXION (Rouge Glass Style) */}
+                    <TouchableOpacity 
+                        style={[styles.glassIcon, { backgroundColor: 'rgba(239, 68, 68, 0.4)' }]}
+                        onPress={signOut} 
+                    >
+                        <Ionicons name="log-out-outline" size={20} color="white" />
+                    </TouchableOpacity>
+
                 </View>
             </LinearGradient>
 
@@ -535,17 +539,17 @@ export default function ProfileApprenantScreen() {
                 <View>
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Badges débloqués</Text>
-                        <Text style={styles.badgeCount}>{unlockedBadges.length}/{Object.keys(BADGE_DEFINITIONS).length}</Text>
+                        <Text style={styles.badgeCount}>{unlockedOnly.length}/8</Text>
                     </View>
 
-                    {unlockedBadges.length === 0 ? (
+                    {unlockedOnly.length === 0 ? (
                         <View style={styles.emptyState}>
                             <Text style={{ fontSize: 40 }}>🏆</Text>
                             <Text style={styles.emptyText}>Regardez des vidéos pour débloquer vos premiers badges !</Text>
                         </View>
                     ) : (
                         <View style={styles.badgesGrid}>
-                            {unlockedBadges.map((badge, index) => (
+                            {unlockedOnly.map((badge, index) => (
                                 <View key={index} style={styles.badgeCard}>
                                     <Text style={{fontSize:30}}>{badge.icon}</Text>
                                     <Text style={styles.badgeTitle}>{badge.name}</Text>
@@ -555,10 +559,10 @@ export default function ProfileApprenantScreen() {
                         </View>
                     )}
                     
-                    {/* Prochains badges (ceux qui sont verrouillés) */}
+                    {/* Prochains badges */}
                     <Text style={[styles.sectionTitle, { marginTop: 25 }]}>Prochains badges</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:10, paddingBottom:10}}>
-                        {lockedBadges.length > 0 ? lockedBadges.slice(0, 4).map((badge, i) => (
+                        {lockedOnly.length > 0 ? lockedOnly.slice(0, 4).map((badge, i) => (
                             <View key={i} style={[styles.badgeCard, {width: 140, opacity: 0.5}]}>
                                 <Text style={{fontSize:30, opacity: 0.5}}>{badge.icon}</Text>
                                 <Text style={styles.badgeTitle}>{badge.name}</Text>
@@ -592,7 +596,7 @@ export default function ProfileApprenantScreen() {
                 </View>
             )}
 
-            {/* FAVORIS (Étoile) */}
+            {/* FAVORIS */}
             {activeTab === 'saved' && (
                 <VideoGrid 
                     videos={favorites} 
@@ -604,7 +608,7 @@ export default function ProfileApprenantScreen() {
                 />
             )}
 
-            {/* J'AIME (Coeur) */}
+            {/* J'AIME */}
             {activeTab === 'liked' && (
                 <VideoGrid 
                     videos={likedVideos} 
@@ -684,10 +688,6 @@ export default function ProfileApprenantScreen() {
                 </View>
 
                 <Text style={styles.settingsSectionTitle}>ACTIONS</Text>
-                <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
-                    <Ionicons name="log-out-outline" size={20} color="#374151" style={{marginRight: 8}} />
-                    <Text style={styles.logoutText}>Se déconnecter</Text>
-                </TouchableOpacity>
                 
                 <TouchableOpacity style={styles.deleteAccountBtn}>
                     <Ionicons name="trash-outline" size={20} color="#EF4444" style={{marginRight: 8}} />
@@ -771,8 +771,8 @@ const styles = StyleSheet.create({
   // --- HEADER ---
   headerWrapper: { marginBottom: 50 },
   headerGradient: { height: 140, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, paddingTop: 50, paddingHorizontal: 20 },
-  headerTopRow: { flexDirection: 'row', justifyContent: 'flex-end' },
-  iconButton: { flexDirection: 'row', alignItems: 'center', padding: 8, borderRadius: 20 },
+  topIcons: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }, // STYLE INTÉGRÉ
+  glassIcon: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 20, marginLeft: 10 }, // STYLE INTÉGRÉ
   
   // --- AVATAR ---
   avatarSection: { position: 'absolute', bottom: -40, left: 0, right: 0, alignItems: 'center' },
