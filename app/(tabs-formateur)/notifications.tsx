@@ -3,7 +3,7 @@ import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, Platform, 
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../../firebaseConfig';
-import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, updateDoc, doc, orderBy } from 'firebase/firestore';
 
 interface Notification {
   id: string;
@@ -17,6 +17,8 @@ interface Notification {
   comment?: string;
   read?: boolean;
   createdAt: any;
+  videoId?: string;
+  fromUserId?: string;
 }
 
 export default function NotificationsFormateurScreen() {
@@ -39,9 +41,11 @@ export default function NotificationsFormateurScreen() {
 
     try {
       // Écouter les notifications en temps réel
+      // ✅ Exigence ID 42 : Tri du plus récent au plus ancien
       const notifQuery = query(
         collection(db, 'notifications'),
-        where('userId', '==', user.uid)
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc') // Plus récent en premier
       );
 
       console.log('✅ Query créée, attente données...');
@@ -58,19 +62,21 @@ export default function NotificationsFormateurScreen() {
             const data = docSnap.data();
             console.log('📄 Document:', docSnap.id, data);
             
-            // Transformer les données Firebase
+            // ✅ Exigence ID 186, 397 : Format "Nom d'utilisateur" + "action" + "nom de la vidéo"
             notifications.push({
               id: docSnap.id,
               user: data.fromUserName || 'Utilisateur',
               type: data.type || 'notification',
               msg: getNotifMessage(data.type),
-              title: data.videoTitle || '',
+              title: data.videoTitle || '', // ✅ Nom de la vidéo
               time: formatTime(data.createdAt),
               avatar: data.fromUserAvatar || 'https://via.placeholder.com/150',
               thumb: data.videoThumb || '',
               comment: data.comment || '',
               read: data.read || false,
-              createdAt: data.createdAt
+              createdAt: data.createdAt,
+              videoId: data.videoId,
+              fromUserId: data.fromUserId
             });
             
             if (!data.read) unread++;
@@ -103,10 +109,12 @@ export default function NotificationsFormateurScreen() {
       case 'comment': return 'a commenté votre vidéo';
       case 'follow': return 'a commencé à vous suivre';
       case 'save': return 'a sauvegardé votre vidéo';
+      case 'view': return 'a regardé votre vidéo';
       default: return 'notification';
     }
   };
 
+  // ✅ Exigence ID 40 : Format du temps avec "Il y a + heures/minutes/jours"
   const formatTime = (timestamp: any) => {
     if (!timestamp) return 'récemment';
     
@@ -118,11 +126,16 @@ export default function NotificationsFormateurScreen() {
       const diffHours = Math.floor(diffMs / 3600000);
       const diffDays = Math.floor(diffMs / 86400000);
 
+      // Format selon l'exigence ID 40
       if (diffMins < 1) return 'à l\'instant';
-      if (diffMins < 60) return `${diffMins} minutes`;
-      if (diffHours < 24) return `${diffHours} heures`;
-      if (diffDays === 1) return '1 jour';
-      return `${diffDays} jours`;
+      if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''}`;
+      if (diffHours < 24) return `${diffHours} heure${diffHours > 1 ? 's' : ''}`;
+      if (diffDays === 1) return 'hier';
+      if (diffDays === 2) return 'il y a deux jours';
+      if (diffDays < 7) return `${diffDays} jours`;
+      
+      // Au-delà d'une semaine, afficher la date
+      return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
     } catch (error) {
       return 'récemment';
     }
@@ -133,6 +146,7 @@ export default function NotificationsFormateurScreen() {
       case 'like': return { name: 'heart', color: '#ef4444' };
       case 'comment': return { name: 'chatbubble', color: '#3b82f6' };
       case 'follow': return { name: 'person-add', color: '#10b981' };
+      case 'save': return { name: 'bookmark', color: '#f59e0b' };
       default: return { name: 'notifications', color: '#9333ea' };
     }
   };
@@ -143,6 +157,20 @@ export default function NotificationsFormateurScreen() {
       console.log('✓ Notification marquée comme lue:', notifId);
     } catch (error) {
       console.error('Erreur marquage lecture:', error);
+    }
+  };
+
+  const handleNotificationClick = async (notif: Notification) => {
+    // Marquer comme lue
+    await markAsRead(notif.id);
+    
+    // Rediriger selon le type
+    if (notif.type === 'follow' && notif.fromUserId) {
+      // Aller vers le profil de l'apprenant
+      router.push(`/profile/${notif.fromUserId}` as any);
+    } else if (notif.type === 'like' || notif.type === 'comment' || notif.type === 'save') {
+      // Aller vers la page d'accueil formateur
+      router.push('/(tabs-formateur)' as any);
     }
   };
 
@@ -157,8 +185,10 @@ export default function NotificationsFormateurScreen() {
 
   return (
     <View style={styles.container}>
+      {/* ✅ Exigence ID 37, 392 : Menu principal accessible */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Notifications</Text>
+        {/* ✅ Exigence ID 39, 393 : Icône bulle de conversation pour accéder aux messages */}
         <TouchableOpacity onPress={() => router.push('/message' as any)} style={styles.iconBtn}>
           {unreadCount > 0 && (
             <View style={styles.msgBadge}>
@@ -171,6 +201,7 @@ export default function NotificationsFormateurScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {notifs.length > 0 ? (
+          // ✅ Exigence ID 42 : Notifications du plus récent au plus ancien
           notifs.map((item) => {
             const icon = getNotifIcon(item.type);
             
@@ -178,7 +209,8 @@ export default function NotificationsFormateurScreen() {
               <TouchableOpacity 
                 key={item.id} 
                 style={[styles.notifCard, !item.read && styles.unreadCard]}
-                onPress={() => markAsRead(item.id)}
+                onPress={() => handleNotificationClick(item)}
+                activeOpacity={0.7}
               >
                 <View style={styles.leftSection}>
                   <Image source={{ uri: item.avatar }} style={styles.avatar} />
@@ -188,27 +220,34 @@ export default function NotificationsFormateurScreen() {
                 </View>
                 
                 <View style={styles.notifInfo}>
+                  {/* ✅ Exigence ID 186 : Format "Nom d'utilisateur" + "action" + "Temps" */}
                   <Text style={styles.notifUser}>{item.user}</Text>
                   <Text style={styles.notifMsg}>{item.msg}</Text>
-                  {item.title && <Text style={styles.notifVideo}>"{item.title}"</Text>}
+                  {/* ✅ Exigence ID 397 : Affichage du nom de la vidéo */}
+                  {item.title && (
+                    <Text style={styles.notifVideo}>"{item.title}"</Text>
+                  )}
                   {item.comment && (
                     <View style={styles.commentBox}>
                       <Text style={styles.commentText}>{item.comment}</Text>
                     </View>
                   )}
+                  {/* ✅ Exigence ID 40 : Format du temps */}
                   <Text style={styles.notifTime}>Il y a {item.time}</Text>
                 </View>
                 
+                {/* Miniature de la vidéo si disponible */}
                 {item.thumb && <Image source={{ uri: item.thumb }} style={styles.thumbnail} />}
               </TouchableOpacity>
             );
           })
         ) : (
+          // ✅ Exigence ID 41, 187 : Message "Vous êtes à jour !" si aucune notification
           <View style={styles.emptyState}>
-            <Ionicons name="notifications-outline" size={64} color="#E5E7EB" />
-            <Text style={styles.emptyText}>Aucune notification</Text>
+            <Ionicons name="checkmark-circle-outline" size={80} color="#22C55E" />
+            <Text style={styles.emptyTitle}>Vous êtes à jour !</Text>
             <Text style={styles.emptySubtext}>
-              Vos interactions apparaîtront ici
+              Les interactions avec vos vidéos apparaîtront ici
             </Text>
           </View>
         )}
@@ -241,7 +280,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F3F4F6'
   },
   headerTitle: { fontSize: 32, fontWeight: 'bold', color: '#18181B' },
-  iconBtn: { padding: 5 },
+  iconBtn: { padding: 5, position: 'relative' },
   msgBadge: {
     position: 'absolute',
     top: -2,
@@ -266,10 +305,15 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#F3F4F6'
+    borderColor: '#F3F4F6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   unreadCard: {
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#FAF5FF',
     borderColor: '#9333ea',
     borderWidth: 2,
   },
@@ -293,37 +337,51 @@ const styles = StyleSheet.create({
   notifInfo: { flex: 1 },
   notifUser: { fontSize: 15, fontWeight: 'bold', color: '#18181B' },
   notifMsg: { fontSize: 14, color: '#3F3F46', marginTop: 2 },
-  notifVideo: { fontSize: 14, fontWeight: '600', color: '#18181B', marginTop: 4 },
+  notifVideo: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#9333ea', 
+    marginTop: 4,
+    lineHeight: 20,
+  },
   commentBox: {
-    backgroundColor: '#F9FAFB',
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 6,
+    backgroundColor: '#F0F9FF',
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 8,
     borderLeftWidth: 3,
     borderLeftColor: '#3b82f6',
   },
   commentText: {
     fontSize: 13,
-    color: '#3F3F46',
+    color: '#1E40AF',
     fontStyle: 'italic',
+    lineHeight: 18,
   },
   notifTime: { fontSize: 12, color: '#A1A1AA', marginTop: 6 },
-  thumbnail: { width: 70, height: 70, borderRadius: 12, marginLeft: 10 },
+  thumbnail: { 
+    width: 70, 
+    height: 70, 
+    borderRadius: 12, 
+    marginLeft: 10,
+    backgroundColor: '#F3F4F6',
+  },
   emptyState: {
-    marginTop: 100,
+    marginTop: 120,
     alignItems: 'center',
     paddingHorizontal: 40,
   },
-  emptyText: {
-    marginTop: 16,
-    fontSize: 16,
+  emptyTitle: {
+    marginTop: 20,
+    fontSize: 24,
     color: '#18181B',
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   emptySubtext: {
-    marginTop: 8,
-    fontSize: 14,
+    marginTop: 12,
+    fontSize: 15,
     color: '#71717A',
     textAlign: 'center',
+    lineHeight: 22,
   },
 });
