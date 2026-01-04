@@ -76,6 +76,7 @@ export default function ApprenantTabsLayout() {
           ),
         }}
       />
+   
       <Tabs.Screen
         name="notifications"
         options={{
