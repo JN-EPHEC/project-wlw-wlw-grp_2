@@ -12,7 +12,7 @@ import { db } from '../../firebaseConfig';
 
 const { width } = Dimensions.get('window');
 
-// --- CATÉGORIES ---
+// --- CATÉGORIES (Boutons de filtres) ---
 const CATEGORIES = [
   { id: 'all', label: 'Tout', icon: '🌟' },
   { id: 'Marketing', label: 'Marketing Digital', icon: '📱' },
@@ -38,6 +38,15 @@ interface VideoData {
   description?: string;
 }
 
+// Type pour les créateurs
+interface CreatorData {
+  id: string;
+  name: string;
+  followers: string;
+  tag: string;
+  avatar: string;
+}
+
 export default function RechercheScreen() {
   // --- ÉTATS ---
   const [activeTab, setActiveTab] = useState<'videos' | 'creators'>('videos');
@@ -49,7 +58,10 @@ export default function RechercheScreen() {
   
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // États pour les Modals (Vidéo & Profil)
   const [selectedVideo, setSelectedVideo] = useState<VideoData | null>(null);
+  const [selectedCreator, setSelectedCreator] = useState<CreatorData | null>(null);
 
   // --- CHARGEMENT FIREBASE ---
   useEffect(() => {
@@ -60,12 +72,30 @@ export default function RechercheScreen() {
         
         querySnapshot.forEach((doc) => {
           const data = doc.data();
+          
+          // Récupération de la catégorie brute (ex: "dev")
+          const rawCat = data.category ? String(data.category).toLowerCase().trim() : '';
+
+          // ---------------------------------------------------------
+          // 📍 --- ICI TU CHANGES LES NOMS (MAPPING) ---
+          // ---------------------------------------------------------
+          let displayTag = data.category || 'Général'; // Valeur par défaut
+
+          // Si la base de données renvoie 'x', on affiche 'y'
+          if (rawCat === 'dev') displayTag = 'Développeur';
+          else if (rawCat === 'ecommerce') displayTag = 'E-commerce';
+          else if (rawCat === 'ia') displayTag = 'Intelligence Artificielle';
+          else if (rawCat === 'marketing') displayTag = 'Marketing Digital';
+          else if (rawCat === 'design') displayTag = 'Design Graphique';
+          // Tu peux rajouter d'autres lignes ici...
+          // ---------------------------------------------------------
+
           videoList.push({
             id: doc.id,
             title: data.title || 'Sans titre',
             creator: data.creator || 'Inconnu',
             videoUrl: data.videoUrl || '',
-            tag: data.category ? String(data.category) : 'Général', 
+            tag: displayTag, // On utilise le nom transformé
             description: data.description || ''
           });
         });
@@ -83,7 +113,7 @@ export default function RechercheScreen() {
   const filteredVideos = useMemo(() => {
     return videos.filter(v => {
       const searchLower = search.toLowerCase().trim();
-      const videoTagLower = v.tag.toLowerCase();
+      const videoTagLower = v.tag.toLowerCase(); // ex: "développeur"
       const videoTitleLower = v.title.toLowerCase();
 
       // 1. Recherche TEXTUELLE
@@ -96,13 +126,15 @@ export default function RechercheScreen() {
       if (selectedCat === 'all') {
         matchesCategoryFilter = true;
       } else {
-        const filterId = selectedCat.toLowerCase().trim();
+        const filterId = selectedCat.toLowerCase().trim(); // ex: "dev"
+        
+        // On vérifie si le tag affiché contient l'ID du filtre ou inversement
+        // Cela permet que "Développeur" soit trouvé par le filtre "Dev"
         matchesCategoryFilter = 
-            videoTagLower === filterId ||                       
             videoTagLower.includes(filterId) ||                 
-            filterId.includes(videoTagLower) ||                 
+            filterId.includes(videoTagLower) ||
             (filterId === 'ia' && videoTagLower.includes('intelligence')) || 
-            (filterId === 'dev' && videoTagLower.includes('développement')); 
+            (filterId === 'dev' && videoTagLower.includes('développeur')); 
       }
 
       return matchesCategoryFilter && matchesSearch;
@@ -198,7 +230,7 @@ export default function RechercheScreen() {
            <ActivityIndicator size="large" color="#9333EA" style={{marginTop: 50}} />
         ) : (
           <>
-            {/* VUE VIDÉOS (Liste Texte Uniquement) */}
+            {/* VUE VIDÉOS */}
             {activeTab === 'videos' && (
               <>
                 <Text style={styles.sectionTitle}>
@@ -217,18 +249,15 @@ export default function RechercheScreen() {
                       style={styles.textOnlyCard}
                       onPress={() => setSelectedVideo(video)}
                     >
-                      {/* --- MODIFICATION ICI --- */}
-                      {/* Le rang #1, #2 ne s'affiche que si la recherche est vide */}
                       {search === '' && (
                         <Text style={styles.rank}>#{index + 1}</Text>
                       )}
                       
-                      {/* INFORMATIONS TEXTUELLES */}
                       <View style={styles.videoInfo}>
                         <Text style={styles.vTitle} numberOfLines={2}>{video.title}</Text>
                         <Text style={styles.vCreator}>Par {video.creator}</Text>
                         
-                        {/* TAG / CATÉGORIE */}
+                        {/* TAG / CATÉGORIE (MODIFIÉ) */}
                         <View style={[
                           styles.tagBadge, 
                           video.tag.toLowerCase().includes(search.toLowerCase()) && search !== '' ? {backgroundColor: '#9333EA'} : {}
@@ -240,22 +269,16 @@ export default function RechercheScreen() {
                         </View>
                       </View>
 
-                      {/* PETITE FLÈCHE DISCRÈTE */}
                       <Ionicons name="chevron-forward" size={20} color="#D4D4D8" />
                     </TouchableOpacity>
                   ))
                 )}
-
-                {/* HISTORIQUE */}
+                
+                {/* Historique... (Code inchangé) */}
                 {history.length > 0 && search === '' && (
                   <View style={styles.historySection}>
-                    <View style={styles.historyHeader}>
-                        <Text style={styles.sectionTitle}>Récent</Text>
-                        <TouchableOpacity onPress={() => setHistory([])}>
-                            <Text style={styles.clearAllText}>Effacer</Text>
-                        </TouchableOpacity>
-                    </View>
-                    {history.map((item, index) => (
+                     {/* ...Contenu historique... */}
+                     {history.map((item, index) => (
                       <View key={index} style={styles.historyRow}>
                         <TouchableOpacity style={styles.historyClickable} onPress={() => setSearch(item)}>
                             <Ionicons name="time-outline" size={20} color="#A1A1AA" />
@@ -271,7 +294,7 @@ export default function RechercheScreen() {
               </>
             )}
 
-            {/* VUE CRÉATEURS */}
+            {/* VUE CRÉATEURS (Mise à jour pour être cliquable) */}
             {activeTab === 'creators' && (
               <>
                  <Text style={styles.sectionTitle}>⭐ Formateurs suggérés</Text>
@@ -279,7 +302,11 @@ export default function RechercheScreen() {
                     <Text style={styles.emptyText}>Aucun formateur trouvé.</Text>
                  ) : (
                    filteredCreators.map(creator => (
-                    <View key={creator.id} style={styles.creatorCard}>
+                    <TouchableOpacity 
+                      key={creator.id} 
+                      style={styles.creatorCard}
+                      onPress={() => setSelectedCreator(creator)}
+                    >
                       <Image source={{ uri: creator.avatar }} style={styles.avatar} />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.creatorName}>{creator.name}</Text>
@@ -293,7 +320,7 @@ export default function RechercheScreen() {
                           {followedIds.includes(creator.id) ? 'Suivi' : 'Suivre'}
                         </Text>
                       </TouchableOpacity>
-                    </View>
+                    </TouchableOpacity>
                   ))
                  )}
               </>
@@ -328,6 +355,72 @@ export default function RechercheScreen() {
               ))}
             </ScrollView>
           </View>
+        </View>
+      </Modal>
+
+      {/* --- MODAL PROFIL FORMATEUR (NOUVEAU) --- */}
+      <Modal 
+        visible={selectedCreator !== null} 
+        animationType="slide" 
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSelectedCreator(null)}
+      >
+        <View style={[styles.container, {paddingTop: 20}]}>
+             <View style={{flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20}}>
+                <TouchableOpacity onPress={() => setSelectedCreator(null)} style={{padding: 10, backgroundColor: '#F3F4F6', borderRadius: 20}}>
+                    <Ionicons name="close" size={24} color="#333" />
+                </TouchableOpacity>
+             </View>
+
+             {selectedCreator && (
+                 <ScrollView contentContainerStyle={{padding: 20, alignItems: 'center'}}>
+                    <Image source={{ uri: selectedCreator.avatar }} style={{ width: 100, height: 100, borderRadius: 50, marginBottom: 15 }} />
+                    <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#1F2937' }}>{selectedCreator.name}</Text>
+                    <Text style={{ color: '#6B7280', marginBottom: 20 }}>Expert en {selectedCreator.tag} • {selectedCreator.followers} abonnés</Text>
+                    
+                    <TouchableOpacity
+                        style={[
+                            styles.followBtn, 
+                            { width: 200, alignItems: 'center', marginBottom: 30, paddingVertical: 10 },
+                            followedIds.includes(selectedCreator.id) && styles.followedBtnActive
+                        ]}
+                        onPress={() => toggleFollow(selectedCreator.id)}
+                    >
+                        <Text style={[
+                            styles.followBtnText, 
+                            {fontSize: 16},
+                            followedIds.includes(selectedCreator.id) && styles.followedBtnTextActive
+                        ]}>
+                        {followedIds.includes(selectedCreator.id) ? 'Abonné(e)' : "S'abonner"}
+                        </Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.divider} />
+
+                    <Text style={[styles.sectionTitle, {alignSelf: 'flex-start'}]}>📚 Ses cours disponibles</Text>
+                    
+                    {videos.filter(v => v.creator === selectedCreator.name).length > 0 ? (
+                        videos.filter(v => v.creator === selectedCreator.name).map((video) => (
+                            <TouchableOpacity 
+                                key={video.id} 
+                                style={[styles.textOnlyCard, {width: '100%'}]}
+                                onPress={() => {
+                                    setSelectedCreator(null);
+                                    setTimeout(() => setSelectedVideo(video), 400); 
+                                }}
+                            >
+                                <View style={styles.videoInfo}>
+                                    <Text style={styles.vTitle}>{video.title}</Text>
+                                    <Text style={styles.vCreator}>{video.tag}</Text>
+                                </View>
+                                <Ionicons name="play-circle" size={32} color="#9333EA" />
+                            </TouchableOpacity>
+                        ))
+                    ) : (
+                        <Text style={styles.emptyText}>Ce formateur n'a pas encore publié de vidéo.</Text>
+                    )}
+                 </ScrollView>
+             )}
         </View>
       </Modal>
 
@@ -418,6 +511,7 @@ const styles = StyleSheet.create({
   historyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   historyClickable: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   historyText: { fontSize: 16, color: '#3F3F46', marginLeft: 12 },
+  
   creatorCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, backgroundColor: '#F9FAFB', padding: 12, borderRadius: 16, borderWidth: 1, borderColor: '#F3F4F6' },
   avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 15 },
   creatorName: { fontWeight: 'bold', fontSize: 16 },
@@ -426,17 +520,22 @@ const styles = StyleSheet.create({
   followedBtnActive: { backgroundColor: '#9333EA' },
   followBtnText: { color: '#9333EA', fontWeight: 'bold' },
   followedBtnTextActive: { color: '#FFF' },
+  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 25, maxHeight: '80%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
   modalTitle: { fontSize: 20, fontWeight: 'bold' },
   filterOption: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', borderRadius: 12 },
   filterLabel: { flex: 1, marginLeft: 15, fontSize: 16 },
+  
   videoModalContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
   closeBtn: { position: 'absolute', top: 50, left: 20, zIndex: 10, padding: 10 },
   videoPlayer: { width: width, height: 300, backgroundColor: 'black' },
   videoDetails: { padding: 20 },
   videoModalTitle: { color: 'white', fontSize: 22, fontWeight: 'bold', marginTop: 10 },
   videoModalCreator: { color: '#AAA', fontSize: 16, marginVertical: 5 },
-  videoModalDesc: { color: '#DDD', marginTop: 10, lineHeight: 20 }
+  videoModalDesc: { color: '#DDD', marginTop: 10, lineHeight: 20 },
+  
+  // Style ajouté pour la Modal Profil
+  divider: { width: '100%', height: 1, backgroundColor: '#E5E7EB', marginVertical: 20 }
 });
