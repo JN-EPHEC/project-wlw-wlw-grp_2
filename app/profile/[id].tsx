@@ -14,7 +14,7 @@ import {
 import { db, auth } from '../../firebaseConfig';
 
 import CommentModal from '../../components/CommentModal';
-import { sendNotification } from'/../utils/notificationService';
+import { sendNotification } from '../../app/utils/notificationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_COUNT = 3;

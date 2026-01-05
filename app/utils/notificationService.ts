@@ -251,3 +251,38 @@ export async function notifyNewMessage(targetUserId: string, messagePreview: str
     comment: messagePreview.substring(0, 100)
   });
 }
+
+/**
+ * GENERIC SEND NOTIFICATION
+ *
+ * Convenience wrapper used by callers that pass a target user, a type and an optional payload.
+ * It merges provided payload fields with the expected notification structure and delegates
+ * to createNotification so we keep a single persistence path.
+ */
+export async function sendNotification(targetUserId: string, type: NotificationType, payload?: any) {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  // Prevent sending a notification to oneself (support both 'senderId' and 'fromUserId')
+  if ((payload?.fromUserId && payload.fromUserId === targetUserId) || (payload?.senderId && payload.senderId === targetUserId)) return;
+
+  // Build base object - prefer explicit values from payload, otherwise derive from auth user when possible
+  const userDoc = await getDoc(doc(db, 'users', user.uid));
+  const userData = userDoc.data();
+
+  const notification: Partial<NotificationData> = {
+    userId: targetUserId,
+    fromUserId: payload?.fromUserId || payload?.senderId || user.uid,
+    fromUserName: payload?.fromUserName || payload?.senderName || `${userData?.prenom || ''} ${userData?.nom || ''}`.trim() || userData?.displayName || 'Utilisateur',
+    fromUserAvatar: payload?.fromUserAvatar || userData?.photoURL,
+    type,
+    videoId: payload?.videoId,
+    videoTitle: payload?.videoTitle,
+    videoThumb: payload?.videoThumb,
+    comment: payload?.comment,
+    badge: payload?.badge,
+    read: false
+  };
+
+  await createNotification(notification);
+}
