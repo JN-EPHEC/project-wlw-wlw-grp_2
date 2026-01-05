@@ -17,6 +17,9 @@ import { db, auth } from '../../firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 
+// Import du modal externe
+import CommentModal from '../../components/CommentModal';
+
 interface VideoData {
   id: string;
   title: string;
@@ -51,28 +54,6 @@ interface UserProfile {
   role?: string;
 }
 
-interface Comment {
-  id: string;
-  videoId: string;
-  userId: string;
-  userName: string;
-  text: string;
-  likes: number;
-  replies: Reply[];
-  createdAt: any;
-  likedBy?: string[];
-}
-
-interface Reply {
-  id: string;
-  userId: string;
-  userName: string;
-  text: string;
-  likes: number;
-  createdAt: any;
-  likedBy?: string[];
-}
-
 export default function HomeScreen() {
   const router = useRouter();
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
@@ -89,11 +70,8 @@ export default function HomeScreen() {
   
   const [showComments, setShowComments] = useState(false);
   const [currentVideoId, setCurrentVideoId] = useState<string>('');
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [replyTo, setReplyTo] = useState<string | null>(null);
-  const [replyText, setReplyText] = useState('');
-  const [loadingComments, setLoadingComments] = useState(false);
+  const [currentVideoCreatorId, setCurrentVideoCreatorId] = useState<string>('');
+  const [currentVideoTitle, setCurrentVideoTitle] = useState<string>('');
 
   const [showShareModal, setShowShareModal] = useState(false);
   const [showUsersList, setShowUsersList] = useState(false);
@@ -486,300 +464,12 @@ export default function HomeScreen() {
     }
   };
 
-  const loadComments = async (videoId: string) => {
-    setLoadingComments(true);
-    try {
-      const commentsQuery = query(
-        collection(db, 'comments'), 
-        where('videoId', '==', videoId)
-      );
-      const snapshot = await getDocs(commentsQuery);
-      
-      const commentsData = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return { 
-          id: doc.id, 
-          ...data, 
-          replies: data.replies || [] 
-        };
-      }) as Comment[];
-      
-      commentsData.sort((a, b) => {
-        const dateA = a.createdAt?.toDate?.() || new Date(0);
-        const dateB = b.createdAt?.toDate?.() || new Date(0);
-        return dateB.getTime() - dateA.getTime();
-      });
-      
-      setComments(commentsData);
-      setLoadingComments(false);
-    } catch (error) {
-      console.error('Erreur chargement commentaires:', error);
-      setLoadingComments(false);
-    }
-  };
-
-  const handleComment = async (videoId: string, creatorId: string) => {
-    setCurrentVideoId(videoId);
+  const handleComment = (video: VideoData) => {
+    setCurrentVideoId(video.id);
+    setCurrentVideoCreatorId(video.creatorId);
+    setCurrentVideoTitle(video.title);
     setShowComments(true);
-    await loadComments(videoId);
-    
-    const currentVideo = videoRefs.current[videoId];
-    if (currentVideo) {
-      try {
-        await currentVideo.pauseAsync();
-        setIsPlaying(false);
-      } catch (error) {}
-    }
-  };
-
-  const handleAddComment = async () => {
-    if (!newComment.trim()) return;
-    
-    try {
-      const user = auth.currentUser;
-      if (!user) {
-        Alert.alert('Erreur', 'Vous devez être connecté pour commenter');
-        return;
-      }
-
-      const commentData = {
-        videoId: currentVideoId,
-        userId: user.uid,
-        userName: userProfile?.displayName || 'Utilisateur',
-        text: newComment.trim(),
-        likes: 0,
-        replies: [],
-        likedBy: [],
-        createdAt: serverTimestamp()
-      };
-
-      await addDoc(collection(db, 'comments'), commentData);
-      await updateDoc(doc(db, 'videos', currentVideoId), { 
-        comments: increment(1) 
-      });
-      
-      setVideos(prev => prev.map(v => 
-        v.id === currentVideoId ? { ...v, comments: v.comments + 1 } : v
-      ));
-
-      setNewComment('');
-      Keyboard.dismiss();
-      loadComments(currentVideoId);
-      Alert.alert('✓', 'Commentaire ajouté !');
-    } catch (error) {
-      console.error('Erreur ajout commentaire:', error);
-      Alert.alert('Erreur', 'Impossible d\'ajouter le commentaire');
-    }
-  };
-
-  const handleAddReply = async (commentId: string) => {
-    if (!replyText.trim()) return;
-    
-    try {
-      const user = auth.currentUser;
-      if (!user) {
-        Alert.alert('Erreur', 'Vous devez être connecté pour répondre');
-        return;
-      }
-
-      const reply = {
-        id: Date.now().toString(),
-        userId: user.uid,
-        userName: userProfile?.displayName || 'Utilisateur',
-        text: replyText.trim(),
-        likes: 0,
-        likedBy: [],
-        createdAt: new Date().toISOString()
-      };
-
-      await updateDoc(doc(db, 'comments', commentId), { 
-        replies: arrayUnion(reply) 
-      });
-      await updateDoc(doc(db, 'videos', currentVideoId), { 
-        comments: increment(1) 
-      });
-      
-      setVideos(prev => prev.map(v => 
-        v.id === currentVideoId ? { ...v, comments: v.comments + 1 } : v
-      ));
-
-      setReplyText('');
-      setReplyTo(null);
-      Keyboard.dismiss();
-      loadComments(currentVideoId);
-      Alert.alert('✓', 'Réponse ajoutée !');
-    } catch (error) {
-      console.error('Erreur ajout réponse:', error);
-      Alert.alert('Erreur', 'Impossible d\'ajouter la réponse');
-    }
-  };
-
-  const handleDeleteComment = async (commentId: string, repliesCount: number) => {
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      const performDelete = async () => {
-        try {
-          await deleteDoc(doc(db, 'comments', commentId));
-          await updateDoc(doc(db, 'videos', currentVideoId), { 
-            comments: increment(-(1 + repliesCount)) 
-          });
-          
-          setVideos(prev => prev.map(v => 
-            v.id === currentVideoId ? { ...v, comments: v.comments - (1 + repliesCount) } : v
-          ));
-          
-          loadComments(currentVideoId);
-          
-          Platform.OS === 'web' 
-            ? alert('✓ Commentaire supprimé !') 
-            : Alert.alert('Succès', 'Commentaire supprimé !');
-        } catch (error) {
-          Alert.alert('Erreur', 'Impossible de supprimer le commentaire');
-        }
-      };
-
-      if (Platform.OS === 'web') {
-        if (confirm('Supprimer ce commentaire ?')) await performDelete();
-      } else {
-        Alert.alert(
-          'Confirmation', 
-          'Supprimer ce commentaire ?', 
-          [
-            { text: 'Annuler', style: 'cancel' },
-            { text: 'Supprimer', style: 'destructive', onPress: performDelete }
-          ]
-        );
-      }
-    } catch (error) {}
-  };
-
-  const handleDeleteReply = async (commentId: string, replyId: string) => {
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-
-      const performDelete = async () => {
-        try {
-          const comment = comments.find(c => c.id === commentId);
-          if (!comment) return;
-          
-          const replyToDelete = comment.replies.find(r => r.id === replyId);
-          if (!replyToDelete) return;
-
-          await updateDoc(doc(db, 'comments', commentId), { 
-            replies: arrayRemove(replyToDelete) 
-          });
-          await updateDoc(doc(db, 'videos', currentVideoId), { 
-            comments: increment(-1) 
-          });
-          
-          setVideos(prev => prev.map(v => 
-            v.id === currentVideoId ? { ...v, comments: v.comments - 1 } : v
-          ));
-          
-          loadComments(currentVideoId);
-          
-          Platform.OS === 'web' 
-            ? alert('✓ Réponse supprimée !') 
-            : Alert.alert('Succès', 'Réponse supprimée !');
-        } catch (error) {
-          Alert.alert('Erreur', 'Impossible de supprimer la réponse');
-        }
-      };
-
-      if (Platform.OS === 'web') {
-        if (confirm('Supprimer cette réponse ?')) await performDelete();
-      } else {
-        Alert.alert(
-          'Confirmation', 
-          'Supprimer cette réponse ?', 
-          [
-            { text: 'Annuler', style: 'cancel' },
-            { text: 'Supprimer', style: 'destructive', onPress: performDelete }
-          ]
-        );
-      }
-    } catch (error) {}
-  };
-
-  const handleLikeComment = async (commentId: string) => {
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-      
-      const comment = comments.find(c => c.id === commentId);
-      if (!comment) return;
-
-      const isLiked = comment.likedBy?.includes(user.uid);
-      const commentRef = doc(db, 'comments', commentId);
-
-      if (isLiked) {
-        await updateDoc(commentRef, { 
-          likes: increment(-1), 
-          likedBy: arrayRemove(user.uid) 
-        });
-      } else {
-        await updateDoc(commentRef, { 
-          likes: increment(1), 
-          likedBy: arrayUnion(user.uid) 
-        });
-      }
-      
-      loadComments(currentVideoId);
-    } catch (error) {}
-  };
-
-  const handleLikeReply = async (commentId: string, replyId: string) => {
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-      
-      const comment = comments.find(c => c.id === commentId);
-      if (!comment) return;
-
-      const updatedReplies = comment.replies.map(reply => {
-        if (reply.id === replyId) {
-          const isLiked = reply.likedBy?.includes(user.uid);
-          return {
-            ...reply,
-            likes: isLiked ? reply.likes - 1 : reply.likes + 1,
-            likedBy: isLiked 
-              ? (reply.likedBy || []).filter(id => id !== user.uid) 
-              : [...(reply.likedBy || []), user.uid]
-          };
-        }
-        return reply;
-      });
-
-      await updateDoc(doc(db, 'comments', commentId), { 
-        replies: updatedReplies 
-      });
-      
-      loadComments(currentVideoId);
-    } catch (error) {}
-  };
-
-  const formatDate = (timestamp: any) => {
-    if (!timestamp) return '';
-    
-    let date;
-    if (timestamp.toDate) date = timestamp.toDate();
-    else if (typeof timestamp === 'string') date = new Date(timestamp);
-    else return '';
-
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) return `${days}j`;
-    if (hours > 0) return `${hours}h`;
-    if (minutes > 0) return `${minutes}min`;
-    return 'À l\'instant';
+    setIsPlaying(false);
   };
 
   const getBadgeInfo = (badge?: 'apprenant' | 'expert' | 'pro') => {
@@ -793,25 +483,17 @@ export default function HomeScreen() {
     }
   };
 
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <LinearGradient 
-          colors={['#7459f0', '#242A65']} 
-          style={StyleSheet.absoluteFill}
-        >
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.loadingText}>Chargement...</Text>
-        </LinearGradient>
-      </View>
-    );
-  }
-
   const progressPercentage = duration > 0 ? (progress / duration) * 100 : 0;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
+      
+      {loading && videos.length === 0 && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#7459f0" />
+        </View>
+      )}
       
       <ScrollView
         ref={scrollViewRef}
@@ -909,8 +591,8 @@ export default function HomeScreen() {
                   <View style={styles.creatorDetails}>
                     <View style={styles.creatorNameRow}>
                       <Text style={styles.creatorName}>
-                        @{video.creatorName} 
-                        {isMyVideo && <Text style={styles.meLabel}> (Moi)</Text>}
+                        @{video.creatorName}
+                        {isMyVideo ? " (Moi)" : ""}
                       </Text>
                       
                       {badgeInfo && (
@@ -1006,7 +688,7 @@ export default function HomeScreen() {
 
                 <TouchableOpacity 
                   style={styles.actionButton} 
-                  onPress={() => handleComment(video.id, video.creatorId)}
+                  onPress={() => handleComment(video)}
                   activeOpacity={0.7}
                 >
                   <LinearGradient
@@ -1260,293 +942,30 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* MODAL COMMENTAIRES */}
-      <Modal 
-        visible={showComments} 
-        animationType="slide" 
-        transparent={false}
-        onRequestClose={() => {
-          setShowComments(false);
-          setReplyTo(null);
-          setReplyText('');
-        }}
-      >
-        <KeyboardAvoidingView 
-          style={styles.modalContainer} 
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={0}
-        >
-          <LinearGradient
-            colors={['#7459f0', '#9333ea', '#242A65']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.modalHeader}
-          >
-            <TouchableOpacity 
-              onPress={() => { 
-                setShowComments(false); 
-                setReplyTo(null); 
-                setReplyText(''); 
-              }} 
-              style={styles.backButton}
-            >
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-            <Text style={styles.modalHeaderTitle}>Commentaires</Text>
-            <View style={styles.placeholder} />
-          </LinearGradient>
-          
-          <ScrollView style={styles.commentsList}>
-            {loadingComments ? (
-              <View style={styles.loadingCommentsContainer}>
-                <ActivityIndicator size="large" color="#7459f0" />
-              </View>
-            ) : comments.length === 0 ? (
-              <View style={styles.emptyCommentsContainer}>
-                <Ionicons name="chatbubbles-outline" size={64} color="#ccc" />
-                <Text style={styles.emptyCommentsText}>Aucun commentaire</Text>
-                <Text style={styles.emptyCommentsSubtext}>Soyez le premier à commenter !</Text>
-              </View>
-            ) : (
-              comments.map((comment) => (
-                <View key={comment.id} style={styles.commentContainer}>
-                  <View style={styles.commentHeader}>
-                    <LinearGradient
-                      colors={['#7459f0', '#242A65']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.commentAvatar}
-                    >
-                      <Text style={styles.commentAvatarText}>
-                        {comment.userName.charAt(0).toUpperCase()}
-                      </Text>
-                    </LinearGradient>
-                    
-                    <View style={styles.commentContent}>
-                      <View style={styles.commentTop}>
-                        <Text style={styles.commentUserName}>{comment.userName}</Text>
-                        <Text style={styles.commentTimestamp}>{formatDate(comment.createdAt)}</Text>
-                      </View>
-                      
-                      <Text style={styles.commentText}>{comment.text}</Text>
-                      
-                      <View style={styles.commentActions}>
-                        <TouchableOpacity 
-                          style={styles.commentActionBtn} 
-                          onPress={() => handleLikeComment(comment.id)}
-                        >
-                          <Ionicons 
-                            name={comment.likedBy?.includes(auth.currentUser?.uid || '') ? "heart" : "heart-outline"} 
-                            size={16} 
-                            color={comment.likedBy?.includes(auth.currentUser?.uid || '') ? "#ef4444" : "#666"} 
-                          />
-                          {comment.likes > 0 && (
-                            <Text style={styles.commentActionText}>{comment.likes}</Text>
-                          )}
-                        </TouchableOpacity>
-                        
-                        <TouchableOpacity 
-                          style={styles.commentActionBtn} 
-                          onPress={() => setReplyTo(comment.id)}
-                        >
-                          <Ionicons name="chatbubble-outline" size={16} color="#666" />
-                          <Text style={styles.commentActionText}>Répondre</Text>
-                        </TouchableOpacity>
-                        
-                        {comment.userId === auth.currentUser?.uid && (
-                          <TouchableOpacity 
-                            style={styles.commentActionBtn} 
-                            onPress={() => handleDeleteComment(comment.id, comment.replies.length)}
-                          >
-                            <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                            <Text style={[styles.commentActionText, { color: '#ef4444' }]}>
-                              Supprimer
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                  
-                  {replyTo === comment.id && (
-                    <View style={styles.replyInputContainer}>
-                      <TextInput 
-                        style={styles.replyInput} 
-                        placeholder="Écrire une réponse..." 
-                        value={replyText} 
-                        onChangeText={setReplyText} 
-                        multiline 
-                        returnKeyType="send"
-                        enablesReturnKeyAutomatically={true}
-                        onSubmitEditing={() => {
-                          if (replyText.trim()) {
-                            handleAddReply(comment.id);
-                          }
-                        }}
-                        blurOnSubmit={false}
-                      />
-                      <View style={styles.replyButtons}>
-                        <TouchableOpacity 
-                          onPress={() => { 
-                            setReplyTo(null); 
-                            setReplyText(''); 
-                          }} 
-                          style={styles.cancelButton}
-                        >
-                          <Text style={styles.cancelButtonText}>Annuler</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity 
-                          onPress={() => {
-                            if (replyText.trim()) {
-                              handleAddReply(comment.id);
-                            }
-                          }} 
-                          disabled={!replyText.trim()}
-                          activeOpacity={0.7}
-                        >
-                          <LinearGradient
-                            colors={!replyText.trim() ? ['#D1D5DB', '#9CA3AF'] : ['#7459f0', '#9333ea']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                            style={styles.sendReplyButton}
-                          >
-                            <Ionicons name="send" size={16} color="#fff" />
-                            <Text style={styles.sendReplyButtonText}>Envoyer</Text>
-                          </LinearGradient>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  )}
-                  
-                  {comment.replies && comment.replies.length > 0 && (
-                    <View style={styles.repliesContainer}>
-                      {comment.replies.map((reply) => (
-                        <View key={reply.id} style={styles.replyItem}>
-                          <View style={styles.replyHeader}>
-                            <LinearGradient
-                              colors={['#9333ea', '#7459f0']}
-                              start={{ x: 0, y: 0 }}
-                              end={{ x: 1, y: 1 }}
-                              style={styles.replyAvatar}
-                            >
-                              <Text style={styles.replyAvatarText}>
-                                {reply.userName.charAt(0).toUpperCase()}
-                              </Text>
-                            </LinearGradient>
-                            
-                            <View style={styles.replyContent}>
-                              <View style={styles.replyTop}>
-                                <Text style={styles.replyUserName}>{reply.userName}</Text>
-                                <Text style={styles.replyTimestamp}>{formatDate(reply.createdAt)}</Text>
-                              </View>
-                              
-                              <Text style={styles.replyText}>{reply.text}</Text>
-                              
-                              <View style={styles.replyActions}>
-                                <TouchableOpacity 
-                                  style={styles.replyLikeBtn} 
-                                  onPress={() => handleLikeReply(comment.id, reply.id)}
-                                >
-                                  <Ionicons 
-                                    name={reply.likedBy?.includes(auth.currentUser?.uid || '') ? "heart" : "heart-outline"} 
-                                    size={14} 
-                                    color={reply.likedBy?.includes(auth.currentUser?.uid || '') ? "#ef4444" : "#666"} 
-                                  />
-                                  {reply.likes > 0 && (
-                                    <Text style={styles.replyLikeText}>{reply.likes}</Text>
-                                  )}
-                                </TouchableOpacity>
-                                
-                                {reply.userId === auth.currentUser?.uid && (
-                                  <TouchableOpacity 
-                                    style={styles.replyDeleteBtn} 
-                                    onPress={() => handleDeleteReply(comment.id, reply.id)}
-                                  >
-                                    <Ionicons name="trash-outline" size={14} color="#ef4444" />
-                                  </TouchableOpacity>
-                                )}
-                              </View>
-                            </View>
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              ))
-            )}
-          </ScrollView>
-          
-          <View style={styles.inputContainer}>
-            <LinearGradient
-              colors={['#7459f0', '#242A65']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.inputAvatar}
-            >
-              <Text style={styles.inputAvatarText}>
-                {userProfile?.displayName?.charAt(0).toUpperCase() || 'U'}
-              </Text>
-            </LinearGradient>
-            <TextInput 
-              style={styles.commentInput} 
-              placeholder="Ajouter un commentaire..." 
-              value={newComment} 
-              onChangeText={setNewComment} 
-              multiline 
-              maxLength={500}
-              returnKeyType="send"
-              enablesReturnKeyAutomatically={true}
-              onSubmitEditing={() => {
-                if (newComment.trim()) {
-                  handleAddComment();
-                }
-              }}
-              blurOnSubmit={false}
-            />
-            <TouchableOpacity 
-              style={styles.sendButtonWrapper} 
-              onPress={() => {
-                if (newComment.trim()) {
-                  handleAddComment();
-                }
-              }} 
-              disabled={!newComment.trim()}
-              activeOpacity={0.7}
-            >
-              <LinearGradient
-                colors={!newComment.trim() ? ['#D1D5DB', '#9CA3AF'] : ['#7459f0', '#9333ea']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.sendButton}
-              >
-                <Ionicons 
-                  name="send" 
-                  size={20} 
-                  color="white"
-                />
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      {/* MODAL COMMENTAIRES - UTILISE LE COMPOSANT EXTERNE */}
+      <CommentModal 
+        visible={showComments}
+        onClose={() => { setShowComments(false); setIsPlaying(true); }}
+        videoId={currentVideoId}
+        creatorId={currentVideoCreatorId}
+        videoTitle={currentVideoTitle}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  loadingContainer: { 
-    flex: 1, 
+  loadingOverlay: { 
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center', 
     alignItems: 'center', 
-    backgroundColor: '#000' 
-  },
-  loadingText: { 
-    color: '#fff', 
-    fontSize: 16, 
-    marginTop: 16,
-    fontWeight: '600'
+    backgroundColor: '#000',
+    zIndex: 999
   },
   scrollView: { flex: 1 },
   scrollViewContent: { flexGrow: 1 },
@@ -1651,11 +1070,6 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3
-  },
-  meLabel: { 
-    fontSize: 12, 
-    color: '#aaa',
-    fontWeight: '500'
   },
   badge: {
     flexDirection: 'row',
@@ -1983,250 +1397,5 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginTop: 16,
     fontWeight: '500'
-  },
-  
-  modalContainer: { flex: 1, backgroundColor: '#fff' },
-  modalHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 16, 
-    paddingVertical: 12, 
-    paddingTop: 50
-  },
-  backButton: { padding: 8 },
-  modalHeaderTitle: { 
-    fontSize: 18, 
-    fontWeight: '700', 
-    color: '#fff' 
-  },
-  placeholder: { width: 40 },
-  commentsList: { flex: 1, backgroundColor: '#F9FAFB' },
-  loadingCommentsContainer: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    paddingVertical: 64 
-  },
-  emptyCommentsContainer: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    paddingVertical: 64 
-  },
-  emptyCommentsText: { 
-    fontSize: 18, 
-    fontWeight: '600', 
-    color: '#666', 
-    marginTop: 16 
-  },
-  emptyCommentsSubtext: { 
-    fontSize: 14, 
-    color: '#999', 
-    marginTop: 8 
-  },
-  commentContainer: { 
-    paddingVertical: 16, 
-    paddingHorizontal: 16, 
-    backgroundColor: '#fff',
-    marginBottom: 1
-  },
-  commentHeader: { 
-    flexDirection: 'row', 
-    gap: 12 
-  },
-  commentAvatar: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  commentAvatarText: { 
-    color: '#fff', 
-    fontSize: 16, 
-    fontWeight: '600' 
-  },
-  commentContent: { flex: 1 },
-  commentTop: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 8, 
-    marginBottom: 4 
-  },
-  commentUserName: { 
-    fontSize: 14, 
-    fontWeight: '600', 
-    color: '#000' 
-  },
-  commentTimestamp: { 
-    fontSize: 12, 
-    color: '#999' 
-  },
-  commentText: { 
-    fontSize: 14, 
-    color: '#333', 
-    lineHeight: 20, 
-    marginBottom: 8 
-  },
-  commentActions: { 
-    flexDirection: 'row', 
-    gap: 16, 
-    marginTop: 4 
-  },
-  commentActionBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 4 
-  },
-  commentActionText: { 
-    fontSize: 12, 
-    color: '#666', 
-    fontWeight: '500' 
-  },
-  repliesContainer: { 
-    marginTop: 12, 
-    marginLeft: 52, 
-    gap: 12 
-  },
-  replyItem: { paddingVertical: 8 },
-  replyHeader: { 
-    flexDirection: 'row', 
-    gap: 8 
-  },
-  replyAvatar: { 
-    width: 32, 
-    height: 32, 
-    borderRadius: 16, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  replyAvatarText: { 
-    color: '#fff', 
-    fontSize: 14, 
-    fontWeight: '600' 
-  },
-  replyContent: { flex: 1 },
-  replyTop: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 8, 
-    marginBottom: 4 
-  },
-  replyUserName: { 
-    fontSize: 13, 
-    fontWeight: '600', 
-    color: '#000' 
-  },
-  replyTimestamp: { 
-    fontSize: 11, 
-    color: '#999' 
-  },
-  replyText: { 
-    fontSize: 13, 
-    color: '#333', 
-    lineHeight: 18, 
-    marginBottom: 6 
-  },
-  replyActions: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 12 
-  },
-  replyLikeBtn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 4 
-  },
-  replyLikeText: { 
-    fontSize: 11, 
-    color: '#666' 
-  },
-  replyDeleteBtn: { padding: 4 },
-  replyInputContainer: { 
-    marginTop: 12, 
-    marginLeft: 52, 
-    padding: 12, 
-    backgroundColor: '#F3E8FF', 
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E9D5FF'
-  },
-  replyInput: { 
-    fontSize: 14, 
-    color: '#000', 
-    minHeight: 40, 
-    maxHeight: 100,
-    paddingVertical: 8
-  },
-  replyButtons: { 
-    flexDirection: 'row', 
-    justifyContent: 'flex-end', 
-    gap: 8, 
-    marginTop: 8 
-  },
-  cancelButton: { 
-    paddingHorizontal: 16, 
-    paddingVertical: 8, 
-    borderRadius: 20 
-  },
-  cancelButtonText: { 
-    fontSize: 14, 
-    color: '#666', 
-    fontWeight: '500' 
-  },
-  sendReplyButton: { 
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16, 
-    paddingVertical: 8, 
-    borderRadius: 20
-  },
-  sendReplyButtonText: { 
-    fontSize: 14, 
-    color: '#fff', 
-    fontWeight: '600' 
-  },
-  inputContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 16, 
-    paddingVertical: 12, 
-    paddingBottom: 30,
-    borderTopWidth: 1, 
-    borderTopColor: '#e5e5e5', 
-    backgroundColor: '#fff', 
-    gap: 12 
-  },
-  inputAvatar: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  inputAvatarText: { 
-    color: '#fff', 
-    fontSize: 16, 
-    fontWeight: '600' 
-  },
-  commentInput: { 
-    flex: 1, 
-    fontSize: 14, 
-    color: '#000', 
-    paddingHorizontal: 16, 
-    paddingVertical: 10, 
-    backgroundColor: '#f5f5f5', 
-    borderRadius: 20, 
-    maxHeight: 100 
-  },
-  sendButtonWrapper: {},
-  sendButton: { 
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center'
   },
 });

@@ -28,47 +28,34 @@ export default function NotificationsFormateurScreen() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    console.log('🔍 Chargement notifications formateur...');
-    
     const user = auth.currentUser;
-    console.log('👤 User ID:', user?.uid);
-    
     if (!user) {
-      console.log('❌ Pas connecté');
       setLoading(false);
       return;
     }
 
     try {
-      // Écouter les notifications en temps réel
-      // ✅ Exigence ID 42 : Tri du plus récent au plus ancien
       const notifQuery = query(
         collection(db, 'notifications'),
         where('userId', '==', user.uid),
-        orderBy('createdAt', 'desc') // Plus récent en premier
+        orderBy('createdAt', 'desc')
       );
-
-      console.log('✅ Query créée, attente données...');
 
       const unsubscribe = onSnapshot(
         notifQuery,
         (snapshot) => {
-          console.log('📬 Données reçues:', snapshot.docs.length, 'notifications');
-          
           const notifications: Notification[] = [];
           let unread = 0;
 
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
-            console.log('📄 Document:', docSnap.id, data);
             
-            // ✅ Exigence ID 186, 397 : Format "Nom d'utilisateur" + "action" + "nom de la vidéo"
             notifications.push({
               id: docSnap.id,
               user: data.fromUserName || 'Utilisateur',
               type: data.type || 'notification',
               msg: getNotifMessage(data.type),
-              title: data.videoTitle || '', // ✅ Nom de la vidéo
+              title: data.videoTitle || '',
               time: formatTime(data.createdAt),
               avatar: data.fromUserAvatar || 'https://via.placeholder.com/150',
               thumb: data.videoThumb || '',
@@ -82,7 +69,6 @@ export default function NotificationsFormateurScreen() {
             if (!data.read) unread++;
           });
 
-          console.log('✅ Total:', notifications.length, '| Non lus:', unread);
           setNotifs(notifications);
           setUnreadCount(unread);
           setLoading(false);
@@ -93,10 +79,7 @@ export default function NotificationsFormateurScreen() {
         }
       );
 
-      return () => {
-        console.log('🧹 Nettoyage listener');
-        unsubscribe();
-      };
+      return () => unsubscribe();
     } catch (error) {
       console.error('❌ Erreur création query:', error);
       setLoading(false);
@@ -114,7 +97,6 @@ export default function NotificationsFormateurScreen() {
     }
   };
 
-  // ✅ Exigence ID 40 : Format du temps avec "Il y a + heures/minutes/jours"
   const formatTime = (timestamp: any) => {
     if (!timestamp) return 'récemment';
     
@@ -126,7 +108,6 @@ export default function NotificationsFormateurScreen() {
       const diffHours = Math.floor(diffMs / 3600000);
       const diffDays = Math.floor(diffMs / 86400000);
 
-      // Format selon l'exigence ID 40
       if (diffMins < 1) return 'à l\'instant';
       if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''}`;
       if (diffHours < 24) return `${diffHours} heure${diffHours > 1 ? 's' : ''}`;
@@ -134,7 +115,6 @@ export default function NotificationsFormateurScreen() {
       if (diffDays === 2) return 'il y a deux jours';
       if (diffDays < 7) return `${diffDays} jours`;
       
-      // Au-delà d'une semaine, afficher la date
       return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
     } catch (error) {
       return 'récemment';
@@ -154,22 +134,32 @@ export default function NotificationsFormateurScreen() {
   const markAsRead = async (notifId: string) => {
     try {
       await updateDoc(doc(db, 'notifications', notifId), { read: true });
-      console.log('✓ Notification marquée comme lue:', notifId);
     } catch (error) {
       console.error('Erreur marquage lecture:', error);
     }
   };
 
+  // ✅ REDIRECTION selon le type de notification
   const handleNotificationClick = async (notif: Notification) => {
-    // Marquer comme lue
     await markAsRead(notif.id);
     
-    // Rediriger selon le type
     if (notif.type === 'follow' && notif.fromUserId) {
       // Aller vers le profil de l'apprenant
       router.push(`/profile/${notif.fromUserId}` as any);
-    } else if (notif.type === 'like' || notif.type === 'comment' || notif.type === 'save') {
-      // Aller vers la page d'accueil formateur
+    } else if (notif.type === 'comment' && notif.videoId) {
+      // ✅ REDIRECTION vers la vidéo avec ouverture automatique des commentaires
+      router.push({
+        pathname: '/(tabs-formateur)',
+        params: { openVideoId: notif.videoId, openComments: 'true' }
+      } as any);
+    } else if ((notif.type === 'like' || notif.type === 'save') && notif.videoId) {
+      // Aller vers la vidéo
+      router.push({
+        pathname: '/(tabs-formateur)',
+        params: { openVideoId: notif.videoId }
+      } as any);
+    } else {
+      // Par défaut, aller vers home formateur
       router.push('/(tabs-formateur)' as any);
     }
   };
@@ -185,10 +175,8 @@ export default function NotificationsFormateurScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ✅ Exigence ID 37, 392 : Menu principal accessible */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Notifications</Text>
-        {/* ✅ Exigence ID 39, 393 : Icône bulle de conversation pour accéder aux messages */}
         <TouchableOpacity onPress={() => router.push('/message' as any)} style={styles.iconBtn}>
           {unreadCount > 0 && (
             <View style={styles.msgBadge}>
@@ -201,7 +189,6 @@ export default function NotificationsFormateurScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {notifs.length > 0 ? (
-          // ✅ Exigence ID 42 : Notifications du plus récent au plus ancien
           notifs.map((item) => {
             const icon = getNotifIcon(item.type);
             
@@ -220,10 +207,8 @@ export default function NotificationsFormateurScreen() {
                 </View>
                 
                 <View style={styles.notifInfo}>
-                  {/* ✅ Exigence ID 186 : Format "Nom d'utilisateur" + "action" + "Temps" */}
                   <Text style={styles.notifUser}>{item.user}</Text>
                   <Text style={styles.notifMsg}>{item.msg}</Text>
-                  {/* ✅ Exigence ID 397 : Affichage du nom de la vidéo */}
                   {item.title && (
                     <Text style={styles.notifVideo}>"{item.title}"</Text>
                   )}
@@ -232,17 +217,14 @@ export default function NotificationsFormateurScreen() {
                       <Text style={styles.commentText}>{item.comment}</Text>
                     </View>
                   )}
-                  {/* ✅ Exigence ID 40 : Format du temps */}
                   <Text style={styles.notifTime}>Il y a {item.time}</Text>
                 </View>
                 
-                {/* Miniature de la vidéo si disponible */}
                 {item.thumb && <Image source={{ uri: item.thumb }} style={styles.thumbnail} />}
               </TouchableOpacity>
             );
           })
         ) : (
-          // ✅ Exigence ID 41, 187 : Message "Vous êtes à jour !" si aucune notification
           <View style={styles.emptyState}>
             <Ionicons name="checkmark-circle-outline" size={80} color="#22C55E" />
             <Text style={styles.emptyTitle}>Vous êtes à jour !</Text>
