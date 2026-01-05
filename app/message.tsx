@@ -2,7 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, 
   Image, KeyboardAvoidingView, Platform, ActivityIndicator, Modal 
-} from 'react-native';
+,LogBox
+} from 'react-native'
+
+LogBox.ignoreLogs([
+  'Unexpected text node',
+  'aria-hidden',
+  ]);
+
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { 
