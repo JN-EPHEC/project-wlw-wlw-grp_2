@@ -4,6 +4,7 @@ import {
   FlatList, Image, KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Keyboard 
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { 
   collection, addDoc, query, where, onSnapshot, serverTimestamp, 
   doc, updateDoc, increment, getDoc, deleteDoc, arrayUnion, arrayRemove 
@@ -195,7 +196,7 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
     onClose();
     const currentUser = auth.currentUser;
     if (uid === currentUser?.uid) {
-      router.push('/(tabs-formateur)/profile');
+      router.push('/(tabs)/profile' as any);
     } else {
       router.push(`/profile/${uid}` as any);
     }
@@ -221,14 +222,12 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
       <View style={styles.overlay}>
-        {/* Zone cliquable pour fermer */}
         <TouchableOpacity 
           style={styles.backdrop} 
           activeOpacity={1} 
           onPress={onClose}
         />
         
-        {/* Contenu du modal (60% de l'écran) */}
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
           style={styles.modalContent}
@@ -244,7 +243,7 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
           
           {loading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#9333ea" />
+              <ActivityIndicator size="large" color="#7459f0" />
             </View>
           ) : (
             <FlatList
@@ -270,10 +269,17 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                   <View style={styles.commentWrapper}>
                     <View style={styles.commentItem}>
                       <TouchableOpacity onPress={() => handleNavigate(parentComment.userId)}>
-                        <Image 
-                          source={{ uri: parentComment.userAvatar || `https://ui-avatars.com/api/?name=${parentComment.userName}` }} 
-                          style={styles.avatar} 
-                        />
+                        <LinearGradient
+                          colors={['#7459f0', '#242A65']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.avatarGradient}
+                        >
+                          <Image 
+                            source={{ uri: parentComment.userAvatar || `https://ui-avatars.com/api/?name=${parentComment.userName}` }} 
+                            style={styles.avatar} 
+                          />
+                        </LinearGradient>
                       </TouchableOpacity>
                       
                       <View style={{flex: 1}}>
@@ -318,7 +324,14 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                           return (
                             <View key={reply.id} style={styles.replyItem}>
                               <TouchableOpacity onPress={() => handleNavigate(reply.userId)}>
-                                <Image source={{ uri: reply.userAvatar || `https://ui-avatars.com/api/?name=${reply.userName}` }} style={styles.replyAvatar} />
+                                <LinearGradient
+                                  colors={['#9333ea', '#7459f0']}
+                                  start={{ x: 0, y: 0 }}
+                                  end={{ x: 1, y: 1 }}
+                                  style={styles.replyAvatarGradient}
+                                >
+                                  <Image source={{ uri: reply.userAvatar || `https://ui-avatars.com/api/?name=${reply.userName}` }} style={styles.replyAvatar} />
+                                </LinearGradient>
                               </TouchableOpacity>
                               
                               <View style={{flex: 1}}>
@@ -368,7 +381,7 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
               <View style={styles.replyIndicator}>
                 <Text style={styles.replyIndicatorText}>Réponse à @{replyingTo.userName}</Text>
                 <TouchableOpacity onPress={() => setReplyingTo(null)}>
-                  <Ionicons name="close-circle" size={18} color="#9333ea" />
+                  <Ionicons name="close-circle" size={18} color="#7459f0" />
                 </TouchableOpacity>
               </View>
             )}
@@ -386,8 +399,15 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                 onSubmitEditing={handleSend}
                 blurOnSubmit={false}
               />
-              <TouchableOpacity onPress={handleSend} disabled={!newComment.trim()} style={[styles.sendBtn, !newComment.trim() && styles.sendBtnDisabled]}>
-                <Ionicons name="send" size={24} color={newComment.trim() ? "#9333ea" : "#D1D5DB"} />
+              <TouchableOpacity onPress={handleSend} disabled={!newComment.trim()} activeOpacity={0.7}>
+                <LinearGradient
+                  colors={newComment.trim() ? ['#7459f0', '#9333ea'] : ['#D1D5DB', '#9CA3AF']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.sendBtn}
+                >
+                  <Ionicons name="send" size={20} color="#fff" />
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
@@ -442,7 +462,21 @@ const styles = StyleSheet.create({
   emptySubtext: { fontSize: 14, color: '#9CA3AF', marginTop: 8, textAlign: 'center' },
   commentWrapper: { borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
   commentItem: { flexDirection: 'row', padding: 16, backgroundColor: '#fff' },
-  avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#E5E7EB' },
+  avatarGradient: { 
+    width: 44, 
+    height: 44, 
+    borderRadius: 22, 
+    marginRight: 12,
+    padding: 2,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  avatar: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    backgroundColor: '#E5E7EB' 
+  },
   commentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
   username: { fontWeight: 'bold', fontSize: 14, color: '#1F2937' },
   timeText: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
@@ -452,11 +486,31 @@ const styles = StyleSheet.create({
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   actionText: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
   repliesContainer: { marginLeft: 52, backgroundColor: '#F9FAFB' },
-  replyItem: { flexDirection: 'row', padding: 12, paddingLeft: 16, borderLeftWidth: 3, borderLeftColor: '#9333ea' },
-  replyAvatar: { width: 32, height: 32, borderRadius: 16, marginRight: 10, backgroundColor: '#E5E7EB' },
+  replyItem: { 
+    flexDirection: 'row', 
+    padding: 12, 
+    paddingLeft: 16, 
+    borderLeftWidth: 3, 
+    borderLeftColor: '#7459f0' 
+  },
+  replyAvatarGradient: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
+    padding: 2,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  replyAvatar: { 
+    width: 32, 
+    height: 32, 
+    borderRadius: 16, 
+    backgroundColor: '#E5E7EB' 
+  },
   replyUsername: { fontWeight: '600', fontSize: 13, color: '#1F2937' },
   replyTimeText: { fontSize: 11, color: '#9CA3AF', marginTop: 1 },
-  replyLabel: { fontSize: 11, color: '#9333ea', fontStyle: 'italic', marginBottom: 4 },
+  replyLabel: { fontSize: 11, color: '#7459f0', fontStyle: 'italic', marginBottom: 4 },
   replyText: { fontSize: 13, color: '#374151', lineHeight: 18, marginBottom: 6 },
   replyActionText: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
   inputArea: { 
@@ -475,11 +529,24 @@ const styles = StyleSheet.create({
     borderRadius: 12, 
     marginBottom: 12, 
     borderLeftWidth: 3, 
-    borderLeftColor: '#9333ea' 
+    borderLeftColor: '#7459f0' 
   },
-  replyIndicatorText: { fontSize: 13, color: '#9333ea', fontWeight: '600' },
+  replyIndicatorText: { fontSize: 13, color: '#7459f0', fontWeight: '600' },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  input: { flex: 1, backgroundColor: '#F3F4F6', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, maxHeight: 100 },
-  sendBtn: { padding: 8 },
-  sendBtnDisabled: { opacity: 0.5 }
+  input: { 
+    flex: 1, 
+    backgroundColor: '#F3F4F6', 
+    borderRadius: 20, 
+    paddingHorizontal: 16, 
+    paddingVertical: 10, 
+    fontSize: 14, 
+    maxHeight: 100 
+  },
+  sendBtn: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  }
 });

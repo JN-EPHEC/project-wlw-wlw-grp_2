@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, useWindowDimensions, ScrollView, TouchableOpacity, 
   Alert, ActivityIndicator, TouchableWithoutFeedback, StatusBar, Image,
-  Modal, TextInput, KeyboardAvoidingView, Platform, Keyboard, Linking, FlatList,
+  Modal, TextInput, KeyboardAvoidingView, Platform, Linking, FlatList,
   Clipboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,14 +10,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { 
   collection, getDocs, query, orderBy, limit, doc, updateDoc, 
-  increment, arrayUnion, arrayRemove, getDoc, addDoc, serverTimestamp,
-  where, deleteDoc
+  increment, arrayUnion, arrayRemove, getDoc, addDoc, serverTimestamp
 } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-
-// Import du modal externe
 import CommentModal from '../../components/CommentModal';
 
 interface VideoData {
@@ -70,8 +67,6 @@ export default function HomeScreen() {
   
   const [showComments, setShowComments] = useState(false);
   const [currentVideoId, setCurrentVideoId] = useState<string>('');
-  const [currentVideoCreatorId, setCurrentVideoCreatorId] = useState<string>('');
-  const [currentVideoTitle, setCurrentVideoTitle] = useState<string>('');
 
   const [showShareModal, setShowShareModal] = useState(false);
   const [showUsersList, setShowUsersList] = useState(false);
@@ -464,12 +459,17 @@ export default function HomeScreen() {
     }
   };
 
-  const handleComment = (video: VideoData) => {
-    setCurrentVideoId(video.id);
-    setCurrentVideoCreatorId(video.creatorId);
-    setCurrentVideoTitle(video.title);
+  const handleComment = async (videoId: string, creatorId: string) => {
+    setCurrentVideoId(videoId);
     setShowComments(true);
-    setIsPlaying(false);
+    
+    const currentVideo = videoRefs.current[videoId];
+    if (currentVideo) {
+      try {
+        await currentVideo.pauseAsync();
+        setIsPlaying(false);
+      } catch (error) {}
+    }
   };
 
   const getBadgeInfo = (badge?: 'apprenant' | 'expert' | 'pro') => {
@@ -483,29 +483,31 @@ export default function HomeScreen() {
     }
   };
 
+  if (loading) {
+  return (
+    <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <ActivityIndicator size="large" color="#7459f0" />
+    </View>
+  );
+}
+
   const progressPercentage = duration > 0 ? (progress / duration) * 100 : 0;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
-      {loading && videos.length === 0 && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#7459f0" />
-        </View>
-      )}
-      
       <ScrollView
-        ref={scrollViewRef}
-        pagingEnabled
-        showsVerticalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        snapToInterval={SCREEN_HEIGHT}
-        decelerationRate="fast"
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollViewContent}
-      >
+  ref={scrollViewRef}
+  pagingEnabled
+  showsVerticalScrollIndicator={false}
+  onScroll={handleScroll}
+  scrollEventThrottle={16}
+  snapToInterval={SCREEN_HEIGHT}
+  decelerationRate="fast"
+  style={styles.scrollView}
+  contentContainerStyle={styles.scrollViewContent}
+>
         {videos.map((video, index) => {
           const isLiked = likedVideosSet.has(video.id);
           const isSaved = savedVideosSet.has(video.id);
@@ -591,8 +593,8 @@ export default function HomeScreen() {
                   <View style={styles.creatorDetails}>
                     <View style={styles.creatorNameRow}>
                       <Text style={styles.creatorName}>
-                        @{video.creatorName}
-                        {isMyVideo ? " (Moi)" : ""}
+                        @{video.creatorName} 
+                        {isMyVideo && <Text style={styles.meLabel}> (Moi)</Text>}
                       </Text>
                       
                       {badgeInfo && (
@@ -688,7 +690,7 @@ export default function HomeScreen() {
 
                 <TouchableOpacity 
                   style={styles.actionButton} 
-                  onPress={() => handleComment(video)}
+                  onPress={() => handleComment(video.id, video.creatorId)}
                   activeOpacity={0.7}
                 >
                   <LinearGradient
@@ -942,13 +944,16 @@ export default function HomeScreen() {
         </View>
       </Modal>
 
-      {/* MODAL COMMENTAIRES - UTILISE LE COMPOSANT EXTERNE */}
-      <CommentModal 
+      {/* MODAL COMMENTAIRES */}
+      <CommentModal
         visible={showComments}
-        onClose={() => { setShowComments(false); setIsPlaying(true); }}
+        onClose={() => {
+          setShowComments(false);
+          setCurrentVideoId('');
+        }}
         videoId={currentVideoId}
-        creatorId={currentVideoCreatorId}
-        videoTitle={currentVideoTitle}
+        creatorId={videos.find(v => v.id === currentVideoId)?.creatorId || ''}
+        videoTitle={videos.find(v => v.id === currentVideoId)?.title || ''}
       />
     </View>
   );
@@ -956,16 +961,17 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  loadingOverlay: { 
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  loadingContainer: { 
+    flex: 1, 
     justifyContent: 'center', 
     alignItems: 'center', 
-    backgroundColor: '#000',
-    zIndex: 999
+    backgroundColor: '#000' 
+  },
+  loadingText: { 
+    color: '#fff', 
+    fontSize: 16, 
+    marginTop: 16,
+    fontWeight: '600'
   },
   scrollView: { flex: 1 },
   scrollViewContent: { flexGrow: 1 },
@@ -1070,6 +1076,11 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3
+  },
+  meLabel: { 
+    fontSize: 12, 
+    color: '#aaa',
+    fontWeight: '500'
   },
   badge: {
     flexDirection: 'row',

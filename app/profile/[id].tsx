@@ -1,1012 +1,416 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  Image, Dimensions, ActivityIndicator, Alert, Modal, StatusBar, TextInput
+  View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, 
+  Image, KeyboardAvoidingView, Platform, ActivityIndicator 
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Video, ResizeMode } from 'expo-av';
 import { 
-  doc, collection, query, where, getDocs, updateDoc, 
-  arrayUnion, arrayRemove, increment, onSnapshot, getDoc, deleteDoc, addDoc, serverTimestamp
+  collection, query, where, onSnapshot, addDoc, serverTimestamp, 
+  orderBy, updateDoc, doc, getDoc
 } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
+import { notifyNewMessage } from '../utils/notificationService';
 
-import CommentModal from '../../components/CommentModal';
-import { sendNotification } from '../../app/utils/notificationService';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const COLUMN_COUNT = 3;
-const GRID_SPACING = 2;
-const ITEM_WIDTH = (SCREEN_WIDTH - (GRID_SPACING * (COLUMN_COUNT + 1))) / COLUMN_COUNT;
-
-interface UserData { 
-  uid: string; 
-  prenom: string; 
-  nom: string; 
-  displayName?: string;
-  role: 'formateur' | 'apprenant'; 
-  badge?: 'apprenant' | 'expert' | 'pro';
-  bio?: string; 
-  photoURL?: string; 
-  followers?: string[]; 
-  following?: string[]; 
-  stats?: { videosWatched: number; }; 
+interface Conversation {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  lastMessage: string;
+  lastMessageTime: any;
+  unreadCount: number;
 }
 
-interface VideoData { 
-  id: string; 
-  title: string; 
-  videoUrl: string; 
-  thumbnail?: string; 
-  views: number; 
-  likes: number; 
-  comments: number; 
-  description?: string; 
-  creatorId: string; 
-  tags?: string[]; 
-  isPinned?: boolean; 
-  createdAt?: any; 
+interface Message {
+  id: string;
+  text: string;
+  senderId: string;
+  senderName: string;
+  createdAt: any;
+  read: boolean;
 }
 
-export default function PublicProfileScreen() {
-  const { id } = useLocalSearchParams();
+export default function MessageScreen() {
   const router = useRouter();
-  const currentUserId = auth.currentUser?.uid;
-
-  const [profile, setProfile] = useState<UserData | null>(null);
-  const [videos, setVideos] = useState<VideoData[]>([]);
+  const params = useLocalSearchParams();
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
-  
-  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
-  const [currentUserName, setCurrentUserName] = useState<string>(""); 
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [followersCount, setFollowersCount] = useState(0);
-  
-  const [myLikedVideos, setMyLikedVideos] = useState<Set<string>>(new Set());
-  const [mySavedVideos, setMySavedVideos] = useState<Set<string>>(new Set());
+  const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
+  const flatListRef = useRef<FlatList>(null);
 
-  const [showPlayer, setShowPlayer] = useState(false);
-  const [selectedVideo, setSelectedVideo] = useState<VideoData | null>(null);
-  const [showComments, setShowComments] = useState(false);
-  const videoRef = useRef<Video>(null);
-
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [showOptions, setShowOptions] = useState(false);
-
-  const totalViews = videos.reduce((acc, curr) => acc + (curr.views || 0), 0);
-  const totalLikes = videos.reduce((acc, curr) => acc + (curr.likes || 0), 0);
-
-  const canInteract = !(currentUserRole === 'formateur' && profile?.role === 'formateur');
-
+  // Charger les conversations
   useEffect(() => {
-    if (!id) return;
-    setLoading(true);
+    const user = auth.currentUser;
+    if (!user) return;
 
-    if (currentUserId) {
-        getDoc(doc(db, 'users', currentUserId)).then(snap => {
-            if (snap.exists()) {
-              const data = snap.data();
-              setCurrentUserRole(data.role);
-              setCurrentUserName(`${data.prenom} ${data.nom}`);
-            }
-        });
-    }
+    const messagesQuery = query(
+      collection(db, 'messages'),
+      orderBy('createdAt', 'desc')
+    );
 
-    const unsubProfile = onSnapshot(doc(db, 'users', id as string), (docSnap) => {
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            setProfile({ 
-              uid: id as string, 
-              displayName: data.displayName || `${data.prenom} ${data.nom}`.trim(),
-              ...data 
-            } as UserData);
-            setFollowersCount(data.followers ? data.followers.length : 0);
-        }
-        setLoading(false);
-    });
+    const unsubscribe = onSnapshot(messagesQuery, async (snapshot) => {
+      const convMap = new Map<string, Conversation>();
 
-    if (currentUserId) {
-        onSnapshot(doc(db, 'users', currentUserId), (docSnap) => {
-            if (docSnap.exists()) {
-                const myData = docSnap.data();
-                setIsFollowing((myData.following || []).includes(id));
-                setMyLikedVideos(new Set(myData.likedVideos || []));
-                setMySavedVideos(new Set(myData.favorites || []));
-            }
-        });
-    }
-
-    const loadVideos = async () => {
-        try {
-            const vQuery = query(collection(db, 'videos'), where('creatorId', '==', id));
-            const vSnapshot = await getDocs(vQuery);
-            const videosData = vSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as VideoData));
-            videosData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-            setVideos(videosData);
-        } catch (e) { console.error(e); }
-    };
-    loadVideos();
-
-    return () => unsubProfile();
-  }, [id, currentUserId]);
-
-  const handleUpdateVideo = async () => {
-    if (!selectedVideo || !editTitle.trim()) return;
-    
-    setIsSaving(true);
-    try {
-      const videoDocRef = doc(db, 'videos', selectedVideo.id);
-      await updateDoc(videoDocRef, {
-        title: editTitle.trim(),
-        description: editDescription.trim()
-      });
-      
-      setVideos(prev => prev.map(v => 
-        v.id === selectedVideo.id 
-        ? { ...v, title: editTitle, description: editDescription } 
-        : v
-      ));
-      setSelectedVideo(prev => prev ? { ...prev, title: editTitle, description: editDescription } : null);
-      
-      Alert.alert("✓", "Vidéo mise à jour !");
-      setIsEditing(false);
-    } catch (error) {
-      Alert.alert("Erreur", "Impossible de modifier la vidéo.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleMessage = () => {
-    if (!profile || !canInteract) return;
-    router.push({
-      pathname: "/chat" as any, 
-      params: { conversationId: profile.uid } 
-    });
-  };
-
-  const handleFollow = async () => {
-    if (!currentUserId || !profile) return;
-    
-    try {
-      const myRef = doc(db, 'users', currentUserId);
-      const targetRef = doc(db, 'users', profile.uid);
-      
-      if (isFollowing) {
-        await updateDoc(myRef, { following: arrayRemove(profile.uid) });
-        await updateDoc(targetRef, { followers: arrayRemove(currentUserId) });
-        setFollowersCount(prev => Math.max(0, prev - 1));
-        Alert.alert('✓', `Vous ne suivez plus ${profile.displayName || profile.prenom}`);
-      } else {
-        await updateDoc(myRef, { following: arrayUnion(profile.uid) });
-        await updateDoc(targetRef, { followers: arrayUnion(currentUserId) });
-        setFollowersCount(prev => prev + 1);
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const conversationId = data.conversationId || '';
         
-        await addDoc(collection(db, 'notifications'), {
-          userId: profile.uid,
-          fromUserId: currentUserId,
-          fromUserName: currentUserName,
-          type: 'follow',
-          read: false,
-          createdAt: serverTimestamp()
-        });
-        
-        Alert.alert('✓', `Vous suivez maintenant ${profile.displayName || profile.prenom}`);
-      }
-    } catch (error: any) {
-      console.error('Erreur follow:', error);
-      Alert.alert("Erreur", error.message || "Impossible de modifier l'abonnement");
-    }
-  };
+        // Filtrer les conversations de l'utilisateur courant
+        if (!conversationId.includes(user.uid)) continue;
 
-  const handleVideoLike = async () => {
-      if (!currentUserId || !selectedVideo || !canInteract) return;
-      const isLiked = myLikedVideos.has(selectedVideo.id);
-      try {
-          const vRef = doc(db, 'videos', selectedVideo.id);
-          const uRef = doc(db, 'users', currentUserId);
-          if (isLiked) {
-              await updateDoc(uRef, { likedVideos: arrayRemove(selectedVideo.id) });
-              await updateDoc(vRef, { likes: increment(-1) });
-          } else {
-              await updateDoc(uRef, { likedVideos: arrayUnion(selectedVideo.id) });
-              await updateDoc(vRef, { likes: increment(1) });
-              await sendNotification(selectedVideo.creatorId, 'like', { videoId: selectedVideo.id, videoTitle: selectedVideo.title, senderName: currentUserName, senderId: currentUserId });
+        const otherUserId = conversationId.split('_').find((id: string) => id !== user.uid);
+        if (!otherUserId) continue;
+
+        // Compter les messages non lus
+        const isUnread = !data.read && data.senderId !== user.uid;
+
+        if (!convMap.has(otherUserId)) {
+          // Charger les infos de l'autre utilisateur
+          const userDoc = await getDoc(doc(db, 'users', otherUserId));
+          const userData = userDoc.data();
+
+          convMap.set(otherUserId, {
+            id: otherUserId,
+            userId: otherUserId,
+            userName: `${userData?.prenom || ''} ${userData?.nom || ''}`.trim() || userData?.displayName || 'Utilisateur',
+            userAvatar: userData?.photoURL,
+            lastMessage: data.content || '',
+            lastMessageTime: data.createdAt,
+            unreadCount: isUnread ? 1 : 0
+          });
+        } else {
+          const existing = convMap.get(otherUserId)!;
+          if (isUnread) {
+            existing.unreadCount++;
           }
-      } catch (e) { console.error(e); }
+        }
+      }
+
+      const convList = Array.from(convMap.values()).sort((a, b) => 
+        (b.lastMessageTime?.seconds || 0) - (a.lastMessageTime?.seconds || 0)
+      );
+
+      setConversations(convList);
+      setLoading(false);
+
+      // Si on a un userId dans les params, ouvrir cette conversation
+      if (params.userId && !selectedConv) {
+        const conv = convList.find(c => c.userId === params.userId);
+        if (conv) {
+          handleSelectConversation(conv);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Charger les messages d'une conversation
+  const handleSelectConversation = (conv: Conversation) => {
+    setSelectedConv(conv);
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const conversationId = [user.uid, conv.userId].sort().join('_');
+
+    const messagesQuery = query(
+      collection(db, 'messages'),
+      where('conversationId', '==', conversationId),
+      orderBy('createdAt', 'asc')
+    );
+
+    onSnapshot(messagesQuery, async (snapshot) => {
+      const msgs: Message[] = [];
+
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        msgs.push({
+          id: docSnap.id,
+          text: data.content || '',
+          senderId: data.senderId || '',
+          senderName: data.senderName || '',
+          createdAt: data.createdAt,
+          read: data.read || false
+        });
+
+        // Marquer comme lu si c'est un message reçu
+        if (data.senderId !== user.uid && !data.read) {
+          await updateDoc(doc(db, 'messages', docSnap.id), { read: true });
+        }
+      }
+
+      setMessages(msgs);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    });
   };
 
-  const getBadgeInfo = (badge?: 'apprenant' | 'expert' | 'pro') => {
-    switch (badge) {
-      case 'expert':
-        return { icon: 'shield-checkmark', color: '#3B82F6', label: 'Expert' };
-      case 'pro':
-        return { icon: 'star', color: '#FBA31A', label: 'Pro' };
-      default:
-        return null;
+  // Envoyer un message
+  const handleSend = async () => {
+    if (!newMessage.trim() || !selectedConv) return;
+
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const userData = userDoc.data();
+      const senderName = `${userData?.prenom || ''} ${userData?.nom || ''}`.trim() || userData?.displayName || 'Vous';
+
+      const conversationId = [user.uid, selectedConv.userId].sort().join('_');
+
+      await addDoc(collection(db, 'messages'), {
+        conversationId,
+        senderId: user.uid,
+        senderName,
+        content: newMessage.trim(),
+        type: 'text',
+        read: false,
+        createdAt: serverTimestamp()
+      });
+
+      // Notifier l'autre utilisateur
+      await notifyNewMessage(selectedConv.userId, newMessage.trim());
+
+      setNewMessage('');
+    } catch (error) {
+      console.error('Erreur envoi message:', error);
     }
+  };
+
+  const formatTime = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const hours = date.getHours().toString().padStart(2, '0');
+    const mins = date.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${mins}`;
   };
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#7459f0" />
-        <Text style={styles.loadingText}>Chargement...</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#9333ea" />
       </View>
     );
   }
-  
-  if (!profile) {
+
+  // Vue conversation sélectionnée
+  if (selectedConv) {
     return (
-      <View style={styles.center}>
-        <Ionicons name="person-circle-outline" size={80} color="#ccc" />
-        <Text style={styles.errorText}>Profil introuvable</Text>
-      </View>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+        style={styles.container}
+      >
+        <View style={styles.chatHeader}>
+          <TouchableOpacity onPress={() => setSelectedConv(null)} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color="#18181B" />
+          </TouchableOpacity>
+          
+          <Image 
+            source={{ uri: selectedConv.userAvatar || `https://ui-avatars.com/api/?name=${selectedConv.userName}` }} 
+            style={styles.chatAvatar} 
+          />
+          <Text style={styles.chatName}>{selectedConv.userName}</Text>
+        </View>
+
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.messagesList}
+          renderItem={({ item }) => {
+            const isMine = item.senderId === auth.currentUser?.uid;
+            return (
+              <View style={[styles.messageBubble, isMine ? styles.myMessage : styles.theirMessage]}>
+                <Text style={[styles.messageText, isMine && styles.myMessageText]}>
+                  {item.text}
+                </Text>
+                <Text style={[styles.messageTime, isMine && styles.myMessageTime]}>
+                  {formatTime(item.createdAt)}
+                </Text>
+              </View>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyMessages}>
+              <Ionicons name="chatbubbles-outline" size={64} color="#D1D5DB" />
+              <Text style={styles.emptyText}>Aucun message</Text>
+            </View>
+          }
+        />
+
+        <View style={styles.inputContainer}>
+          <TextInput 
+            style={styles.input}
+            value={newMessage}
+            onChangeText={setNewMessage}
+            placeholder="Écrire un message..."
+            multiline
+            maxLength={1000}
+          />
+          <TouchableOpacity 
+            onPress={handleSend}
+            disabled={!newMessage.trim()}
+            style={[styles.sendBtn, !newMessage.trim() && styles.sendBtnDisabled]}
+          >
+            <Ionicons name="send" size={24} color={newMessage.trim() ? "#9333ea" : "#D1D5DB"} />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     );
   }
 
-  const badgeInfo = getBadgeInfo(profile.badge);
-  const isOwnProfile = currentUserId === profile.uid;
-
+  // Vue liste de conversations
   return (
-    <View style={styles.wrapper}>
-      <StatusBar barStyle="light-content" />
-      
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* HEADER AVEC AVATAR INTÉGRÉ */}
-        <View style={styles.headerSection}>
-          <LinearGradient 
-            colors={['#7459f0', '#9333ea', '#242a65']} 
-            locations={[0, 0.5, 1]}
-            style={styles.headerGradient}
-          >
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-            
-            {/* AVATAR DANS LE HEADER */}
-            <View style={styles.avatarContainer}>
-              <View style={styles.avatarBorder}>
-                {profile.photoURL ? (
-                  <Image source={{ uri: profile.photoURL }} style={styles.avatarImg} />
-                ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarInitial}>
-                      {profile.prenom?.[0]?.toUpperCase() || 'U'}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {/* NOM + ROLE DANS LE HEADER */}
-            <View style={styles.headerInfo}>
-              <View style={styles.nameRow}>
-                <Text style={styles.nameWhite}>{profile.displayName || `${profile.prenom} ${profile.nom}`}</Text>
-                {badgeInfo && (
-                  <View style={[styles.badge, { backgroundColor: badgeInfo.color }]}>
-                    <Ionicons name={badgeInfo.icon as any} size={12} color="#fff" />
-                    <Text style={styles.badgeText}>{badgeInfo.label}</Text>
-                  </View>
-                )}
-              </View>
-              
-              <View style={styles.roleTagWhite}>
-                <Ionicons name="school" size={14} color="#fff" />
-                <Text style={styles.roleWhiteText}>Formateur</Text>
-              </View>
-
-              {/* STATS DANS LE HEADER */}
-              <View style={styles.headerStats}>
-                <View style={styles.headerStatItem}>
-                  <Text style={styles.headerStatValue}>{videos.length}</Text>
-                  <Text style={styles.headerStatLabel}>Vidéos</Text>
-                </View>
-                <View style={styles.headerStatItem}>
-                  <Text style={styles.headerStatValue}>{followersCount}</Text>
-                  <Text style={styles.headerStatLabel}>Abonnés</Text>
-                </View>
-                <View style={styles.headerStatItem}>
-                  <Text style={styles.headerStatValue}>{totalViews}</Text>
-                  <Text style={styles.headerStatLabel}>Vues</Text>
-                </View>
-                <View style={styles.headerStatItem}>
-                  <Text style={styles.headerStatValue}>{totalLikes}</Text>
-                  <Text style={styles.headerStatLabel}>J'aime</Text>
-                </View>
-              </View>
-            </View>
-          </LinearGradient>
-
-          {/* BOUTONS S'ABONNER ET MESSAGE */}
-          {!isOwnProfile && (
-            canInteract ? (
-              <View style={styles.actionButtonsContainer}>
-                <TouchableOpacity 
-                  style={[styles.followBtn, isFollowing && styles.followBtnActive]} 
-                  onPress={handleFollow}
-                >
-                  <Ionicons 
-                    name={isFollowing ? "checkmark-circle" : "person-add"} 
-                    size={20} 
-                    color={isFollowing ? "#7459f0" : "#fff"} 
-                  />
-                  <Text style={[styles.followBtnText, isFollowing && styles.followBtnTextActive]}>
-                    {isFollowing ? "Abonné" : "Suivre"}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.messageBtn} onPress={handleMessage}>
-                  <Ionicons name="chatbubble-outline" size={20} color="#7459f0" />
-                  <Text style={styles.messageBtnText}>Message</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.restrictedBanner}>
-                <Ionicons name="lock-closed" size={16} color="#9CA3AF" />
-                <Text style={styles.restrictedText}>Collaboration entre formateurs restreinte</Text>
-              </View>
-            )
-          )}
-        </View>
-
-        {/* VIDÉOS */}
-        <View style={styles.videosSection}>
-          <View style={styles.videosHeader}>
-            <Text style={styles.videosTitle}>Vidéos publiées</Text>
-            <View style={styles.videosCount}>
-              <Text style={styles.videosCountText}>{videos.length}</Text>
-            </View>
-          </View>
-
-          <View style={styles.videosGrid}>
-            {videos.map((video) => (
-              <TouchableOpacity 
-                key={video.id} 
-                style={styles.videoItem} 
-                onPress={() => { 
-                  setSelectedVideo(video); 
-                  setShowPlayer(true); 
-                }}
-              >
-                {video.thumbnail ? (
-                  <Image source={{ uri: video.thumbnail }} style={styles.videoThumbnail} />
-                ) : (
-                  <View style={styles.videoPlaceholder}>
-                    <Ionicons name="videocam" size={40} color="rgba(255,255,255,0.5)" />
-                  </View>
-                )}
-                
-                <LinearGradient 
-                  colors={['transparent', 'rgba(0,0,0,0.8)']} 
-                  style={styles.videoGradient}
-                >
-                  <View style={styles.playIconContainer}>
-                    <Ionicons name="play" size={16} color="#fff" />
-                  </View>
-                  <Text style={styles.videoViews}>{video.views}</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-        
-        <View style={{height: 40}} />
-      </ScrollView>
-
-      {/* PLAYER MODAL */}
-      <Modal visible={showPlayer && selectedVideo !== null} animationType="slide">
-        <View style={styles.playerContainer}>
-          {selectedVideo && (
-            <>
-              <Video 
-                ref={videoRef} 
-                source={{ uri: selectedVideo.videoUrl }} 
-                style={StyleSheet.absoluteFill} 
-                resizeMode={ResizeMode.COVER} 
-                shouldPlay 
-                isLooping 
-              />
-
-              {currentUserId === selectedVideo.creatorId && (
-                <TouchableOpacity style={styles.optionsButton} onPress={() => setShowOptions(true)}>
-                  <View style={styles.optionsIcon}>
-                    <Ionicons name="ellipsis-vertical" size={24} color="white" />
-                  </View>
-                </TouchableOpacity>
-              )}
-              
-              {canInteract && (
-                <View style={styles.playerActions}>
-                  <TouchableOpacity style={styles.playerAction} onPress={handleVideoLike}>
-                    <View style={[styles.playerActionIcon, myLikedVideos.has(selectedVideo.id) && styles.playerActionIconActive]}>
-                      <Ionicons 
-                        name={myLikedVideos.has(selectedVideo.id) ? "heart" : "heart-outline"} 
-                        size={28} 
-                        color="#fff" 
-                      />
-                    </View>
-                    <Text style={styles.playerActionText}>{selectedVideo.likes}</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity style={styles.playerAction} onPress={() => setShowComments(true)}>
-                    <View style={styles.playerActionIcon}>
-                      <Ionicons name="chatbubble-outline" size={28} color="#fff" />
-                    </View>
-                    <Text style={styles.playerActionText}>{selectedVideo.comments}</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              <TouchableOpacity onPress={() => setShowPlayer(false)} style={styles.closeButton}>
-                <View style={styles.closeIcon}>
-                  <Ionicons name="close" size={28} color="white" />
-                </View>
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </Modal>
-
-      {/* MODAL OPTIONS */}
-      <Modal visible={showOptions} transparent animationType="fade">
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowOptions(false)}>
-          <View style={styles.modalContent}>
-            <TouchableOpacity 
-              style={styles.modalOption} 
-              onPress={() => {
-                setShowOptions(false);
-                setEditTitle(selectedVideo?.title || '');
-                setEditDescription(selectedVideo?.description || '');
-                setIsEditing(true);
-              }}
-            >
-              <Ionicons name="create-outline" size={24} color="#7459f0" />
-              <Text style={styles.modalOptionText}>Modifier</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.modalOption} 
-              onPress={() => {
-                setShowOptions(false);
-                Alert.alert("Supprimer", "Supprimer cette vidéo ?", [
-                  { text: "Annuler", style: "cancel" },
-                  { text: "Supprimer", style: "destructive", onPress: async () => {
-                    try {
-                      await deleteDoc(doc(db, 'videos', selectedVideo!.id));
-                      setVideos(prev => prev.filter(v => v.id !== selectedVideo!.id));
-                      setShowPlayer(false);
-                      Alert.alert("✓", "Vidéo supprimée");
-                    } catch (e) { 
-                      Alert.alert("Erreur", "Impossible de supprimer"); 
-                    }
-                  }}
-                ]);
-              }}
-            >
-              <Ionicons name="trash-outline" size={24} color="#EF4444" />
-              <Text style={[styles.modalOptionText, {color: '#EF4444'}]}>Supprimer</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowOptions(false)}>
-              <Text style={styles.modalCancelText}>Fermer</Text>
-            </TouchableOpacity>
-          </View>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color="#18181B" />
         </TouchableOpacity>
-      </Modal>
+        <Text style={styles.headerTitle}>Messages</Text>
+      </View>
 
-      {/* MODAL ÉDITION */}
-      <Modal visible={isEditing} transparent animationType="slide">
-        <View style={styles.editOverlay}>
-          <View style={styles.editContent}>
-            <Text style={styles.editTitle}>Modifier la vidéo</Text>
-            
-            <Text style={styles.editLabel}>Titre</Text>
-            <TextInput 
-              style={styles.editInput} 
-              value={editTitle} 
-              onChangeText={setEditTitle} 
-              placeholder="Titre" 
-              placeholderTextColor="#999"
+      <FlatList
+        data={conversations}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.convList}
+        renderItem={({ item }) => (
+          <TouchableOpacity 
+            style={styles.convItem}
+            onPress={() => handleSelectConversation(item)}
+          >
+            <Image 
+              source={{ uri: item.userAvatar || `https://ui-avatars.com/api/?name=${item.userName}` }} 
+              style={styles.avatar} 
             />
             
-            <Text style={styles.editLabel}>Description</Text>
-            <TextInput 
-              style={[styles.editInput, styles.editTextArea]} 
-              value={editDescription} 
-              onChangeText={setEditDescription} 
-              placeholder="Description" 
-              placeholderTextColor="#999"
-              multiline 
-            />
-            
-            <View style={styles.editActions}>
-              <TouchableOpacity style={styles.editCancel} onPress={() => setIsEditing(false)}>
-                <Text style={styles.editCancelText}>Annuler</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.editSave} onPress={handleUpdateVideo} disabled={isSaving}>
-                {isSaving ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <>
-                    <Ionicons name="checkmark" size={20} color="#fff" />
-                    <Text style={styles.editSaveText}>Sauvegarder</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+            <View style={styles.convInfo}>
+              <Text style={styles.convName}>{item.userName}</Text>
+              <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage}</Text>
             </View>
-          </View>
-        </View>
-      </Modal>
 
-      {selectedVideo && canInteract && (
-        <CommentModal 
-          visible={showComments} 
-          videoId={selectedVideo.id} 
-          creatorId={selectedVideo.creatorId} 
-          videoTitle={selectedVideo.title} 
-          onClose={() => setShowComments(false)} 
-        />
-      )}
+            {item.unreadCount > 0 && (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText}>{item.unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        )}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Ionicons name="mail-outline" size={80} color="#D1D5DB" />
+            <Text style={styles.emptyTitle}>Aucun message</Text>
+            <Text style={styles.emptySubtext}>Vos conversations apparaîtront ici</Text>
+          </View>
+        }
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrapper: { flex: 1, backgroundColor: '#F8F8F6' },
-  container: { flex: 1 },
-  center: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    backgroundColor: '#F8F8F6' 
-  },
-  loadingText: { 
-    color: '#7459f0', 
-    fontSize: 16, 
-    marginTop: 16, 
-    fontWeight: '600' 
-  },
-  errorText: { 
-    color: '#666', 
-    fontSize: 18, 
-    marginTop: 16 
-  },
-  
-  // Header Section
-  headerSection: {
-    marginBottom: 20
-  },
-  headerGradient: { 
-    paddingTop: 50, 
+  container: { flex: 1, backgroundColor: '#FAFAFA' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingHorizontal: 20,
-    paddingBottom: 30
-  },
-  backButton: { 
-    backgroundColor: 'rgba(255,255,255,0.2)', 
-    width: 40, 
-    height: 40, 
-    borderRadius: 12, 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    marginBottom: 20
-  },
-  
-  avatarContainer: { 
-    alignItems: 'center', 
-    marginBottom: 16
-  },
-  avatarBorder: { 
-    width: 100, 
-    height: 100, 
-    borderRadius: 50, 
-    backgroundColor: '#fff', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    borderWidth: 4, 
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8
-  },
-  avatarImg: { 
-    width: '100%', 
-    height: '100%', 
-    borderRadius: 50 
-  },
-  avatarPlaceholder: { 
-    width: '100%', 
-    height: '100%', 
-    borderRadius: 50, 
-    backgroundColor: '#242a65', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  avatarInitial: { 
-    fontSize: 40, 
-    color: '#fff', 
-    fontWeight: 'bold' 
-  },
-  
-  headerInfo: {
-    alignItems: 'center'
-  },
-  nameRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 8, 
-    marginBottom: 8 
-  },
-  nameWhite: { 
-    fontSize: 22, 
-    fontWeight: 'bold', 
-    color: '#fff' 
-  },
-  badge: {
+    paddingBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    gap: 16
   },
-  badgeText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  
-  roleTagWhite: {
+  headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#18181B' },
+  backBtn: { padding: 4 },
+  convList: { padding: 16 },
+  convItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    backgroundColor: '#FFFFFF',
+    padding: 16,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginBottom: 20
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  roleWhiteText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600'
-  },
-  
-  headerStats: {
-    flexDirection: 'row',
-    gap: 30
-  },
-  headerStatItem: {
-    alignItems: 'center'
-  },
-  headerStatValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#fff'
-  },
-  headerStatLabel: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.8)',
-    marginTop: 2
-  },
-  
-  // Action Buttons
-  actionButtonsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-    marginTop: -20
-  },
-  followBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#7459f0',
-    paddingVertical: 14,
+  avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 12, backgroundColor: '#E5E7EB' },
+  convInfo: { flex: 1 },
+  convName: { fontSize: 16, fontWeight: 'bold', color: '#18181B', marginBottom: 4 },
+  lastMessage: { fontSize: 14, color: '#71717A' },
+  unreadBadge: {
+    backgroundColor: '#9333ea',
     borderRadius: 12,
-    shadowColor: '#7459f0',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8
   },
-  followBtnActive: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#7459f0'
-  },
-  followBtnText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 15
-  },
-  followBtnTextActive: {
-    color: '#7459f0'
-  },
-  
-  messageBtn: {
-    flex: 1,
+  unreadText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
+  chatHeader: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#7459f0',
-    paddingVertical: 14,
-    borderRadius: 12
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    gap: 12
   },
-  messageBtnText: {
-    color: '#7459f0',
-    fontWeight: 'bold',
-    fontSize: 15
-  },
-  
-  restrictedBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#F3F4F6',
+  chatAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#E5E7EB' },
+  chatName: { fontSize: 18, fontWeight: 'bold', color: '#18181B', flex: 1 },
+  messagesList: { padding: 16, paddingBottom: 80 },
+  messageBubble: {
+    maxWidth: '75%',
     padding: 12,
-    borderRadius: 12,
-    marginHorizontal: 20,
-    marginTop: -20
-  },
-  restrictedText: {
-    color: '#6B7280',
-    fontSize: 12,
-    fontWeight: '500'
-  },
-  
-  // Videos Section
-  videosSection: {
-    paddingHorizontal: 20
-  },
-  videosHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16
-  },
-  videosTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#242a65'
-  },
-  videosCount: {
-    backgroundColor: '#7459f0',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12
-  },
-  videosCountText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '700'
-  },
-  
-  videosGrid: { 
-    flexDirection: 'row', 
-    flexWrap: 'wrap',
-    marginHorizontal: -1
-  },
-  videoItem: { 
-    width: ITEM_WIDTH, 
-    height: 200, 
-    backgroundColor: '#242a65',
-    borderRadius: 12,
-    overflow: 'hidden',
-    margin: 1
-  },
-  videoThumbnail: { 
-    width: '100%', 
-    height: '100%' 
-  },
-  videoPlaceholder: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    backgroundColor: '#1a1a2e'
-  },
-  videoGradient: { 
-    position: 'absolute', 
-    bottom: 0, 
-    left: 0, 
-    right: 0, 
-    padding: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  playIconContainer: {
-    width: 32,
-    height: 32,
     borderRadius: 16,
-    backgroundColor: '#7459f0',
-    justifyContent: 'center',
-    alignItems: 'center'
+    marginBottom: 8
   },
-  videoViews: { 
-    color: '#fff', 
-    fontSize: 12, 
-    fontWeight: '700' 
+  myMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#9333ea',
+    borderBottomRightRadius: 4
   },
-  
-  // Player
-  playerContainer: { 
-    flex: 1, 
-    backgroundColor: '#000' 
+  theirMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#F3F4F6',
+    borderBottomLeftRadius: 4
   },
-  optionsButton: { 
-    position: 'absolute', 
-    top: 50, 
-    right: 20 
-  },
-  optionsIcon: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  
-  playerActions: { 
-    position: 'absolute', 
-    bottom: 120, 
-    right: 16, 
-    gap: 24 
-  },
-  playerAction: { 
-    alignItems: 'center', 
-    gap: 6 
-  },
-  playerActionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  playerActionIconActive: {
-    backgroundColor: '#EF4444'
-  },
-  playerActionText: { 
-    color: '#fff', 
-    fontSize: 13, 
-    fontWeight: '600' 
-  },
-  
-  closeButton: { 
-    position: 'absolute', 
-    top: 50, 
-    left: 20 
-  },
-  closeIcon: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  
-  // Modals
-  modalOverlay: { 
-    flex: 1, 
-    backgroundColor: 'rgba(0,0,0,0.7)', 
-    justifyContent: 'flex-end', 
-    padding: 20 
-  },
-  modalContent: { 
-    backgroundColor: '#fff', 
-    borderRadius: 20, 
-    overflow: 'hidden'
-  },
-  modalOption: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    padding: 18, 
-    borderBottomWidth: 0.5, 
-    borderBottomColor: '#E5E7EB', 
-    gap: 12 
-  },
-  modalOptionText: { 
-    fontSize: 16, 
-    fontWeight: '600', 
-    color: '#242a65' 
-  },
-  modalCancel: { 
-    padding: 18, 
-    alignItems: 'center' 
-  },
-  modalCancelText: { 
-    fontSize: 16, 
-    color: '#666', 
-    fontWeight: '500' 
-  },
-  
-  // Edit Modal
-  editOverlay: { 
-    flex: 1, 
-    backgroundColor: 'rgba(0,0,0,0.8)', 
-    justifyContent: 'center', 
-    padding: 24 
-  },
-  editContent: { 
-    backgroundColor: '#fff', 
-    borderRadius: 20, 
-    padding: 24
-  },
-  editTitle: { 
-    fontSize: 20, 
-    fontWeight: 'bold', 
-    marginBottom: 20, 
-    textAlign: 'center',
-    color: '#242a65'
-  },
-  editLabel: { 
-    fontSize: 13, 
-    color: '#666', 
-    marginBottom: 8,
-    fontWeight: '600'
-  },
-  editInput: { 
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 15,
-    marginBottom: 16,
-    backgroundColor: '#F9FAFB'
-  },
-  editTextArea: { 
-    height: 100, 
-    textAlignVertical: 'top' 
-  },
-  editActions: { 
-    flexDirection: 'row', 
-    gap: 12, 
-    marginTop: 8 
-  },
-  editCancel: { 
-    flex: 1, 
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    alignItems: 'center'
-  },
-  editCancelText: { 
-    color: '#666', 
-    fontWeight: '600',
-    fontSize: 15
-  },
-  editSave: { 
-    flex: 2, 
-    backgroundColor: '#7459f0',
-    padding: 14,
-    borderRadius: 12,
+  messageText: { fontSize: 15, color: '#18181B', marginBottom: 4 },
+  myMessageText: { color: '#FFFFFF' },
+  messageTime: { fontSize: 11, color: '#71717A', alignSelf: 'flex-end' },
+  myMessageTime: { color: '#E9D5FF' },
+  inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    gap: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 16
   },
-  editSaveText: { 
-    color: '#fff', 
-    fontWeight: 'bold',
-    fontSize: 15
-  }
+  input: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+    maxHeight: 100
+  },
+  sendBtn: { padding: 8 },
+  sendBtnDisabled: { opacity: 0.5 },
+  emptyState: { marginTop: 100, alignItems: 'center', paddingHorizontal: 40 },
+  emptyTitle: { marginTop: 20, fontSize: 22, color: '#18181B', fontWeight: 'bold' },
+  emptySubtext: { marginTop: 12, fontSize: 15, color: '#71717A', textAlign: 'center' },
+  emptyMessages: { marginTop: 80, alignItems: 'center' },
+  emptyText: { marginTop: 16, fontSize: 16, color: '#71717A' }
 });
