@@ -652,9 +652,11 @@ export default function RechercheScreen() {
               <Image source={{ uri: selectedCreator.photoURL || 'https://via.placeholder.com/150' }} 
                 style={{ width: 100, height: 100, borderRadius: 50, marginBottom: 15 }} />
               <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#1F2937' }}>{selectedCreator.name}</Text>
-              <Text style={{ color: '#6B7280', marginBottom: 10, textAlign: 'center' }}>
-                {selectedCreator.category && `Expert en ${getCategoryLabel(selectedCreator.category)}`}
-              </Text>
+              {selectedCreator.category && (
+                <Text style={{ color: '#6B7280', marginBottom: 10, textAlign: 'center' }}>
+                  {`Expert en ${getCategoryLabel(selectedCreator.category)}`}
+                </Text>
+              )}
               <Text style={{ color: '#6B7280', marginBottom: 20 }}>
                 {selectedCreator.followers?.toLocaleString() || 0} abonnés • {selectedCreator.videosCount || 0} vidéos
               </Text>

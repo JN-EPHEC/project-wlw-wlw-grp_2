@@ -2,16 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, 
   Image, KeyboardAvoidingView, Platform, ActivityIndicator, Modal 
-,LogBox
-} from 'react-native'
+  ,LogBox
+} from 'react-native';
 
 LogBox.ignoreLogs([
   'Unexpected text node',
   'aria-hidden',
-  ]);
+]);
 
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { 
   collection, query, where, onSnapshot, addDoc, serverTimestamp, 
   orderBy, updateDoc, doc, getDoc, getDocs
@@ -61,7 +62,6 @@ export default function MessageScreen() {
   const [searchLoading, setSearchLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  // 🔥 FONCTION RETOUR VERS NOTIFICATIONS
   const handleGoBack = async () => {
     const user = auth.currentUser;
     if (!user) {
@@ -83,7 +83,6 @@ export default function MessageScreen() {
     }
   };
 
-  // 🔍 RECHERCHER UTILISATEURS
   const searchUsers = async (searchText: string) => {
     if (!searchText.trim()) {
       setSearchResults([]);
@@ -100,7 +99,7 @@ export default function MessageScreen() {
 
       snapshot.forEach((doc) => {
         const data = doc.data();
-        if (doc.id === currentUserId) return; // Exclure l'utilisateur courant
+        if (doc.id === currentUserId) return;
 
         const fullName = `${data.prenom || ''} ${data.nom || ''}`.trim().toLowerCase();
         const displayName = (data.displayName || '').toLowerCase();
@@ -126,7 +125,6 @@ export default function MessageScreen() {
     }
   };
 
-  // 💬 DÉMARRER UNE NOUVELLE CONVERSATION
   const startNewConversation = (user: User) => {
     const newConv: Conversation = {
       id: user.id,
@@ -144,7 +142,6 @@ export default function MessageScreen() {
     setSearchResults([]);
   };
 
-  // 🔥 CHARGEMENT CONVERSATIONS EN TEMPS RÉEL
   useEffect(() => {
     const user = auth.currentUser;
     if (!user) {
@@ -295,7 +292,15 @@ export default function MessageScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#9333ea" />
+        <LinearGradient
+          colors={['#7459f0', '#9333ea', '#242A65']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.loadingIconWrapper}
+        >
+          <ActivityIndicator size="large" color="#FFF" />
+        </LinearGradient>
+        <Text style={styles.loadingText}>Chargement...</Text>
       </View>
     );
   }
@@ -307,22 +312,48 @@ export default function MessageScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
         style={styles.container}
       >
-        <View style={styles.chatHeader}>
-          <TouchableOpacity onPress={() => setSelectedConv(null)} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color="#18181B" />
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            onPress={() => router.push(`/profile/${selectedConv.userId}` as any)}
-            style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
-          >
-            <Image 
-              source={{ uri: selectedConv.userAvatar || `https://ui-avatars.com/api/?name=${selectedConv.userName}` }} 
-              style={styles.chatAvatar} 
-            />
-            <Text style={styles.chatName}>{selectedConv.userName}</Text>
-          </TouchableOpacity>
-        </View>
+        {/* HEADER DÉGRADÉ */}
+        <LinearGradient
+          colors={['#FFFFFF', '#F9FAFB']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.chatHeaderGradient}
+        >
+          <View style={styles.chatHeader}>
+            <TouchableOpacity onPress={() => setSelectedConv(null)} activeOpacity={0.7}>
+              <LinearGradient
+                colors={['#F3E8FF', '#FAF5FF']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.backBtn}
+              >
+                <Ionicons name="arrow-back" size={22} color="#7459f0" />
+              </LinearGradient>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              onPress={() => router.push(`/profile/${selectedConv.userId}` as any)}
+              style={styles.chatUserInfo}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#7459f0', '#242A65']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.chatAvatarBorder}
+              >
+                <View style={styles.chatAvatarWrapper}>
+                  <Image 
+                    source={{ uri: selectedConv.userAvatar || `https://ui-avatars.com/api/?name=${selectedConv.userName}` }} 
+                    style={styles.chatAvatar} 
+                  />
+                </View>
+              </LinearGradient>
+              
+              <Text style={styles.chatName}>{selectedConv.userName}</Text>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
 
         <FlatList
           ref={flatListRef}
@@ -332,40 +363,71 @@ export default function MessageScreen() {
           renderItem={({ item }) => {
             const isMine = item.senderId === auth.currentUser?.uid;
             return (
-              <View style={[styles.messageBubble, isMine ? styles.myMessage : styles.theirMessage]}>
-                <Text style={[styles.messageText, isMine && styles.myMessageText]}>
-                  {item.text}
-                </Text>
-                <Text style={[styles.messageTime, isMine && styles.myMessageTime]}>
-                  {formatTime(item.createdAt)}
-                </Text>
+              <View style={[styles.messageBubbleWrapper, isMine && styles.myMessageWrapper]}>
+                <LinearGradient
+                  colors={isMine ? ['#7459f0', '#9333ea', '#242A65'] : ['#F3F4F6', '#E5E7EB']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[styles.messageBubble, isMine ? styles.myMessage : styles.theirMessage]}
+                >
+                  <Text style={[styles.messageText, isMine && styles.myMessageText]}>
+                    {item.text}
+                  </Text>
+                  <Text style={[styles.messageTime, isMine && styles.myMessageTime]}>
+                    {formatTime(item.createdAt)}
+                  </Text>
+                </LinearGradient>
               </View>
             );
           }}
           ListEmptyComponent={
             <View style={styles.emptyMessages}>
-              <Ionicons name="chatbubbles-outline" size={64} color="#D1D5DB" />
+              <LinearGradient
+                colors={['#7459f0', '#9333ea', '#242A65']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.emptyIcon}
+              >
+                <Ionicons name="chatbubbles-outline" size={40} color="#FFF" />
+              </LinearGradient>
               <Text style={styles.emptyText}>Aucun message</Text>
               <Text style={styles.emptySubtext}>Commencez la conversation !</Text>
             </View>
           }
         />
 
-        <View style={styles.inputContainer}>
-          <TextInput 
-            style={styles.input}
-            value={newMessage}
-            onChangeText={setNewMessage}
-            placeholder="Écrire un message..."
-            multiline
-            maxLength={1000}
-          />
+        {/* INPUT AVEC DÉGRADÉ */}
+        <View style={styles.inputContainerWrapper}>
+          <LinearGradient
+            colors={['#F3E8FF', '#FAF5FF']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.inputGradient}
+          >
+            <TextInput 
+              style={styles.input}
+              value={newMessage}
+              onChangeText={setNewMessage}
+              placeholder="Écrire un message..."
+              placeholderTextColor="#9CA3AF"
+              multiline
+              maxLength={1000}
+            />
+          </LinearGradient>
+          
           <TouchableOpacity 
             onPress={handleSend}
             disabled={!newMessage.trim()}
-            style={[styles.sendBtn, !newMessage.trim() && styles.sendBtnDisabled]}
+            activeOpacity={0.7}
           >
-            <Ionicons name="send" size={24} color={newMessage.trim() ? "#9333ea" : "#D1D5DB"} />
+            <LinearGradient
+              colors={newMessage.trim() ? ['#7459f0', '#9333ea', '#242A65'] : ['#E5E7EB', '#D1D5DB']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.sendBtn, !newMessage.trim() && styles.sendBtnDisabled]}
+            >
+              <Ionicons name="send" size={20} color="#FFF" />
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -375,15 +437,39 @@ export default function MessageScreen() {
   // VUE LISTE DE CONVERSATIONS
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleGoBack} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#18181B" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Messages</Text>
-        <TouchableOpacity onPress={() => setShowUserSearch(true)} style={styles.newChatBtn}>
-          <Ionicons name="create-outline" size={26} color="#9333ea" />
-        </TouchableOpacity>
-      </View>
+      {/* HEADER AVEC DÉGRADÉ */}
+      <LinearGradient
+        colors={['#FFFFFF', '#F9FAFB']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.headerGradient}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleGoBack} activeOpacity={0.7}>
+            <LinearGradient
+              colors={['#F3E8FF', '#FAF5FF']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.backBtn}
+            >
+              <Ionicons name="arrow-back" size={22} color="#7459f0" />
+            </LinearGradient>
+          </TouchableOpacity>
+          
+          <Text style={styles.headerTitle}>Messages</Text>
+          
+          <TouchableOpacity onPress={() => setShowUserSearch(true)} activeOpacity={0.7}>
+            <LinearGradient
+              colors={['#7459f0', '#9333ea', '#242A65']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.newChatBtn}
+            >
+              <Ionicons name="create" size={20} color="#FFF" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
 
       <FlatList
         data={conversations}
@@ -391,37 +477,75 @@ export default function MessageScreen() {
         contentContainerStyle={styles.convList}
         renderItem={({ item }) => (
           <TouchableOpacity 
-            style={styles.convItem}
+            style={styles.convItemWrapper}
             onPress={() => handleSelectConversation(item)}
+            activeOpacity={0.8}
           >
-            <Image 
-              source={{ uri: item.userAvatar || `https://ui-avatars.com/api/?name=${item.userName}` }} 
-              style={styles.avatar} 
-            />
-            
-            <View style={styles.convInfo}>
-              <Text style={styles.convName}>{item.userName}</Text>
-              <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage}</Text>
-            </View>
-
-            {item.unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>{item.unreadCount}</Text>
+            <LinearGradient
+              colors={['#FFFFFF', '#FAFAFA']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.convItem}
+            >
+              <LinearGradient
+                colors={['#7459f0', '#242A65']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.avatarBorder}
+              >
+                <View style={styles.avatarWrapper}>
+                  <Image 
+                    source={{ uri: item.userAvatar || `https://ui-avatars.com/api/?name=${item.userName}` }} 
+                    style={styles.avatar} 
+                  />
+                </View>
+              </LinearGradient>
+              
+              <View style={styles.convInfo}>
+                <Text style={styles.convName}>{item.userName}</Text>
+                <Text style={styles.lastMessage} numberOfLines={1}>{item.lastMessage}</Text>
               </View>
-            )}
+
+              {item.unreadCount > 0 && (
+                <LinearGradient
+                  colors={['#FBA31A', '#F59E0B']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.unreadBadge}
+                >
+                  <Text style={styles.unreadText}>{item.unreadCount}</Text>
+                </LinearGradient>
+              )}
+            </LinearGradient>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="mail-outline" size={80} color="#D1D5DB" />
+            <LinearGradient
+              colors={['#7459f0', '#9333ea', '#242A65']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.emptyIconWrapper}
+            >
+              <Ionicons name="mail-outline" size={50} color="#FFF" />
+            </LinearGradient>
+            
             <Text style={styles.emptyTitle}>Aucun message</Text>
             <Text style={styles.emptySubtext}>Commencez une nouvelle conversation</Text>
+            
             <TouchableOpacity 
-              style={styles.startChatBtn}
               onPress={() => setShowUserSearch(true)}
+              activeOpacity={0.8}
             >
-              <Ionicons name="add-circle" size={20} color="#fff" />
-              <Text style={styles.startChatText}>Nouvelle conversation</Text>
+              <LinearGradient
+                colors={['#7459f0', '#9333ea', '#242A65']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.startChatBtn}
+              >
+                <Ionicons name="add-circle" size={20} color="#FFF" />
+                <Text style={styles.startChatText}>Nouvelle conversation</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         }
@@ -436,33 +560,60 @@ export default function MessageScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
+            {/* HEADER MODAL AVEC DÉGRADÉ */}
+            <LinearGradient
+              colors={['#7459f0', '#9333ea', '#242A65']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.modalHeader}
+            >
               <Text style={styles.modalTitle}>Nouvelle conversation</Text>
-              <TouchableOpacity onPress={() => {
-                setShowUserSearch(false);
-                setSearchQuery('');
-                setSearchResults([]);
-              }}>
-                <Ionicons name="close" size={24} color="#18181B" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Rechercher un utilisateur..."
-                value={searchQuery}
-                onChangeText={(text) => {
-                  setSearchQuery(text);
-                  searchUsers(text);
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowUserSearch(false);
+                  setSearchQuery('');
+                  setSearchResults([]);
                 }}
-                autoFocus
-              />
+                style={styles.modalCloseBtn}
+              >
+                <Ionicons name="close" size={24} color="#FFF" />
+              </TouchableOpacity>
+            </LinearGradient>
+
+            {/* SEARCH BAR AVEC DÉGRADÉ */}
+            <View style={styles.searchContainerWrapper}>
+              <LinearGradient
+                colors={['#F3E8FF', '#FAF5FF']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.searchContainer}
+              >
+                <Ionicons name="search" size={20} color="#7459f0" style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Rechercher un utilisateur..."
+                  placeholderTextColor="#9CA3AF"
+                  value={searchQuery}
+                  onChangeText={(text) => {
+                    setSearchQuery(text);
+                    searchUsers(text);
+                  }}
+                  autoFocus
+                />
+              </LinearGradient>
             </View>
 
             {searchLoading ? (
-              <ActivityIndicator size="large" color="#9333ea" style={{ marginTop: 40 }} />
+              <View style={styles.searchLoadingContainer}>
+                <LinearGradient
+                  colors={['#7459f0', '#9333ea', '#242A65']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.loadingIconWrapper}
+                >
+                  <ActivityIndicator size="large" color="#FFF" />
+                </LinearGradient>
+              </View>
             ) : (
               <FlatList
                 data={searchResults}
@@ -470,24 +621,57 @@ export default function MessageScreen() {
                 contentContainerStyle={styles.searchResults}
                 renderItem={({ item }) => (
                   <TouchableOpacity
-                    style={styles.userItem}
+                    style={styles.userItemWrapper}
                     onPress={() => startNewConversation(item)}
+                    activeOpacity={0.8}
                   >
-                    <Image
-                      source={{ uri: item.photoURL || `https://ui-avatars.com/api/?name=${item.prenom}+${item.nom}` }}
-                      style={styles.userAvatar}
-                    />
-                    <View style={styles.userInfo}>
-                      <Text style={styles.userName}>{`${item.prenom} ${item.nom}`.trim() || item.displayName}</Text>
-                      <Text style={styles.userRole}>{item.role === 'formateur' ? 'Formateur' : 'Apprenant'}</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                    <LinearGradient
+                      colors={['#FFFFFF', '#FAFAFA']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.userItem}
+                    >
+                      <LinearGradient
+                        colors={['#7459f0', '#242A65']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.userAvatarBorder}
+                      >
+                        <View style={styles.userAvatarWrapper}>
+                          <Image
+                            source={{ uri: item.photoURL || `https://ui-avatars.com/api/?name=${item.prenom}+${item.nom}` }}
+                            style={styles.userAvatar}
+                          />
+                        </View>
+                      </LinearGradient>
+                      
+                      <View style={styles.userInfo}>
+                        <Text style={styles.userName}>{`${item.prenom} ${item.nom}`.trim() || item.displayName}</Text>
+                        <Text style={styles.userRole}>{item.role === 'formateur' ? '👨‍🎓 Formateur' : '🎓 Apprenant'}</Text>
+                      </View>
+                      
+                      <LinearGradient
+                        colors={['#7459f0', '#9333ea']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.chevronWrapper}
+                      >
+                        <Ionicons name="chevron-forward" size={18} color="#FFF" />
+                      </LinearGradient>
+                    </LinearGradient>
                   </TouchableOpacity>
                 )}
                 ListEmptyComponent={
                   searchQuery.trim() ? (
                     <View style={styles.noResults}>
-                      <Ionicons name="search-outline" size={48} color="#D1D5DB" />
+                      <LinearGradient
+                        colors={['#7459f0', '#9333ea', '#242A65']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.noResultsIcon}
+                      >
+                        <Ionicons name="search-outline" size={36} color="#FFF" />
+                      </LinearGradient>
                       <Text style={styles.noResultsText}>Aucun utilisateur trouvé</Text>
                     </View>
                   ) : null
@@ -502,168 +686,518 @@ export default function MessageScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAFA' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#F9FAFB' 
+  },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB'
+  },
+  loadingIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 12
+  },
+  loadingText: {
+    color: '#71717A',
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 12
+  },
+  
+  // HEADER LISTE CONVERSATIONS
+  headerGradient: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB'
+  },
   header: {
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingHorizontal: 20,
     paddingBottom: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    justifyContent: 'space-between'
   },
-  headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#18181B', flex: 1, marginLeft: 16 },
-  backBtn: { padding: 4 },
-  newChatBtn: { padding: 4 },
-  convList: { padding: 16 },
+  headerTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    color: '#1F2937',
+    flex: 1,
+    marginLeft: 16
+  },
+  backBtn: { 
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4
+  },
+  newChatBtn: { 
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8
+  },
+  
+  // LISTE CONVERSATIONS
+  convList: { 
+    padding: 20,
+    paddingBottom: 32
+  },
+  convItemWrapper: {
+    marginBottom: 12
+  },
   convItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
     padding: 16,
-    borderRadius: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4
   },
-  avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 12, backgroundColor: '#E5E7EB' },
-  convInfo: { flex: 1 },
-  convName: { fontSize: 16, fontWeight: 'bold', color: '#18181B', marginBottom: 4 },
-  lastMessage: { fontSize: 14, color: '#71717A' },
+  avatarBorder: {
+    padding: 3,
+    borderRadius: 28,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5
+  },
+  avatarWrapper: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden',
+    backgroundColor: '#FFF'
+  },
+  avatar: { 
+    width: '100%', 
+    height: '100%' 
+  },
+  convInfo: { 
+    flex: 1,
+    marginLeft: 12
+  },
+  convName: { 
+    fontSize: 16, 
+    fontWeight: 'bold', 
+    color: '#1F2937', 
+    marginBottom: 4 
+  },
+  lastMessage: { 
+    fontSize: 14, 
+    color: '#71717A' 
+  },
   unreadBadge: {
-    backgroundColor: '#9333ea',
     borderRadius: 12,
-    minWidth: 24,
-    height: 24,
+    minWidth: 28,
+    height: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 8
+    paddingHorizontal: 10,
+    marginLeft: 12,
+    shadowColor: '#FBA31A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
+    elevation: 6
   },
-  unreadText: { color: '#FFFFFF', fontSize: 12, fontWeight: 'bold' },
+  unreadText: { 
+    color: '#FFF', 
+    fontSize: 12, 
+    fontWeight: 'bold' 
+  },
+  
+  // HEADER CHAT
+  chatHeaderGradient: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB'
+  },
   chatHeader: {
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingHorizontal: 20,
     paddingBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
     gap: 12
   },
-  chatAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12, backgroundColor: '#E5E7EB' },
-  chatName: { fontSize: 18, fontWeight: 'bold', color: '#18181B' },
-  messagesList: { padding: 16, paddingBottom: 80 },
+  chatUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1
+  },
+  chatAvatarBorder: {
+    padding: 2,
+    borderRadius: 22,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4
+  },
+  chatAvatarWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#FFF'
+  },
+  chatAvatar: { 
+    width: '100%', 
+    height: '100%' 
+  },
+  chatName: { 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    color: '#1F2937',
+    marginLeft: 12
+  },
+  
+  // MESSAGES
+  messagesList: { 
+    padding: 16, 
+    paddingBottom: 80 
+  },
+  messageBubbleWrapper: {
+    marginBottom: 12,
+    alignItems: 'flex-start'
+  },
+  myMessageWrapper: {
+    alignItems: 'flex-end'
+  },
   messageBubble: {
     maxWidth: '75%',
-    padding: 12,
-    borderRadius: 16,
-    marginBottom: 8
+    padding: 14,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 5
   },
   myMessage: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#9333ea',
-    borderBottomRightRadius: 4
+    borderBottomRightRadius: 4,
+    shadowColor: '#7459f0',
+    shadowOpacity: 0.3
   },
   theirMessage: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#F3F4F6',
     borderBottomLeftRadius: 4
   },
-  messageText: { fontSize: 15, color: '#18181B', marginBottom: 4 },
-  myMessageText: { color: '#FFFFFF' },
-  messageTime: { fontSize: 11, color: '#71717A', alignSelf: 'flex-end' },
-  myMessageTime: { color: '#E9D5FF' },
-  inputContainer: {
+  messageText: { 
+    fontSize: 15, 
+    color: '#1F2937', 
+    marginBottom: 6,
+    lineHeight: 20,
+    fontWeight: '500'
+  },
+  myMessageText: { 
+    color: '#FFF',
+    fontWeight: '600'
+  },
+  messageTime: { 
+    fontSize: 11, 
+    color: '#9CA3AF', 
+    alignSelf: 'flex-end',
+    fontWeight: '600'
+  },
+  myMessageTime: { 
+    color: '#E9D5FF' 
+  },
+  
+  // INPUT
+  inputContainerWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFF',
     borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    borderTopColor: '#E5E7EB',
     gap: 12,
     paddingBottom: Platform.OS === 'ios' ? 34 : 16
   },
-  input: {
+  inputGradient: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 20,
+    borderRadius: 24,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 15,
-    maxHeight: 100
+    paddingVertical: 4,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3
   },
-  sendBtn: { padding: 8 },
-  sendBtnDisabled: { opacity: 0.5 },
-  emptyState: { marginTop: 100, alignItems: 'center', paddingHorizontal: 40 },
-  emptyTitle: { marginTop: 20, fontSize: 22, color: '#18181B', fontWeight: 'bold' },
-  emptySubtext: { marginTop: 12, fontSize: 15, color: '#71717A', textAlign: 'center' },
+  input: {
+    fontSize: 15,
+    maxHeight: 100,
+    color: '#1F2937',
+    paddingVertical: 10
+  },
+  sendBtn: { 
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 6
+  },
+  sendBtnDisabled: { 
+    opacity: 0.5
+  },
+  
+  // EMPTY STATES
+  emptyState: { 
+    marginTop: 100, 
+    alignItems: 'center', 
+    paddingHorizontal: 40 
+  },
+  emptyIconWrapper: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10
+  },
+  emptyTitle: { 
+    marginTop: 8,
+    fontSize: 22, 
+    color: '#1F2937', 
+    fontWeight: 'bold',
+    marginBottom: 8
+  },
+  emptySubtext: { 
+    fontSize: 15, 
+    color: '#71717A', 
+    textAlign: 'center',
+    marginBottom: 30
+  },
   startChatBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#9333ea',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
     borderRadius: 25,
-    marginTop: 24,
-    gap: 8
+    gap: 10,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 8
   },
-  startChatText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  emptyMessages: { marginTop: 80, alignItems: 'center' },
-  emptyText: { marginTop: 16, fontSize: 16, color: '#71717A' },
+  startChatText: { 
+    color: '#FFF', 
+    fontSize: 16, 
+    fontWeight: 'bold' 
+  },
+  emptyMessages: { 
+    marginTop: 80, 
+    alignItems: 'center' 
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8
+  },
+  emptyText: { 
+    marginTop: 8,
+    fontSize: 18, 
+    color: '#71717A',
+    fontWeight: '600',
+    marginBottom: 6
+  },
+  
+  // MODAL
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end'
   },
   modalContent: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F9FAFB',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    height: '80%',
-    paddingTop: 20
+    height: '85%'
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6'
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 20
   },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#18181B' },
+  modalTitle: { 
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    color: '#FFF' 
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  searchContainerWrapper: {
+    paddingHorizontal: 20,
+    marginBottom: 16
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    marginHorizontal: 20,
-    marginTop: 16,
-    marginBottom: 12,
-    paddingHorizontal: 12
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4
   },
-  searchIcon: { marginRight: 8 },
+  searchIcon: { 
+    marginRight: 10 
+  },
   searchInput: {
     flex: 1,
-    paddingVertical: 12,
     fontSize: 15,
-    color: '#18181B'
+    color: '#1F2937'
   },
-  searchResults: { paddingHorizontal: 20, paddingBottom: 20 },
+  searchLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  searchResults: { 
+    paddingHorizontal: 20, 
+    paddingBottom: 20
+  },
+  userItemWrapper: {
+    marginBottom: 10
+  },
   userItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6'
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3
   },
-  userAvatar: { width: 48, height: 48, borderRadius: 24, marginRight: 12, backgroundColor: '#E5E7EB' },
-  userInfo: { flex: 1 },
-  userName: { fontSize: 16, fontWeight: '600', color: '#18181B', marginBottom: 2 },
-  userRole: { fontSize: 13, color: '#71717A' },
-  noResults: { marginTop: 60, alignItems: 'center' },
-  noResultsText: { marginTop: 12, fontSize: 15, color: '#71717A' }
+  userAvatarBorder: {
+    padding: 2,
+    borderRadius: 26,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4
+  },
+  userAvatarWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: '#FFF'
+  },
+  userAvatar: { 
+    width: '100%', 
+    height: '100%' 
+  },
+  userInfo: { 
+    flex: 1,
+    marginLeft: 12
+  },
+  userName: { 
+    fontSize: 16, 
+    fontWeight: '600', 
+    color: '#1F2937', 
+    marginBottom: 4 
+  },
+  userRole: { 
+    fontSize: 13, 
+    color: '#71717A',
+    fontWeight: '500'
+  },
+  chevronWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  noResults: { 
+    marginTop: 60, 
+    alignItems: 'center' 
+  },
+  noResultsIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8
+  },
+  noResultsText: { 
+    marginTop: 8,
+    fontSize: 15, 
+    color: '#71717A',
+    fontWeight: '600'
+  }
 });

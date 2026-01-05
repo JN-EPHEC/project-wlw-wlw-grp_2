@@ -12,7 +12,7 @@ import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 // ===== IMPORTS FIREBASE =====
 import { auth, db, storage } from '../../firebaseConfig'; 
 import { 
-  doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, serverTimestamp, deleteDoc, arrayUnion, arrayRemove 
+  doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, serverTimestamp, deleteDoc, arrayUnion, arrayRemove, orderBy, limit
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { signOut as firebaseSignOut } from 'firebase/auth';
@@ -32,7 +32,7 @@ interface CreatorVideo {
   views: number;
   likes: number;
   comments: number;
-  creatorId: string; // Ajouté pour la cohérence
+  creatorId: string;
   isPinned?: boolean;
   createdAt: any;
 }
@@ -51,12 +51,15 @@ export default function ProfileFormateurScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('videos');
+  const [showHistory, setShowHistory] = useState(false);
+  const [watchHistory, setWatchHistory] = useState<CreatorVideo[]>([]);
   
   // Edit Profile
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState('');
   const [editedBio, setEditedBio] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [bioCharCount, setBioCharCount] = useState(0);
 
   // Data
   const [myVideos, setMyVideos] = useState<CreatorVideo[]>([]);
@@ -76,6 +79,9 @@ export default function ProfileFormateurScreen() {
   const [showComments, setShowComments] = useState(false);
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [showEditVideo, setShowEditVideo] = useState(false);
+  const [editedVideoTitle, setEditedVideoTitle] = useState('');
+  const [editedVideoDesc, setEditedVideoDesc] = useState('');
 
   // --- PLAYLIST DETAILS STATES ---
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
@@ -86,6 +92,13 @@ export default function ProfileFormateurScreen() {
   // Stats
   const totalViews = myVideos.reduce((acc, curr) => acc + (curr.views || 0), 0);
   const totalLikes = myVideos.reduce((acc, curr) => acc + (curr.likes || 0), 0);
+
+  // Progression (simulée pour l'exemple)
+  const progressData = {
+    videosWatched: 0, // L'apprenant regardera ses vidéos, pas le formateur
+    totalVideos: myVideos.length,
+    progressPercent: 0
+  };
 
   // --- LOADING ---
   useFocusEffect(
@@ -105,6 +118,7 @@ export default function ProfileFormateurScreen() {
         setUserProfile(data);
         setEditedName(`${data.prenom || ''} ${data.nom || ''}`.trim());
         setEditedBio(data.bio || "Formateur expert 🎓");
+        setBioCharCount((data.bio || "").length);
       }
 
       // Vidéos
@@ -129,6 +143,24 @@ export default function ProfileFormateurScreen() {
           setMyPlaylists(pSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Playlist)));
       } catch (e) { console.log("Erreur playlists:", e); }
 
+      // Historique (dernières vidéos vues)
+      try {
+        const historyRef = collection(db, 'watchHistory');
+        const historyQuery = query(
+          historyRef, 
+          where('userId', '==', user.uid), 
+          orderBy('watchedAt', 'desc'),
+          limit(20)
+        );
+        const historySnapshot = await getDocs(historyQuery);
+        const historyVideoIds = historySnapshot.docs.map(d => d.data().videoId);
+        
+        if (historyVideoIds.length > 0) {
+          const historyVideos = await fetchVideosByIds(historyVideoIds);
+          setWatchHistory(historyVideos);
+        }
+      } catch (e) { console.log("Erreur historique:", e); }
+
     } catch (error) {
       console.error("Erreur générale:", error);
     } finally {
@@ -145,14 +177,36 @@ export default function ProfileFormateurScreen() {
   const saveProfile = async () => {
     const user = auth.currentUser;
     if (!user) return;
+    
+    // Limiter la bio à 200 caractères (ID 65, 275)
+    if (editedBio.length > 200) {
+      Alert.alert("Erreur", "La biographie ne peut pas dépasser 200 caractères");
+      return;
+    }
+    
     const [prenom, ...nomArray] = editedName.split(' ');
-    await updateDoc(doc(db, 'users', user.uid), { prenom: prenom || '', nom: nomArray.join(' ') || '', bio: editedBio });
-    setIsEditing(false); loadProfile();
+    await updateDoc(doc(db, 'users', user.uid), { 
+      prenom: prenom || '', 
+      nom: nomArray.join(' ') || '', 
+      bio: editedBio 
+    });
+    setIsEditing(false); 
+    loadProfile();
+  };
+
+  const handleBioChange = (text: string) => {
+    if (text.length <= 200) {
+      setEditedBio(text);
+      setBioCharCount(text.length);
+    }
   };
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5,
+      mediaTypes: ImagePicker.MediaTypeOptions.Images, 
+      allowsEditing: true, 
+      aspect: [1, 1], 
+      quality: 0.5,
     });
     if (!result.canceled) uploadImage(result.assets[0].uri);
   };
@@ -196,8 +250,13 @@ export default function ProfileFormateurScreen() {
 
   const togglePlayPause = async () => {
     if (videoRef.current) {
-        if (isPlaying) { await videoRef.current.pauseAsync(); setIsPlaying(false); }
-        else { await videoRef.current.playAsync(); setIsPlaying(true); }
+        if (isPlaying) { 
+          await videoRef.current.pauseAsync(); 
+          setIsPlaying(false); 
+        } else { 
+          await videoRef.current.playAsync(); 
+          setIsPlaying(true); 
+        }
     }
   };
 
@@ -218,6 +277,35 @@ export default function ProfileFormateurScreen() {
         setSelectedVideo({...selectedVideo, isPinned: newStatus});
         loadProfile();
     } catch (e) { Alert.alert("Erreur", "Action échouée"); }
+  };
+
+  // ID 49 - Modifier une vidéo
+  const openEditVideo = () => {
+    if (!selectedVideo) return;
+    setEditedVideoTitle(selectedVideo.title);
+    setEditedVideoDesc(selectedVideo.description || '');
+    setShowVideoOptions(false);
+    setShowEditVideo(true);
+  };
+
+  const saveEditedVideo = async () => {
+    if (!selectedVideo) return;
+    try {
+      await updateDoc(doc(db, 'videos', selectedVideo.id), {
+        title: editedVideoTitle,
+        description: editedVideoDesc
+      });
+      Alert.alert("Succès", "Vidéo modifiée avec succès");
+      setShowEditVideo(false);
+      setSelectedVideo({
+        ...selectedVideo,
+        title: editedVideoTitle,
+        description: editedVideoDesc
+      });
+      loadProfile();
+    } catch (e) {
+      Alert.alert("Erreur", "Modification échouée");
+    }
   };
 
   const deleteVideo = async () => {
@@ -253,9 +341,15 @@ export default function ProfileFormateurScreen() {
         const user = auth.currentUser;
         if (!user) return;
         await addDoc(collection(db, 'playlists'), {
-            name: newPlaylistName, userId: user.uid, videoIds: [], createdAt: serverTimestamp()
+            name: newPlaylistName, 
+            userId: user.uid, 
+            videoIds: [], 
+            createdAt: serverTimestamp()
         });
-        setNewPlaylistName(''); setShowCreatePlaylist(false); loadProfile();
+        setNewPlaylistName(''); 
+        setShowCreatePlaylist(false); 
+        loadProfile();
+        Alert.alert("Succès", "Playlist créée 🎉");
     } catch (e) { Alert.alert("Erreur", "Création échouée"); }
   };
 
@@ -275,31 +369,78 @@ export default function ProfileFormateurScreen() {
             Alert.alert("Succès", "Playlist supprimée");
         } catch (e) { Alert.alert("Erreur", "Impossible de supprimer la playlist"); }
     };
-    if (Platform.OS === 'web') { if (confirm("Supprimer ?")) performDelete(); }
-    else { Alert.alert("Supprimer", "Sûr ?", [{text:"Non"}, {text:"Oui", onPress:performDelete}]); }
+    if (Platform.OS === 'web') { 
+      if (confirm("Supprimer cette playlist ?")) performDelete(); 
+    } else { 
+      Alert.alert("Supprimer", "Êtes-vous sûr ?", [
+        {text:"Annuler"}, 
+        {text:"Supprimer", style: 'destructive', onPress:performDelete}
+      ]); 
+    }
   };
 
   const openAddVideoModal = async () => {
-    if (!userProfile?.likedVideos?.length) return Alert.alert("Info", "Pas de likes");
-    const likedVids = await fetchVideosByIds(userProfile.likedVideos);
-    setLikedVideosList(likedVids);
+    // Pour le formateur, on ajoute ses propres vidéos à la playlist
+    if (myVideos.length === 0) {
+      Alert.alert("Info", "Vous n'avez pas encore de vidéos");
+      return;
+    }
     setShowAddVideoModal(true);
   };
 
   const addVideoToPlaylist = async (video: CreatorVideo) => {
     if (!selectedPlaylist) return;
-    await updateDoc(doc(db, 'playlists', selectedPlaylist.id), { videoIds: arrayUnion(video.id) });
+    
+    // Vérifier si la vidéo est déjà dans la playlist
+    if (selectedPlaylist.videoIds.includes(video.id)) {
+      Alert.alert("Info", "Cette vidéo est déjà dans la playlist");
+      return;
+    }
+    
+    await updateDoc(doc(db, 'playlists', selectedPlaylist.id), { 
+      videoIds: arrayUnion(video.id) 
+    });
     setSelectedPlaylistVideos(prev => [...prev, video]);
+    setSelectedPlaylist({
+      ...selectedPlaylist,
+      videoIds: [...selectedPlaylist.videoIds, video.id]
+    });
+    Alert.alert("Succès", "Vidéo ajoutée à la playlist");
     setShowAddVideoModal(false);
   };
 
   const removeVideoFromPlaylist = async (videoId: string) => {
     if (!selectedPlaylist) return;
-    await updateDoc(doc(db, 'playlists', selectedPlaylist.id), { videoIds: arrayRemove(videoId) });
-    setSelectedPlaylistVideos(prev => prev.filter(v => v.id !== videoId));
+    
+    const performRemove = async () => {
+      await updateDoc(doc(db, 'playlists', selectedPlaylist.id), { 
+        videoIds: arrayRemove(videoId) 
+      });
+      setSelectedPlaylistVideos(prev => prev.filter(v => v.id !== videoId));
+      setSelectedPlaylist({
+        ...selectedPlaylist,
+        videoIds: selectedPlaylist.videoIds.filter(id => id !== videoId)
+      });
+      Alert.alert("Succès", "Vidéo retirée de la playlist");
+    };
+    
+    if (Platform.OS === 'web') {
+      if (confirm("Retirer cette vidéo de la playlist ?")) performRemove();
+    } else {
+      Alert.alert("Confirmer", "Retirer cette vidéo de la playlist ?", [
+        { text: "Annuler", style: 'cancel' },
+        { text: "Retirer", style: 'destructive', onPress: performRemove }
+      ]);
+    }
   };
 
-  if (loading || !userProfile) return <View style={styles.center}><ActivityIndicator size="large" color="#9333ea" /></View>;
+  if (loading || !userProfile) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#7459f0" />
+      </View>
+    );
+  }
 
   const progressPercent = videoDuration > 0 ? (videoProgress / videoDuration) * 100 : 0;
 
@@ -308,30 +449,66 @@ export default function ProfileFormateurScreen() {
       <ScrollView 
         style={styles.container} 
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {setRefreshing(true); loadProfile();}} />}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={() => {
+              setRefreshing(true); 
+              loadProfile();
+            }} 
+            tintColor="#7459f0"
+          />
+        }
       >
-        {/* HEADER */}
+        {/* HEADER avec gradient SwipeSkills */}
         <View style={styles.headerWrapper}>
-            <LinearGradient colors={['#9333ea', '#7e22ce']} style={styles.headerGradient}>
+            <LinearGradient 
+              colors={['#7459f0', '#5b3fd1']} 
+              style={styles.headerGradient}
+            >
                 <View style={styles.topIcons}>
-                    <TouchableOpacity style={styles.glassIcon} onPress={() => setShowSettings(true)}>
+                    <TouchableOpacity 
+                      style={styles.glassIcon} 
+                      onPress={() => setShowSettings(true)}
+                    >
                         <Ionicons name="settings-outline" size={20} color="white" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.glassIcon, { backgroundColor: 'rgba(239, 68, 68, 0.4)' }]} onPress={signOut}>
+                    <TouchableOpacity 
+                      style={[styles.glassIcon, { backgroundColor: 'rgba(239, 68, 68, 0.4)' }]} 
+                      onPress={signOut}
+                    >
                         <Ionicons name="log-out-outline" size={20} color="white" />
                     </TouchableOpacity>
                 </View>
             </LinearGradient>
+            
+            {/* Avatar */}
             <View style={styles.avatarSection}>
                 <View style={styles.avatarContainer}>
-                    <TouchableOpacity onPress={pickImage} style={styles.avatarBorder} disabled={isUploading}>
-                        {isUploading ? <ActivityIndicator color="white" /> : userProfile.photoURL ? (
-                            <Image source={{ uri: userProfile.photoURL }} style={styles.avatarImg} />
+                    <TouchableOpacity 
+                      onPress={pickImage} 
+                      style={styles.avatarBorder} 
+                      disabled={isUploading}
+                    >
+                        {isUploading ? (
+                          <ActivityIndicator color="white" />
+                        ) : userProfile.photoURL ? (
+                            <Image 
+                              source={{ uri: userProfile.photoURL }} 
+                              style={styles.avatarImg} 
+                            />
                         ) : (
-                            <View style={styles.avatarCircle}><Text style={styles.avatarInit}>{userProfile.prenom?.[0] || 'F'}</Text></View>
+                            <View style={styles.avatarCircle}>
+                              <Text style={styles.avatarInit}>
+                                {userProfile.prenom?.[0] || 'F'}
+                              </Text>
+                            </View>
                         )}
                     </TouchableOpacity>
-                    <View style={styles.roleBadge}><Ionicons name="school" size={10} color="#9333ea" /><Text style={styles.roleText}>Formateur</Text></View>
+                    <View style={styles.roleBadge}>
+                      <Ionicons name="school" size={10} color="#7459f0" />
+                      <Text style={styles.roleText}>Formateur</Text>
+                    </View>
                 </View>
             </View>
         </View>
@@ -340,19 +517,58 @@ export default function ProfileFormateurScreen() {
         <View style={styles.identitySection}>
             {isEditing ? (
                 <View style={styles.editForm}>
-                    <TextInput style={styles.input} value={editedName} onChangeText={setEditedName} placeholder="Nom" />
-                    <TextInput style={[styles.input, { height: 60 }]} value={editedBio} onChangeText={setEditedBio} multiline />
+                    <TextInput 
+                      style={styles.input} 
+                      value={editedName} 
+                      onChangeText={setEditedName} 
+                      placeholder="Nom complet" 
+                      placeholderTextColor="#9CA3AF"
+                    />
+                    <View>
+                      <TextInput 
+                        style={[styles.input, { height: 80 }]} 
+                        value={editedBio} 
+                        onChangeText={handleBioChange} 
+                        multiline 
+                        placeholder="Biographie (max 200 caractères)"
+                        placeholderTextColor="#9CA3AF"
+                        maxLength={200}
+                      />
+                      <Text style={styles.charCount}>
+                        {bioCharCount}/200
+                      </Text>
+                    </View>
                     <View style={styles.editButtons}>
-                        <TouchableOpacity style={[styles.saveBtn, styles.cancelBtn]} onPress={() => setIsEditing(false)}><Text>Annuler</Text></TouchableOpacity>
-                        <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}><Text style={{color:"white"}}>Save</Text></TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.cancelBtn} 
+                          onPress={() => {
+                            setIsEditing(false);
+                            setEditedName(`${userProfile.prenom || ''} ${userProfile.nom || ''}`.trim());
+                            setEditedBio(userProfile.bio || "Formateur expert 🎓");
+                            setBioCharCount((userProfile.bio || "").length);
+                          }}
+                        >
+                          <Text style={styles.cancelBtnText}>Annuler</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.saveBtn} 
+                          onPress={saveProfile}
+                        >
+                          <Text style={styles.saveBtnText}>Enregistrer</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             ) : (
                 <>
-                    <Text style={styles.name}>{userProfile.prenom} {userProfile.nom}</Text>
+                    <Text style={styles.name}>
+                      {userProfile.prenom} {userProfile.nom}
+                    </Text>
                     <Text style={styles.bio}>{userProfile.bio}</Text>
-                    <TouchableOpacity style={styles.modifyBtn} onPress={() => setIsEditing(true)}>
-                        <Ionicons name="create-outline" size={16} color="#9333ea" />
+                    <TouchableOpacity 
+                      style={styles.modifyBtn} 
+                      onPress={() => setIsEditing(true)}
+                    >
+                        <Ionicons name="create-outline" size={16} color="#7459f0" />
                         <Text style={styles.modifyText}>Modifier</Text>
                     </TouchableOpacity>
                 </>
@@ -361,110 +577,646 @@ export default function ProfileFormateurScreen() {
 
         {/* STATS */}
         <View style={styles.statsRow}>
-            <View style={styles.statCard}><Text style={styles.statNum}>{totalViews}</Text><Text style={styles.statLabel}>Vues</Text></View>
-            <View style={styles.statCard}><Text style={styles.statNum}>{totalLikes} ❤️</Text><Text style={styles.statLabel}>Likes</Text></View>
-            <View style={styles.statCard}><Text style={styles.statNum}>{myVideos.length}</Text><Text style={styles.statLabel}>Vidéos</Text></View>
+            <View style={styles.statCard}>
+              <Text style={styles.statNum}>{totalViews}</Text>
+              <Text style={styles.statLabel}>Vues totales</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statNum}>{totalLikes}</Text>
+              <Text style={styles.statLabel}>Likes totaux</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statNum}>{myVideos.length}</Text>
+              <Text style={styles.statLabel}>Vidéos</Text>
+            </View>
+        </View>
+
+        {/* TABLEAU DE PROGRESSION (ID 62) */}
+        <View style={styles.progressSection}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressTitle}>Ma progression</Text>
+            {/* ID 43, 398 - Icône historique */}
+            <TouchableOpacity 
+              style={styles.historyBtn}
+              onPress={() => setShowHistory(true)}
+            >
+              <Ionicons name="time-outline" size={20} color="#7459f0" />
+              <Text style={styles.historyBtnText}>Historique</Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.progressCard}>
+            <View style={styles.progressRow}>
+              <View style={styles.progressItem}>
+                <Text style={styles.progressLabel}>Vidéos publiées</Text>
+                <Text style={styles.progressValue}>{myVideos.length}</Text>
+              </View>
+              <View style={styles.progressDivider} />
+              <View style={styles.progressItem}>
+                <Text style={styles.progressLabel}>Vues totales</Text>
+                <Text style={styles.progressValue}>{totalViews}</Text>
+              </View>
+            </View>
+          </View>
         </View>
 
         {/* ONGLETS */}
         <View style={styles.tabBar}>
-            <TouchableOpacity onPress={() => setActiveTab('videos')} style={[styles.tabItem, activeTab === 'videos' && styles.tabItemActive]}>
-                <Ionicons name="videocam" size={20} color={activeTab === 'videos' ? '#9333ea' : '#71717A'} /><Text>Vidéos</Text>
+            <TouchableOpacity 
+              onPress={() => setActiveTab('videos')} 
+              style={[styles.tabItem, activeTab === 'videos' && styles.tabItemActive]}
+            >
+                <Ionicons 
+                  name="videocam" 
+                  size={20} 
+                  color={activeTab === 'videos' ? '#7459f0' : '#71717A'} 
+                />
+                <Text style={[
+                  styles.tabText,
+                  activeTab === 'videos' && styles.tabTextActive
+                ]}>
+                  Vidéos
+                </Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setActiveTab('playlists')} style={[styles.tabItem, activeTab === 'playlists' && styles.tabItemActive]}>
-                <Ionicons name="list" size={20} color={activeTab === 'playlists' ? '#9333ea' : '#71717A'} /><Text>Playlists</Text>
+            <TouchableOpacity 
+              onPress={() => setActiveTab('playlists')} 
+              style={[styles.tabItem, activeTab === 'playlists' && styles.tabItemActive]}
+            >
+                <Ionicons 
+                  name="list" 
+                  size={20} 
+                  color={activeTab === 'playlists' ? '#7459f0' : '#71717A'} 
+                />
+                <Text style={[
+                  styles.tabText,
+                  activeTab === 'playlists' && styles.tabTextActive
+                ]}>
+                  Playlists
+                </Text>
             </TouchableOpacity>
         </View>
 
-        {/* GRILLE */}
+        {/* GRILLE VIDEOS / PLAYLISTS */}
         <View style={styles.contentContainer}>
             {activeTab === 'videos' && (
                 <View style={styles.gridContainer}>
-                    {myVideos.map((video) => (
-                        <TouchableOpacity key={video.id} style={[styles.videoCard, video.isPinned && styles.videoCardPinned]} onPress={() => handleVideoPress(video)}>
+                    {myVideos.length === 0 ? (
+                      <View style={styles.emptyState}>
+                        <Ionicons name="videocam-outline" size={60} color="#D1D5DB" />
+                        <Text style={styles.emptyText}>Aucune vidéo publiée</Text>
+                        <Text style={styles.emptySubtext}>
+                          Vos vidéos apparaîtront ici
+                        </Text>
+                      </View>
+                    ) : (
+                      myVideos.map((video) => (
+                        <TouchableOpacity 
+                          key={video.id} 
+                          style={[
+                            styles.videoCard, 
+                            video.isPinned && styles.videoCardPinned
+                          ]} 
+                          onPress={() => handleVideoPress(video)}
+                        >
                             <View style={styles.videoThumb}>
-                                {video.thumbnail ? <Image source={{ uri: video.thumbnail }} style={styles.thumbImage} /> : <View style={styles.center}><Ionicons name="play" size={30} color="white" /></View>}
-                                {video.isPinned && <View style={styles.pinBadge}><Ionicons name="pricetag" size={10} color="white" /></View>}
-                                <View style={styles.overlayBottomRight}><Ionicons name="play" size={10} color="white" /><Text style={styles.overlayTextSm}>{video.views}</Text></View>
+                                {video.thumbnail ? (
+                                  <Image 
+                                    source={{ uri: video.thumbnail }} 
+                                    style={styles.thumbImage} 
+                                  />
+                                ) : (
+                                  <LinearGradient
+                                    colors={['#7459f0', '#5b3fd1']}
+                                    style={styles.thumbGradient}
+                                  >
+                                    <Ionicons name="play" size={30} color="white" />
+                                  </LinearGradient>
+                                )}
+                                
+                                {/* ID 60 - Badge épinglé */}
+                                {video.isPinned && (
+                                  <View style={styles.pinBadge}>
+                                    <Ionicons name="bookmark" size={12} color="white" />
+                                  </View>
+                                )}
+                                
+                                {/* ID 47, 48 - Vues et Likes sur la vidéo */}
+                                <View style={styles.videoStats}>
+                                  <View style={styles.statBadge}>
+                                    <Ionicons name="play" size={10} color="white" />
+                                    <Text style={styles.statBadgeText}>{video.views}</Text>
+                                  </View>
+                                  <View style={[styles.statBadge, { marginLeft: 4 }]}>
+                                    <Ionicons name="heart" size={10} color="white" />
+                                    <Text style={styles.statBadgeText}>{video.likes}</Text>
+                                  </View>
+                                </View>
                             </View>
-                            <Text style={styles.videoTitle} numberOfLines={1}>{video.title}</Text>
+                            <Text style={styles.videoTitle} numberOfLines={2}>
+                              {video.title}
+                            </Text>
                         </TouchableOpacity>
-                    ))}
+                      ))
+                    )}
                 </View>
             )}
+            
             {activeTab === 'playlists' && (
                 <View>
-                    <TouchableOpacity style={styles.createPlaylistBtn} onPress={() => setShowCreatePlaylist(true)}><Text>+ Playlist</Text></TouchableOpacity>
-                    {myPlaylists.map(pl => (
-                        <TouchableOpacity key={pl.id} style={styles.playlistCard} onPress={() => openPlaylist(pl)}>
+                    <TouchableOpacity 
+                      style={styles.createPlaylistBtn} 
+                      onPress={() => setShowCreatePlaylist(true)}
+                    >
+                      <Ionicons name="add-circle" size={20} color="#7459f0" />
+                      <Text style={styles.createPlaylistText}>
+                        Créer une playlist
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {myPlaylists.length === 0 ? (
+                      <View style={styles.emptyState}>
+                        <Ionicons name="list-outline" size={60} color="#D1D5DB" />
+                        <Text style={styles.emptyText}>Aucune playlist</Text>
+                        <Text style={styles.emptySubtext}>
+                          Créez des playlists pour organiser vos vidéos
+                        </Text>
+                      </View>
+                    ) : (
+                      myPlaylists.map(pl => (
+                        <TouchableOpacity 
+                          key={pl.id} 
+                          style={styles.playlistCard} 
+                          onPress={() => openPlaylist(pl)}
+                        >
+                          <View style={styles.playlistIcon}>
+                            <Ionicons name="list" size={24} color="#7459f0" />
+                          </View>
+                          <View style={styles.playlistInfo}>
                             <Text style={styles.playlistTitle}>{pl.name}</Text>
+                            <Text style={styles.playlistSubtitle}>
+                              {pl.videoIds?.length || 0} vidéo{(pl.videoIds?.length || 0) > 1 ? 's' : ''}
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
                         </TouchableOpacity>
-                    ))}
+                      ))
+                    )}
                 </View>
             )}
         </View>
         <View style={{height: 100}} />
       </ScrollView>
 
-      {/* LECTEUR */}
+      {/* LECTEUR VIDEO */}
       <Modal visible={showPlayer && selectedVideo !== null} animationType="slide">
         <View style={styles.fullScreenContainer}>
             <StatusBar hidden />
             {selectedVideo && (
                 <>
-                    <Video ref={videoRef} source={{ uri: selectedVideo.videoUrl }} style={StyleSheet.absoluteFill} resizeMode={ResizeMode.COVER} shouldPlay isLooping onPlaybackStatusUpdate={onPlaybackStatusUpdate} />
-                    <TouchableOpacity activeOpacity={1} onPress={togglePlayPause} style={styles.touchOverlay}>
-                        {!isPlaying && <Ionicons name="play" size={80} color="rgba(255,255,255,0.6)" />}
+                    <Video 
+                      ref={videoRef} 
+                      source={{ uri: selectedVideo.videoUrl }} 
+                      style={StyleSheet.absoluteFill} 
+                      resizeMode={ResizeMode.COVER} 
+                      shouldPlay 
+                      isLooping 
+                      onPlaybackStatusUpdate={onPlaybackStatusUpdate} 
+                    />
+                    
+                    <TouchableOpacity 
+                      activeOpacity={1} 
+                      onPress={togglePlayPause} 
+                      style={styles.touchOverlay}
+                    >
+                        {!isPlaying && (
+                          <Ionicons 
+                            name="play" 
+                            size={80} 
+                            color="rgba(255,255,255,0.6)" 
+                          />
+                        )}
                     </TouchableOpacity>
-                    <View style={styles.progressBarContainer}><View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} /></View>
+                    
+                    {/* Barre de progression */}
+                    <View style={styles.progressBarContainer}>
+                      <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+                    </View>
+                    
+                    {/* Infos vidéo */}
                     <View style={styles.leftSide}>
                         <Text style={styles.videoTitleFull}>{selectedVideo.title}</Text>
-                        <Text style={styles.videoDescFull}>{selectedVideo.description}</Text>
+                        <Text style={styles.videoDescFull}>
+                          {selectedVideo.description}
+                        </Text>
+                        <View style={styles.videoStatsPlayer}>
+                          <View style={styles.statPlayerItem}>
+                            <Ionicons name="eye" size={14} color="white" />
+                            <Text style={styles.statPlayerText}>{selectedVideo.views} vues</Text>
+                          </View>
+                          <View style={styles.statPlayerItem}>
+                            <Ionicons name="heart" size={14} color="white" />
+                            <Text style={styles.statPlayerText}>{selectedVideo.likes} likes</Text>
+                          </View>
+                        </View>
                     </View>
+                    
+                    {/* Actions */}
                     <View style={styles.rightSide}>
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(true)}>
-                            <Ionicons name="chatbubble-ellipses" size={35} color="white" /><Text style={styles.actionText}>{selectedVideo.comments}</Text>
+                        <TouchableOpacity 
+                          style={styles.actionBtn} 
+                          onPress={() => setShowComments(true)}
+                        >
+                            <Ionicons name="chatbubble-ellipses" size={32} color="white" />
+                            <Text style={styles.actionText}>{selectedVideo.comments}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowVideoOptions(true)}>
-                            <Ionicons name="ellipsis-horizontal-circle" size={40} color="white" /><Text style={styles.actionText}>Gérer</Text>
+                        <TouchableOpacity 
+                          style={styles.actionBtn} 
+                          onPress={() => setShowVideoOptions(true)}
+                        >
+                            <Ionicons name="ellipsis-horizontal-circle" size={32} color="white" />
+                            <Text style={styles.actionText}>Options</Text>
                         </TouchableOpacity>
                     </View>
-                    <TouchableOpacity onPress={() => setShowPlayer(false)} style={styles.closePlayerBtn}><Ionicons name="close" size={30} color="white" /></TouchableOpacity>
+                    
+                    {/* Bouton fermer */}
+                    <TouchableOpacity 
+                      onPress={() => {
+                        setShowPlayer(false);
+                        setIsPlaying(false);
+                      }} 
+                      style={styles.closePlayerBtn}
+                    >
+                      <Ionicons name="close" size={30} color="white" />
+                    </TouchableOpacity>
                 </>
             )}
         </View>
       </Modal>
 
-      {/* MODAL COMMENTAIRES CORRIGÉ */}
+      {/* MODAL COMMENTAIRES */}
       {selectedVideo && (
         <CommentModal 
             visible={showComments} 
             videoId={selectedVideo.id} 
-            creatorId={selectedVideo.creatorId} // Correction ici
-            videoTitle={selectedVideo.title}    // Correction ici
+            creatorId={selectedVideo.creatorId}
+            videoTitle={selectedVideo.title}
             onClose={() => setShowComments(false)} 
         />
       )}
 
-      {/* OPTIONS VIDEO */}
+      {/* OPTIONS VIDEO (ID 49 - Ajout de "Modifier") */}
       <Modal visible={showVideoOptions} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <TouchableOpacity style={styles.modalOption} onPress={togglePinVideo}><Text>📌 Épingler</Text></TouchableOpacity>
-                <TouchableOpacity style={styles.modalOption} onPress={deleteVideo}><Text style={{color:"red"}}>🗑️ Supprimer</Text></TouchableOpacity>
-                <TouchableOpacity onPress={() => setShowVideoOptions(false)} style={styles.modalCancel}><Text>Annuler</Text></TouchableOpacity>
-            </View>
-        </View>
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowVideoOptions(false)}
+        >
+          <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Options de la vidéo</Text>
+              
+              <TouchableOpacity 
+                style={styles.modalOption} 
+                onPress={openEditVideo}
+              >
+                <Ionicons name="create-outline" size={20} color="#7459f0" />
+                <Text style={styles.modalOptionText}>Modifier</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.modalOption} 
+                onPress={togglePinVideo}
+              >
+                <Ionicons 
+                  name={selectedVideo?.isPinned ? "bookmark" : "bookmark-outline"} 
+                  size={20} 
+                  color="#7459f0" 
+                />
+                <Text style={styles.modalOptionText}>
+                  {selectedVideo?.isPinned ? "Désépingler" : "Épingler"}
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.modalOption} 
+                onPress={deleteVideo}
+              >
+                <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                <Text style={[styles.modalOptionText, { color: "#ef4444" }]}>
+                  Supprimer
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                onPress={() => setShowVideoOptions(false)} 
+                style={styles.modalCancel}
+              >
+                <Text style={styles.modalCancelText}>Annuler</Text>
+              </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* MODAL MODIFIER VIDÉO (ID 49) */}
+      <Modal visible={showEditVideo} transparent animationType="fade">
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowEditVideo(false)}
+        >
+          <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Modifier la vidéo</Text>
+              
+              <TextInput 
+                placeholder="Titre de la vidéo" 
+                value={editedVideoTitle} 
+                onChangeText={setEditedVideoTitle} 
+                style={styles.modalInput}
+                placeholderTextColor="#9CA3AF"
+              />
+              
+              <TextInput 
+                placeholder="Description (optionnel)" 
+                value={editedVideoDesc} 
+                onChangeText={setEditedVideoDesc} 
+                style={[styles.modalInput, { height: 80 }]}
+                multiline
+                placeholderTextColor="#9CA3AF"
+              />
+              
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  onPress={() => setShowEditVideo(false)}
+                  style={styles.modalBtnSecondary}
+                >
+                  <Text style={styles.modalBtnSecondaryText}>Annuler</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  onPress={saveEditedVideo}
+                  style={styles.modalBtnPrimary}
+                >
+                  <Text style={styles.modalBtnPrimaryText}>Enregistrer</Text>
+                </TouchableOpacity>
+              </View>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* CREATE PLAYLIST */}
       <Modal visible={showCreatePlaylist} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <TextInput placeholder="Nom" value={newPlaylistName} onChangeText={setNewPlaylistName} style={styles.modalInput} />
-                <TouchableOpacity onPress={createPlaylist}><Text>Créer</Text></TouchableOpacity>
-                <TouchableOpacity onPress={() => setShowCreatePlaylist(false)}><Text>Annuler</Text></TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowCreatePlaylist(false)}
+        >
+          <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Nouvelle playlist</Text>
+              
+              <TextInput 
+                placeholder="Nom de la playlist" 
+                value={newPlaylistName} 
+                onChangeText={setNewPlaylistName} 
+                style={styles.modalInput}
+                placeholderTextColor="#9CA3AF"
+              />
+              
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  onPress={() => setShowCreatePlaylist(false)}
+                  style={styles.modalBtnSecondary}
+                >
+                  <Text style={styles.modalBtnSecondaryText}>Annuler</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  onPress={createPlaylist}
+                  style={styles.modalBtnPrimary}
+                >
+                  <Text style={styles.modalBtnPrimaryText}>Créer</Text>
+                </TouchableOpacity>
+              </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* MODAL DÉTAILS PLAYLIST (ID 45, 58) */}
+      <Modal 
+        visible={selectedPlaylist !== null} 
+        animationType="slide"
+        transparent
+      >
+        <View style={styles.playlistDetailOverlay}>
+          <View style={styles.playlistDetailContainer}>
+            {/* Header */}
+            <View style={styles.playlistDetailHeader}>
+              <TouchableOpacity 
+                onPress={() => setSelectedPlaylist(null)}
+                style={styles.backBtn}
+              >
+                <Ionicons name="arrow-back" size={24} color="#1F2937" />
+              </TouchableOpacity>
+              
+              <Text style={styles.playlistDetailTitle}>
+                {selectedPlaylist?.name}
+              </Text>
+              
+              <TouchableOpacity 
+                onPress={deletePlaylist}
+                style={styles.deletePlaylistIconBtn}
+              >
+                <Ionicons name="trash-outline" size={20} color="#ef4444" />
+              </TouchableOpacity>
             </View>
+
+            {/* Bouton ajouter vidéo */}
+            <TouchableOpacity 
+              style={styles.addVideoToPlBtn}
+              onPress={openAddVideoModal}
+            >
+              <Ionicons name="add-circle" size={20} color="#7459f0" />
+              <Text style={styles.addVideoToPlText}>Ajouter une vidéo</Text>
+            </TouchableOpacity>
+
+            {/* Liste des vidéos */}
+            <ScrollView style={styles.playlistVideosScroll}>
+              {selectedPlaylistVideos.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Ionicons name="videocam-outline" size={60} color="#D1D5DB" />
+                  <Text style={styles.emptyText}>Playlist vide</Text>
+                  <Text style={styles.emptySubtext}>
+                    Ajoutez des vidéos à cette playlist
+                  </Text>
+                </View>
+              ) : (
+                selectedPlaylistVideos.map((video, index) => (
+                  <View key={video.id} style={styles.playlistVideoItem}>
+                    <TouchableOpacity 
+                      style={styles.playlistVideoThumb}
+                      onPress={() => handleVideoPress(video)}
+                    >
+                      {video.thumbnail ? (
+                        <Image 
+                          source={{ uri: video.thumbnail }} 
+                          style={styles.playlistVideoThumbImg} 
+                        />
+                      ) : (
+                        <LinearGradient
+                          colors={['#7459f0', '#5b3fd1']}
+                          style={styles.playlistVideoThumbImg}
+                        >
+                          <Ionicons name="play" size={20} color="white" />
+                        </LinearGradient>
+                      )}
+                    </TouchableOpacity>
+                    
+                    <View style={styles.playlistVideoInfo}>
+                      <Text style={styles.playlistVideoTitle} numberOfLines={2}>
+                        {video.title}
+                      </Text>
+                      <Text style={styles.playlistVideoStats}>
+                        {video.views} vues • {video.likes} likes
+                      </Text>
+                    </View>
+                    
+                    {/* ID 51 - Supprimer de la playlist */}
+                    <TouchableOpacity 
+                      style={styles.removeVideoBtn}
+                      onPress={() => removeVideoFromPlaylist(video.id)}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL AJOUTER VIDÉO À PLAYLIST */}
+      <Modal 
+        visible={showAddVideoModal} 
+        transparent 
+        animationType="fade"
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowAddVideoModal(false)}
+        >
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Ajouter une vidéo</Text>
+            
+            <ScrollView style={styles.modalVideosList}>
+              {myVideos.filter(v => 
+                !selectedPlaylist?.videoIds.includes(v.id)
+              ).map(video => (
+                <TouchableOpacity 
+                  key={video.id}
+                  style={styles.modalVideoItem}
+                  onPress={() => addVideoToPlaylist(video)}
+                >
+                  <View style={styles.modalVideoThumb}>
+                    {video.thumbnail ? (
+                      <Image 
+                        source={{ uri: video.thumbnail }} 
+                        style={styles.modalVideoThumbImg} 
+                      />
+                    ) : (
+                      <LinearGradient
+                        colors={['#7459f0', '#5b3fd1']}
+                        style={styles.modalVideoThumbImg}
+                      >
+                        <Ionicons name="play" size={16} color="white" />
+                      </LinearGradient>
+                    )}
+                  </View>
+                  <Text style={styles.modalVideoItemText} numberOfLines={2}>
+                    {video.title}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            
+            <TouchableOpacity 
+              onPress={() => setShowAddVideoModal(false)}
+              style={styles.modalCancel}
+            >
+              <Text style={styles.modalCancelText}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* MODAL HISTORIQUE (ID 43, 398) */}
+      <Modal 
+        visible={showHistory} 
+        animationType="slide"
+        transparent
+      >
+        <View style={styles.historyOverlay}>
+          <View style={styles.historyContainer}>
+            <View style={styles.historyHeader}>
+              <TouchableOpacity 
+                onPress={() => setShowHistory(false)}
+                style={styles.backBtn}
+              >
+                <Ionicons name="arrow-back" size={24} color="#1F2937" />
+              </TouchableOpacity>
+              
+              <Text style={styles.historyTitle}>Historique</Text>
+              
+              <View style={{ width: 24 }} />
+            </View>
+
+            <ScrollView style={styles.historyScroll}>
+              {watchHistory.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Ionicons name="time-outline" size={60} color="#D1D5DB" />
+                  <Text style={styles.emptyText}>Aucun historique</Text>
+                  <Text style={styles.emptySubtext}>
+                    Vos vidéos regardées apparaîtront ici
+                  </Text>
+                </View>
+              ) : (
+                watchHistory.map((video) => (
+                  <TouchableOpacity 
+                    key={video.id}
+                    style={styles.historyItem}
+                    onPress={() => {
+                      setShowHistory(false);
+                      handleVideoPress(video);
+                    }}
+                  >
+                    <View style={styles.historyThumb}>
+                      {video.thumbnail ? (
+                        <Image 
+                          source={{ uri: video.thumbnail }} 
+                          style={styles.historyThumbImg} 
+                        />
+                      ) : (
+                        <LinearGradient
+                          colors={['#7459f0', '#5b3fd1']}
+                          style={styles.historyThumbImg}
+                        >
+                          <Ionicons name="play" size={20} color="white" />
+                        </LinearGradient>
+                      )}
+                    </View>
+                    
+                    <View style={styles.historyInfo}>
+                      <Text style={styles.historyVideoTitle} numberOfLines={2}>
+                        {video.title}
+                      </Text>
+                      <Text style={styles.historyVideoStats}>
+                        {video.views} vues • {video.likes} likes
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </View>
         </View>
       </Modal>
     </View>
@@ -472,105 +1224,869 @@ export default function ProfileFormateurScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFF' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#FFFFFF' 
+  },
+  center: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF'
+  },
   
   // Header
-  headerWrapper: { marginBottom: 50 },
-  headerGradient: { height: 140, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, paddingTop: 50, paddingHorizontal: 20 },
-  topIcons: { flexDirection: 'row', justifyContent: 'flex-end' },
-  glassIcon: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 20, marginLeft: 10 },
+  headerWrapper: { 
+    marginBottom: 50 
+  },
+  headerGradient: { 
+    height: 140, 
+    borderBottomLeftRadius: 30, 
+    borderBottomRightRadius: 30, 
+    paddingTop: 50, 
+    paddingHorizontal: 20 
+  },
+  topIcons: { 
+    flexDirection: 'row', 
+    justifyContent: 'flex-end' 
+  },
+  glassIcon: { 
+    backgroundColor: 'rgba(255,255,255,0.25)', 
+    padding: 10, 
+    borderRadius: 20, 
+    marginLeft: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
+  },
   
   // Avatar
-  avatarSection: { position: 'absolute', bottom: -40, left: 0, right: 0, alignItems: 'center' },
-  avatarContainer: { position: 'relative' },
-  avatarBorder: { width: 100, height: 100, borderRadius: 50, borderWidth: 4, borderColor: '#FFF', backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', elevation: 5 },
-  avatarImg: { width: '100%', height: '100%', borderRadius: 50 },
-  avatarCircle: { width: '100%', height: '100%', borderRadius: 50, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center' },
-  avatarInit: { fontSize: 40, color: '#FFF', fontWeight: 'bold' },
-  roleBadge: { position: 'absolute', bottom: -5, alignSelf: 'center', backgroundColor: '#FFF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, flexDirection: 'row', alignItems: 'center', elevation: 2 },
-  roleText: { fontSize: 10, fontWeight: 'bold', color: '#9333ea', marginLeft: 4 },
+  avatarSection: { 
+    position: 'absolute', 
+    bottom: -40, 
+    left: 0, 
+    right: 0, 
+    alignItems: 'center' 
+  },
+  avatarContainer: { 
+    position: 'relative' 
+  },
+  avatarBorder: { 
+    width: 100, 
+    height: 100, 
+    borderRadius: 50, 
+    borderWidth: 4, 
+    borderColor: '#FFFFFF', 
+    backgroundColor: '#7459f0', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  avatarImg: { 
+    width: '100%', 
+    height: '100%', 
+    borderRadius: 50 
+  },
+  avatarCircle: { 
+    width: '100%', 
+    height: '100%', 
+    borderRadius: 50, 
+    backgroundColor: '#7459f0', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  avatarInit: { 
+    fontSize: 40, 
+    color: '#FFFFFF', 
+    fontWeight: 'bold' 
+  },
+  roleBadge: { 
+    position: 'absolute', 
+    bottom: -5, 
+    alignSelf: 'center', 
+    backgroundColor: '#FFFFFF', 
+    paddingHorizontal: 12, 
+    paddingVertical: 5, 
+    borderRadius: 12, 
+    flexDirection: 'row', 
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  roleText: { 
+    fontSize: 10, 
+    fontWeight: 'bold', 
+    color: '#7459f0', 
+    marginLeft: 4 
+  },
 
   // Identity & Edit
-  identitySection: { alignItems: 'center', marginTop: 10, paddingHorizontal: 20 },
-  name: { fontSize: 22, fontWeight: 'bold', color: '#1F2937' },
-  bio: { fontSize: 13, color: '#6B7280', textAlign: 'center', marginTop: 4 },
-  modifyBtn: { marginTop: 12, flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 24, borderRadius: 20, borderWidth: 1, borderColor: '#E5E7EB' },
-  modifyText: { fontSize: 13, color: '#9333ea', fontWeight: '600', marginLeft: 6 },
-  editForm: { width: '100%', gap: 10 },
-  input: { backgroundColor: '#F9FAFB', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 10, padding: 12 },
-  editButtons: { flexDirection: 'row', gap: 10 },
-  saveBtn: { flex: 1, backgroundColor: '#9333ea', padding: 12, borderRadius: 10, alignItems: 'center' },
-  cancelBtn: { backgroundColor: '#F3F4F6', padding: 12, borderRadius: 10, alignItems: 'center', flex: 1 },
+  identitySection: { 
+    alignItems: 'center', 
+    marginTop: 10, 
+    paddingHorizontal: 20 
+  },
+  name: { 
+    fontSize: 22, 
+    fontWeight: 'bold', 
+    color: '#1F2937' 
+  },
+  bio: { 
+    fontSize: 14, 
+    color: '#6B7280', 
+    textAlign: 'center', 
+    marginTop: 6,
+    lineHeight: 20
+  },
+  modifyBtn: { 
+    marginTop: 16, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingVertical: 10, 
+    paddingHorizontal: 24, 
+    borderRadius: 20, 
+    borderWidth: 1.5, 
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF'
+  },
+  modifyText: { 
+    fontSize: 14, 
+    color: '#7459f0', 
+    fontWeight: '600', 
+    marginLeft: 6 
+  },
+  editForm: { 
+    width: '100%' 
+  },
+  input: { 
+    backgroundColor: '#F9FAFB', 
+    borderWidth: 1, 
+    borderColor: '#E5E7EB', 
+    borderRadius: 12, 
+    padding: 14,
+    fontSize: 15,
+    color: '#1F2937',
+    marginBottom: 12
+  },
+  charCount: {
+    position: 'absolute',
+    right: 12,
+    bottom: 20,
+    fontSize: 12,
+    color: '#9CA3AF'
+  },
+  editButtons: { 
+    flexDirection: 'row',
+    marginTop: 8
+  },
+  saveBtn: { 
+    flex: 1, 
+    backgroundColor: '#7459f0', 
+    padding: 14, 
+    borderRadius: 12, 
+    alignItems: 'center',
+    marginLeft: 8
+  },
+  saveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600'
+  },
+  cancelBtn: { 
+    flex: 1,
+    backgroundColor: '#F3F4F6', 
+    padding: 14, 
+    borderRadius: 12, 
+    alignItems: 'center'
+  },
+  cancelBtnText: {
+    color: '#6B7280',
+    fontSize: 15,
+    fontWeight: '600'
+  },
 
   // Stats
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 20 },
-  statCard: { width: '31%', backgroundColor: '#FFF', padding: 15, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#F3F4F6', elevation: 1 },
-  statNum: { fontSize: 18, fontWeight: 'bold', color: '#4B5563' },
-  statLabel: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
+  statsRow: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 20, 
+    marginTop: 20 
+  },
+  statCard: { 
+    width: '31%', 
+    backgroundColor: '#FFFFFF', 
+    padding: 16, 
+    borderRadius: 16, 
+    alignItems: 'center', 
+    borderWidth: 1, 
+    borderColor: '#F3F4F6',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  statNum: { 
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    color: '#1F2937' 
+  },
+  statLabel: { 
+    fontSize: 11, 
+    color: '#9CA3AF', 
+    marginTop: 4 
+  },
+
+  // Progression Section (ID 62)
+  progressSection: {
+    paddingHorizontal: 20,
+    marginTop: 20
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  progressTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937'
+  },
+  historyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12
+  },
+  historyBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7459f0',
+    marginLeft: 6
+  },
+  progressCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center'
+  },
+  progressItem: {
+    flex: 1,
+    alignItems: 'center'
+  },
+  progressLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 6
+  },
+  progressValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#7459f0'
+  },
+  progressDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#E5E7EB'
+  },
 
   // Tabs
-  tabBar: { flexDirection: 'row', marginHorizontal: 20, marginTop: 25, backgroundColor: '#F9FAFB', padding: 4, borderRadius: 16 },
-  tabItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12 },
-  tabItemActive: { backgroundColor: '#FFF', elevation: 2 },
+  tabBar: { 
+    flexDirection: 'row', 
+    marginHorizontal: 20, 
+    marginTop: 25, 
+    backgroundColor: '#F9FAFB', 
+    padding: 4, 
+    borderRadius: 16 
+  },
+  tabItem: { 
+    flex: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    paddingVertical: 12, 
+    borderRadius: 12 
+  },
+  tabItemActive: { 
+    backgroundColor: '#FFFFFF',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  tabText: {
+    fontSize: 14,
+    color: '#71717A',
+    marginLeft: 6,
+    fontWeight: '500'
+  },
+  tabTextActive: {
+    color: '#7459f0',
+    fontWeight: '600'
+  },
 
   // Content
-  contentContainer: { padding: 20 },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  videoCard: { width: '48%', marginBottom: 15 },
-  videoCardPinned: { borderColor: '#9333ea', borderWidth: 2, borderRadius: 14 },
-  videoThumb: { width: '100%', height: 120, backgroundColor: '#333', borderRadius: 12, overflow: 'hidden', position: 'relative' },
-  thumbImage: { width: '100%', height: '100%' },
-  overlayBottomRight: { position: 'absolute', bottom: 5, right: 5, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  overlayTextSm: { color: 'white', fontSize: 10, marginLeft: 3 },
-  pinBadge: { position: 'absolute', top: 5, left: 5, backgroundColor: '#9333ea', padding: 4, borderRadius: 4 },
-  videoTitle: { fontSize: 12, fontWeight: '600', color: '#374151', marginTop: 5 },
+  contentContainer: { 
+    padding: 20 
+  },
+  gridContainer: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    justifyContent: 'space-between'
+  },
+  videoCard: { 
+    width: '48%', 
+    marginBottom: 20 
+  },
+  videoCardPinned: { 
+    borderColor: '#7459f0', 
+    borderWidth: 2, 
+    borderRadius: 14,
+    padding: 3
+  },
+  videoThumb: { 
+    width: '100%', 
+    height: 120, 
+    backgroundColor: '#1F2937', 
+    borderRadius: 12, 
+    overflow: 'hidden', 
+    position: 'relative' 
+  },
+  thumbImage: { 
+    width: '100%', 
+    height: '100%' 
+  },
+  thumbGradient: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  // ID 47, 48 - Stats sur la vidéo (vues + likes)
+  videoStats: {
+    position: 'absolute',
+    bottom: 6,
+    right: 6,
+    flexDirection: 'row'
+  },
+  statBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6
+  },
+  statBadgeText: {
+    color: 'white',
+    fontSize: 10,
+    marginLeft: 3,
+    fontWeight: '600'
+  },
+  pinBadge: { 
+    position: 'absolute', 
+    top: 6, 
+    left: 6, 
+    backgroundColor: '#7459f0', 
+    padding: 6, 
+    borderRadius: 8 
+  },
+  videoTitle: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#1F2937', 
+    marginTop: 8,
+    lineHeight: 18
+  },
 
-  // Playlists (Correction de l'erreur ici)
+  // Playlists
   createPlaylistBtn: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     backgroundColor: '#F3E8FF', 
-    padding: 15, 
+    padding: 16, 
     borderRadius: 12, 
-    marginBottom: 15,
+    marginBottom: 16,
     justifyContent: 'center'
   },
-  playlistCard: { padding: 15, backgroundColor: "#F9FAFB", borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#F3F4F6' },
-  playlistTitle: { fontWeight: "bold", color: '#1F2937' },
+  createPlaylistText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#7459f0',
+    marginLeft: 8
+  },
+  playlistCard: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16, 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 12, 
+    marginBottom: 12, 
+    borderWidth: 1, 
+    borderColor: '#F3F4F6',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  playlistIcon: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#F3E8FF',
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12
+  },
+  playlistInfo: {
+    flex: 1
+  },
+  playlistTitle: { 
+    fontSize: 15,
+    fontWeight: '600', 
+    color: '#1F2937',
+    marginBottom: 4
+  },
+  playlistSubtitle: {
+    fontSize: 13,
+    color: '#9CA3AF'
+  },
+
+  // Empty States
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 20
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#9CA3AF',
+    marginTop: 12
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#D1D5DB',
+    marginTop: 4,
+    textAlign: 'center'
+  },
 
   // Player Fullscreen
-  fullScreenContainer: { flex: 1, backgroundColor: 'black' },
-  touchOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  progressBarContainer: { position: 'absolute', bottom: 50, left: 0, right: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.3)' },
-  progressBarFill: { height: '100%', backgroundColor: '#9333ea' },
-  leftSide: { position: 'absolute', bottom: 70, left: 15, width: '70%' },
-  videoTitleFull: { color: 'white', fontSize: 16, fontWeight: '700' },
-  videoDescFull: { color: '#ddd', fontSize: 14, marginTop: 5 },
-  rightSide: { position: 'absolute', bottom: 70, right: 10, alignItems: 'center', gap: 20 },
-  actionBtn: { alignItems: 'center', gap: 5 },
-  actionText: { color: 'white', fontSize: 12, fontWeight: '600' },
-  closePlayerBtn: { position: 'absolute', top: 50, left: 20, padding: 8, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 20 },
+  fullScreenContainer: { 
+    flex: 1, 
+    backgroundColor: 'black' 
+  },
+  touchOverlay: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  progressBarContainer: { 
+    position: 'absolute', 
+    bottom: 50, 
+    left: 0, 
+    right: 0, 
+    height: 3, 
+    backgroundColor: 'rgba(255,255,255,0.3)' 
+  },
+  progressBarFill: { 
+    height: '100%', 
+    backgroundColor: '#7459f0' 
+  },
+  leftSide: { 
+    position: 'absolute', 
+    bottom: 70, 
+    left: 15, 
+    width: '70%' 
+  },
+  videoTitleFull: { 
+    color: 'white', 
+    fontSize: 18, 
+    fontWeight: '700',
+    marginBottom: 6
+  },
+  videoDescFull: { 
+    color: '#ddd', 
+    fontSize: 14, 
+    marginTop: 4,
+    lineHeight: 20
+  },
+  videoStatsPlayer: {
+    flexDirection: 'row',
+    marginTop: 12
+  },
+  statPlayerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 16
+  },
+  statPlayerText: {
+    color: 'white',
+    fontSize: 13,
+    marginLeft: 6,
+    fontWeight: '500'
+  },
+  rightSide: { 
+    position: 'absolute', 
+    bottom: 70, 
+    right: 12, 
+    alignItems: 'center'
+  },
+  actionBtn: { 
+    alignItems: 'center',
+    marginBottom: 20
+  },
+  actionText: { 
+    color: 'white', 
+    fontSize: 12, 
+    fontWeight: '600',
+    marginTop: 6
+  },
+  closePlayerBtn: { 
+    position: 'absolute', 
+    top: 50, 
+    left: 20, 
+    padding: 10, 
+    backgroundColor: 'rgba(0,0,0,0.4)', 
+    borderRadius: 25 
+  },
 
   // Modals
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#FFF', padding: 20, borderRadius: 20 },
-  modalOption: { paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  modalCancel: { marginTop: 15, alignItems: 'center' },
-  modalInput: { backgroundColor: '#F9FAFB', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 20 },
+  modalOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.6)', 
+    justifyContent: 'center', 
+    padding: 20 
+  },
+  modalContent: { 
+    backgroundColor: '#FFFFFF', 
+    padding: 24, 
+    borderRadius: 20,
+    maxHeight: '80%'
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 20
+  },
+  modalOption: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F3F4F6'
+  },
+  modalOptionText: {
+    fontSize: 16,
+    color: '#1F2937',
+    marginLeft: 12,
+    fontWeight: '500'
+  },
+  modalCancel: { 
+    marginTop: 16, 
+    alignItems: 'center',
+    paddingVertical: 12
+  },
+  modalCancelText: {
+    fontSize: 15,
+    color: '#7459f0',
+    fontWeight: '600'
+  },
+  modalInput: { 
+    backgroundColor: '#F9FAFB', 
+    padding: 14, 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: '#E5E7EB', 
+    marginBottom: 16,
+    fontSize: 15,
+    color: '#1F2937'
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    marginTop: 8
+  },
+  modalBtnSecondary: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginRight: 8
+  },
+  modalBtnSecondaryText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7280'
+  },
+  modalBtnPrimary: {
+    flex: 1,
+    backgroundColor: '#7459f0',
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginLeft: 8
+  },
+  modalBtnPrimaryText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF'
+  },
+  modalVideosList: {
+    maxHeight: 300,
+    marginBottom: 16
+  },
+  modalVideoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  modalVideoThumb: {
+    width: 60,
+    height: 40,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginRight: 12
+  },
+  modalVideoThumbImg: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  modalVideoItemText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#1F2937',
+    fontWeight: '500'
+  },
 
-  // Sheet Playlist Detail
-  sheetContainer: { flex: 1, backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderColor: '#F3F4F6', alignItems: 'center' },
-  sheetTitle: { fontSize: 18, fontWeight: 'bold' },
-  deletePlaylistBtn: { padding: 8, backgroundColor: '#FEF2F2', borderRadius: 8 },
-  addVideoToPlBtn: { flexDirection:'row', alignItems:'center', justifyContent:'center', backgroundColor:'#F3E8FF', padding:15, borderRadius:12, marginBottom:20 },
-  addVideoToPlText: { color:'#9333ea', fontWeight:'bold', marginLeft:10 },
-  sheetVideoItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#F9FAFB' },
-  emptyText: { textAlign: 'center', color: '#9CA3AF', marginTop: 20 },
-  
-  // Settings Modal
-  settingsContainer: { flex: 1, backgroundColor: '#F9FAFB' },
-  settingsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10, backgroundColor: '#FFF' },
-  settingsTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
+  // Playlist Detail Modal
+  playlistDetailOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end'
+  },
+  playlistDetailContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    height: '90%',
+    paddingTop: 20
+  },
+  playlistDetailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  backBtn: {
+    padding: 8
+  },
+  playlistDetailTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937'
+  },
+  deletePlaylistIconBtn: {
+    padding: 8
+  },
+  addVideoToPlBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3E8FF',
+    padding: 14,
+    borderRadius: 12,
+    marginHorizontal: 20,
+    marginTop: 16
+  },
+  addVideoToPlText: {
+    color: '#7459f0',
+    fontWeight: '600',
+    marginLeft: 8,
+    fontSize: 15
+  },
+  playlistVideosScroll: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16
+  },
+  playlistVideoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  playlistVideoThumb: {
+    width: 80,
+    height: 60,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginRight: 12
+  },
+  playlistVideoThumbImg: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  playlistVideoInfo: {
+    flex: 1
+  },
+  playlistVideoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+    lineHeight: 18
+  },
+  playlistVideoStats: {
+    fontSize: 12,
+    color: '#9CA3AF'
+  },
+  removeVideoBtn: {
+    padding: 8
+  },
+
+  // History Modal (ID 43, 398)
+  historyOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end'
+  },
+  historyContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    height: '80%',
+    paddingTop: 20
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  historyTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937'
+  },
+  historyScroll: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 16
+  },
+  historyItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  historyThumb: {
+    width: 80,
+    height: 60,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginRight: 12
+  },
+  historyThumbImg: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  historyInfo: {
+    flex: 1
+  },
+  historyVideoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4,
+    lineHeight: 18
+  },
+  historyVideoStats: {
+    fontSize: 12,
+    color: '#9CA3AF'
+  },
 });

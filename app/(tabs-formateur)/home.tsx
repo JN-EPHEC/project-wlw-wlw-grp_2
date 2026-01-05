@@ -14,7 +14,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import CommentModal from '../../components/CommentModal';
 
 interface VideoData {
@@ -53,7 +53,12 @@ interface UserProfile {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  
+  // 🎯 GESTION DES PARAMÈTRES DE NAVIGATION
+  const targetVideoId = params.videoId as string;
+  const shouldOpenComments = params.openComments === 'true';
   
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -143,6 +148,31 @@ export default function HomeScreen() {
     };
     pauseOtherVideos();
   }, [currentIndex]);
+
+  // 🎯 SCROLL AUTOMATIQUE VERS LA VIDÉO CIBLÉE
+  useEffect(() => {
+    if (targetVideoId && videos.length > 0) {
+      const targetIndex = videos.findIndex(v => v.id === targetVideoId);
+      if (targetIndex !== -1 && scrollViewRef.current) {
+        // Attendre que le ScrollView soit rendu
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({
+            y: targetIndex * SCREEN_HEIGHT,
+            animated: true
+          });
+          setCurrentIndex(targetIndex);
+          
+          // Ouvrir les commentaires si demandé
+          if (shouldOpenComments) {
+            setTimeout(() => {
+              setCurrentVideoId(targetVideoId);
+              setShowComments(true);
+            }, 500);
+          }
+        }, 300);
+      }
+    }
+  }, [targetVideoId, videos, SCREEN_HEIGHT, shouldOpenComments]);
 
   const loadAllUsers = async () => {
     try {
