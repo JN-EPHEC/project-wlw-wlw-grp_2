@@ -125,7 +125,7 @@ export default function ForgotPasswordScreen() {
             disabled={loading}
           >
             <Text style={styles.submitButtonText}>
-              {loading ? 'Envoi en cours...' : 'Réinitialisiter le mot de passe'}
+              {loading ? 'Envoi en cours...' : 'Réinitialiser le mot de passe'}
             </Text>
           </TouchableOpacity>
 
