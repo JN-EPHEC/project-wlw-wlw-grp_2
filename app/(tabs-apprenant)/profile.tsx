@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  Image, Dimensions, TextInput, ActivityIndicator, Alert, Modal, RefreshControl
+  Image, Dimensions, TextInput, ActivityIndicator, Alert, Modal, RefreshControl, Animated
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,6 +18,8 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { signOut as firebaseSignOut } from 'firebase/auth'; // Import renommé pour clarté
 import { useUserProgress } from '../../hooks/useuserprogress';
+// AJOUT: Import pour les badges
+import { checkNewBadges } from '../../services/badgeService';
 
 const { width } = Dimensions.get('window');
 
@@ -32,6 +34,26 @@ interface SimpleVideo {
 }
 
 interface BadgeDisplay {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  unlocked: boolean;
+}
+
+// AJOUT: Types pour les badges de la page badges
+interface Badge {
+  id: string;
+  name: string;
+  level: 'Bronze' | 'Argent' | 'Or';
+  icon: string;
+  requirement: number;
+  description: string;
+  unlocked: boolean;
+  progress: number;
+}
+
+interface BonusBadge {
   id: string;
   name: string;
   icon: string;
@@ -153,6 +175,13 @@ export default function ProfileApprenantScreen() {
   const [likedVideos, setLikedVideos] = useState<SimpleVideo[]>([]);
   const [unlockedBadges, setUnlockedBadges] = useState<BadgeDisplay[]>([]);
   
+  // AJOUT: États pour les badges style page badges
+  const [badges, setBadges] = useState<Badge[]>([]);
+  const [bonusBadges, setBonusBadges] = useState<BonusBadge[]>([]);
+  const [showToast, setShowToast] = useState(false);
+  const [toastAnimation] = useState(new Animated.Value(-100));
+  const [newlyUnlockedBadge, setNewlyUnlockedBadge] = useState<Badge | null>(null);
+  
   // Statistiques
   const [stats, setStats] = useState({
     videosWatched: 0,
@@ -170,7 +199,7 @@ export default function ProfileApprenantScreen() {
   const [selectedVideo, setSelectedVideo] = useState<SimpleVideo | null>(null);
 
   // Hooks Progression
-  const { stats: progressStats, getXPProgressPercentage } = useUserProgress();
+  const { stats: progressStats, getXPProgressPercentage, getBadgesWithProgress, getBonusBadgesWithProgress } = useUserProgress();
   const xpPercentage = getXPProgressPercentage ? getXPProgressPercentage() : 0;
   const currentLevel = userProfile?.progressData?.level || Math.floor((stats.videosWatched || 0) / 10) + 1;
   const nextLevelVideos = (currentLevel * 10) - (stats.videosWatched || 0);
@@ -214,6 +243,63 @@ export default function ProfileApprenantScreen() {
     return videosData;
   };
 
+  // AJOUT: Fonction pour charger les badges
+  const loadBadges = async () => {
+    try {
+      const allBadges = getBadgesWithProgress();
+      const allBonusBadges = getBonusBadgesWithProgress();
+      
+      setBadges(allBadges);
+      setBonusBadges(allBonusBadges);
+      
+      // Vérifier les nouveaux badges débloqués
+      const newBadges = await checkNewBadges(allBadges);
+      if (newBadges.length > 0) {
+        const badge = allBadges.find(b => b.id === newBadges[0].id);
+        if (badge) {
+          setNewlyUnlockedBadge(badge);
+          showBadgeUnlockedToast();
+        }
+      }
+    } catch (error) {
+      console.error('Erreur chargement badges:', error);
+    }
+  };
+
+  // AJOUT: Fonction pour afficher le toast
+  const showBadgeUnlockedToast = () => {
+    setShowToast(true);
+    Animated.sequence([
+      Animated.spring(toastAnimation, {
+        toValue: 20,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 7,
+      }),
+      Animated.delay(3000),
+      Animated.timing(toastAnimation, {
+        toValue: -100,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setShowToast(false));
+  };
+
+  // AJOUT: Fonction helper pour les couleurs de niveau
+  const getLevelColor = (level: string) => {
+    switch (level) {
+      case 'Bronze': return '#CD7F32';
+      case 'Argent': return '#C0C0C0';
+      case 'Or': return '#FFD700';
+      default: return '#CD7F32';
+    }
+  };
+
+  // AJOUT: Fonction pour obtenir le prochain badge
+  const getNextBadge = () => {
+    return badges.find(badge => !badge.unlocked);
+  };
+
   const loadProfile = async () => {
     try {
       const user = auth.currentUser;
@@ -233,6 +319,9 @@ export default function ProfileApprenantScreen() {
           totalMinutes: data.stats?.totalMinutes || 0,
           followers: data.stats?.followers || 0,
         });
+
+        // AJOUT: Charger les badges
+        await loadBadges();
 
         if (activeTab === 'playlists') await loadPlaylists(user.uid);
         if (activeTab === 'saved') setFavorites(await fetchVideosByIds(data.favorites || []));
@@ -382,8 +471,31 @@ export default function ProfileApprenantScreen() {
   const unlockedOnly = unlockedBadges ? unlockedBadges : []; 
   const lockedOnly = Object.values(BADGE_DEFINITIONS).filter(def => !unlockedBadges.some(b => b.id === def.id));
 
+  // AJOUT: Variables pour les badges de la page badges
+  const nextBadge = getNextBadge();
+  const unlockedBadgesFull = badges.filter(b => b.unlocked);
+  const lockedBadgesFull = badges.filter(b => !b.unlocked);
+
   return (
     <View style={{flex: 1, backgroundColor: '#FFFFFF'}}>
+      {/* AJOUT: Toast de notification */}
+      {showToast && newlyUnlockedBadge && (
+        <Animated.View 
+          style={[styles.toastContainer, { transform: [{ translateY: toastAnimation }] }]}
+        >
+          <View style={styles.toast}>
+            <Text style={styles.toastIcon}>🎉</Text>
+            <View style={styles.toastContent}>
+              <Text style={styles.toastTitle}>Bravo !</Text>
+              <Text style={styles.toastMessage}>
+                Tu as débloqué le badge {newlyUnlockedBadge.icon} {newlyUnlockedBadge.name} !
+              </Text>
+            </View>
+            <Text style={styles.toastCelebration}>🎊</Text>
+          </View>
+        </Animated.View>
+      )}
+
       <ScrollView 
         style={styles.container} 
         showsVerticalScrollIndicator={false}
@@ -534,44 +646,132 @@ export default function ProfileApprenantScreen() {
         {/* CONTENU ONGLETS */}
         <View style={styles.contentContainer}>
             
-            {/* PROGRÈS (BADGES) */}
+            {/* PROGRÈS (BADGES) - MODIFIÉ */}
             {activeTab === 'progress' && (
                 <View>
+                    {/* AJOUT: Section Prochain Badge */}
+                    {nextBadge && (
+                      <View style={styles.nextBadgeSection}>
+                        <View style={styles.nextBadgeHeader}>
+                          <View style={styles.nextBadgeIconContainer}>
+                            <Text style={styles.nextBadgeIconLarge}>{nextBadge.icon}</Text>
+                          </View>
+                          <View style={styles.nextBadgeInfo}>
+                            <Text style={styles.nextBadgeTitle}>Prochain: {nextBadge.name}</Text>
+                            <Text style={styles.nextBadgeSubtitle}>
+                              {nextBadge.progress > 0 
+                                ? `Plus que ${nextBadge.requirement - Math.round(nextBadge.requirement * nextBadge.progress / 100)} vidéos ! 🔥`
+                                : `Regardez ${nextBadge.requirement} vidéos`
+                              }
+                            </Text>
+                          </View>
+                        </View>
+                        
+                        {nextBadge.progress > 0 && (
+                          <>
+                            <View style={styles.nextBadgeProgressBar}>
+                              <View style={[styles.nextBadgeProgressFill, { width: `${nextBadge.progress}%` }]} />
+                            </View>
+                            <Text style={styles.nextBadgeProgressText}>
+                              {Math.round(nextBadge.requirement * nextBadge.progress / 100)}/{nextBadge.requirement} ({nextBadge.progress}%)
+                            </Text>
+                          </>
+                        )}
+                      </View>
+                    )}
+
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Badges débloqués</Text>
-                        <Text style={styles.badgeCount}>{unlockedOnly.length}/8</Text>
+                        {/* MODIFIÉ: Utiliser les badges de la page badges */}
+                        <Text style={styles.badgeCount}>{unlockedBadgesFull.length}/{badges.length}</Text>
                     </View>
 
-                    {unlockedOnly.length === 0 ? (
+                    {/* MODIFIÉ: Utiliser unlockedBadgesFull au lieu de unlockedOnly */}
+                    {unlockedBadgesFull.length === 0 ? (
                         <View style={styles.emptyState}>
                             <Text style={{ fontSize: 40 }}>🏆</Text>
                             <Text style={styles.emptyText}>Regardez des vidéos pour débloquer vos premiers badges !</Text>
                         </View>
                     ) : (
                         <View style={styles.badgesGrid}>
-                            {unlockedOnly.map((badge, index) => (
-                                <View key={index} style={styles.badgeCard}>
-                                    <Text style={{fontSize:30}}>{badge.icon}</Text>
-                                    <Text style={styles.badgeTitle}>{badge.name}</Text>
-                                    <Text style={styles.badgeDesc} numberOfLines={2}>{badge.description}</Text>
+                            {/* MODIFIÉ: Afficher les badges avec le nouveau style */}
+                            {unlockedBadgesFull.map((badge) => (
+                                <View key={badge.id} style={styles.badgeCardFull}>
+                                    <View style={styles.badgeIconContainer}>
+                                      <Text style={styles.badgeIconLarge}>{badge.icon}</Text>
+                                      <View style={styles.checkmarkContainer}>
+                                        <Text style={styles.checkmark}>✓</Text>
+                                      </View>
+                                    </View>
+                                    <Text style={styles.badgeName}>{badge.name}</Text>
+                                    <View style={[styles.badgeLevel, { backgroundColor: getLevelColor(badge.level) }]}>
+                                      <Text style={styles.badgeLevelText}>{badge.level}</Text>
+                                    </View>
+                                    <Text style={styles.badgeDescription}>{badge.description}</Text>
                                 </View>
                             ))}
                         </View>
                     )}
                     
-                    {/* Prochains badges */}
-                    <Text style={[styles.sectionTitle, { marginTop: 25 }]}>Prochains badges</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:10, paddingBottom:10}}>
-                        {lockedOnly.length > 0 ? lockedOnly.slice(0, 4).map((badge, i) => (
-                            <View key={i} style={[styles.badgeCard, {width: 140, opacity: 0.5}]}>
-                                <Text style={{fontSize:30, opacity: 0.5}}>{badge.icon}</Text>
-                                <Text style={styles.badgeTitle}>{badge.name}</Text>
-                                <Text style={styles.badgeDesc} numberOfLines={2}>{badge.description}</Text>
-                            </View>
-                        )) : (
-                            <Text style={{color:'#71717A', fontSize:12, fontStyle:'italic'}}>Tous les badges sont débloqués ! 🎉</Text>
-                        )}
-                    </ScrollView>
+                    {/* MODIFIÉ: Prochains badges avec le nouveau style */}
+                    {lockedBadgesFull.length > 0 && (
+                      <>
+                        <Text style={[styles.sectionTitle, { marginTop: 25 }]}>Badges à débloquer</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap:10, paddingBottom:10}}>
+                            {lockedBadgesFull.map((badge) => {
+                              const inProgress = badge.progress > 0;
+                              return (
+                                <View key={badge.id} style={[styles.badgeCardFull, {width: 140, opacity: inProgress ? 0.8 : 0.5}]}>
+                                    <View style={[styles.badgeIconContainer, styles.badgeIconLocked]}>
+                                      <Text style={[styles.badgeIconLarge, styles.badgeIconLockedText]}>
+                                        {badge.icon}
+                                      </Text>
+                                    </View>
+                                    <Text style={styles.badgeName}>{badge.name}</Text>
+                                    <View style={[styles.badgeLevel, { backgroundColor: getLevelColor(badge.level) }, styles.badgeLevelLocked]}>
+                                      <Text style={styles.badgeLevelText}>{badge.level}</Text>
+                                    </View>
+                                    <Text style={[styles.badgeDescription, styles.badgeDescriptionLocked]}>{badge.description}</Text>
+                                    
+                                    {inProgress && (
+                                      <View style={styles.progressContainer}>
+                                        <View style={styles.progressBarBackground}>
+                                          <View style={[styles.progressBarFill, { width: `${badge.progress}%` }]} />
+                                        </View>
+                                        <Text style={styles.progressText}>{badge.progress}%</Text>
+                                      </View>
+                                    )}
+                                </View>
+                              );
+                            })}
+                        </ScrollView>
+                      </>
+                    )}
+
+                    {/* AJOUT: Badges Bonus */}
+                    {bonusBadges.length > 0 && (
+                      <View style={styles.bonusSection}>
+                        <Text style={styles.bonusTitle}>🎁 Badges Bonus</Text>
+                        <View style={styles.bonusBadgesContainer}>
+                          {bonusBadges.map((badge) => {
+                            const isLocked = !badge.unlocked;
+                            return (
+                              <View key={badge.id} style={styles.bonusBadgeCard}>
+                                <Text style={[styles.bonusBadgeIcon, isLocked && styles.bonusBadgeIconLocked]}>
+                                  {badge.icon}
+                                </Text>
+                                <Text style={[styles.bonusBadgeName, isLocked && styles.bonusBadgeNameLocked]}>
+                                  {badge.name}
+                                </Text>
+                                <Text style={[styles.bonusBadgeDescription, isLocked && styles.bonusBadgeDescriptionLocked]}>
+                                  {badge.description}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    )}
                 </View>
             )}
 
@@ -615,18 +815,6 @@ export default function ProfileApprenantScreen() {
                     type="likedVideos" 
                     emptyMsg="Aucun like" 
                     icon="heart" 
-                    onSelect={setSelectedVideo}
-                    onRemove={handleRemoveAction}
-                />
-            )}
-
-            {/* HISTORIQUE */}
-            {activeTab === 'history' && (
-                <VideoGrid 
-                    videos={history} 
-                    type="watchHistory" 
-                    emptyMsg="Historique vide" 
-                    icon="time" 
                     onSelect={setSelectedVideo}
                     onRemove={handleRemoveAction}
                 />
@@ -768,11 +956,38 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   
+  // AJOUT: Styles pour le toast
+  toastContainer: { 
+    position: 'absolute', 
+    top: 0, 
+    left: 0, 
+    right: 0, 
+    zIndex: 1000, 
+    paddingHorizontal: 20 
+  },
+  toast: { 
+    backgroundColor: '#10B981', 
+    borderRadius: 16, 
+    padding: 16, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 4 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 8, 
+    elevation: 8 
+  },
+  toastIcon: { fontSize: 40, marginRight: 12 },
+  toastContent: { flex: 1 },
+  toastTitle: { fontSize: 18, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 4 },
+  toastMessage: { fontSize: 14, color: '#FFFFFF' },
+  toastCelebration: { fontSize: 32, marginLeft: 8 },
+  
   // --- HEADER ---
   headerWrapper: { marginBottom: 50 },
   headerGradient: { height: 140, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, paddingTop: 50, paddingHorizontal: 20 },
-  topIcons: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' }, // STYLE INTÉGRÉ
-  glassIcon: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 20, marginLeft: 10 }, // STYLE INTÉGRÉ
+  topIcons: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
+  glassIcon: { backgroundColor: 'rgba(255,255,255,0.2)', padding: 8, borderRadius: 20, marginLeft: 10 },
   
   // --- AVATAR ---
   avatarSection: { position: 'absolute', bottom: -40, left: 0, right: 0, alignItems: 'center' },
@@ -841,6 +1056,45 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   badgeCount: { fontSize: 14, fontWeight: '600', color: '#9333EA' },
   
+  // AJOUT: Styles pour la section prochain badge
+  nextBadgeSection: { 
+    marginBottom: 25, 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 20, 
+    padding: 20, 
+    borderWidth: 2, 
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  nextBadgeHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  nextBadgeIconContainer: { 
+    width: 60, 
+    height: 60, 
+    borderRadius: 30, 
+    backgroundColor: '#f3f4f6', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 15 
+  },
+  nextBadgeIconLarge: { fontSize: 36 },
+  nextBadgeInfo: { flex: 1 },
+  nextBadgeTitle: { fontSize: 18, fontWeight: 'bold', color: '#1f2937', marginBottom: 4 },
+  nextBadgeSubtitle: { fontSize: 13, color: '#6b7280' },
+  nextBadgeProgressBar: { 
+    width: '100%', 
+    height: 10, 
+    backgroundColor: '#f3f4f6', 
+    borderRadius: 5, 
+    overflow: 'hidden', 
+    marginBottom: 8 
+  },
+  nextBadgeProgressFill: { height: '100%', backgroundColor: '#9333ea', borderRadius: 5 },
+  nextBadgeProgressText: { color: '#6b7280', fontSize: 13, textAlign: 'center', fontWeight: '600' },
+  
   // --- PLAYLISTS ---
   createPlaylistBtn: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
   createPlaylistIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F3E8FF', justifyContent: 'center', alignItems: 'center', marginRight: 10 },
@@ -862,10 +1116,94 @@ const styles = StyleSheet.create({
   videoTitle: { fontSize: 12, fontWeight: '600', color: '#374151' },
   videoCat: { fontSize: 10, color: '#9333ea', marginTop: 2 },
   deleteVideoBtn: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(255,255,255,0.9)', padding: 4, borderRadius: 10, zIndex: 10 },
-  deleteButton: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(255,255,255,0.9)', padding: 4, borderRadius: 10, zIndex: 10 }, // Alias
+  deleteButton: { position: 'absolute', top: 5, right: 5, backgroundColor: 'rgba(255,255,255,0.9)', padding: 4, borderRadius: 10, zIndex: 10 },
 
-  // Style Badges
-  badgesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  // AJOUT: Styles pour les badges (version complète)
+  badgesGrid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  badgeCardFull: { 
+    width: '48%', 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 20, 
+    padding: 20, 
+    marginBottom: 15, 
+    alignItems: 'center', 
+    borderWidth: 1, 
+    borderColor: '#e5e7eb',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  badgeIconContainer: { 
+    width: 80, 
+    height: 80, 
+    borderRadius: 40, 
+    backgroundColor: '#f3f4f6', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginBottom: 15, 
+    position: 'relative' 
+  },
+  badgeIconLocked: { backgroundColor: '#f9fafb' },
+  badgeIconLarge: { fontSize: 40 },
+  badgeIconLockedText: { opacity: 0.3 },
+  checkmarkContainer: { 
+    position: 'absolute', 
+    top: -5, 
+    right: -5, 
+    width: 28, 
+    height: 28, 
+    borderRadius: 14, 
+    backgroundColor: '#10B981', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  checkmark: { color: '#FFFFFF', fontSize: 18, fontWeight: 'bold' },
+  badgeName: { fontSize: 16, fontWeight: 'bold', color: '#1f2937', marginBottom: 8, textAlign: 'center' },
+  badgeLevel: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 12, marginBottom: 8 },
+  badgeLevelLocked: { opacity: 0.3 },
+  badgeLevelText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
+  badgeDescription: { fontSize: 13, color: '#6b7280', textAlign: 'center' },
+  badgeDescriptionLocked: { opacity: 0.4 },
+  progressContainer: { width: '100%', marginTop: 12 },
+  progressBarBackground: { 
+    width: '100%', 
+    height: 8, 
+    backgroundColor: '#f3f4f6', 
+    borderRadius: 4, 
+    overflow: 'hidden' 
+  },
+  progressBarFill: { height: '100%', backgroundColor: '#9333ea', borderRadius: 4 },
+  progressText: { color: '#6b7280', fontSize: 12, textAlign: 'right', marginTop: 4, fontWeight: '600' },
+  
+  // AJOUT: Styles pour les badges bonus
+  bonusSection: { marginTop: 30, marginBottom: 20 },
+  bonusTitle: { fontSize: 20, fontWeight: 'bold', color: '#1f2937', marginBottom: 15 },
+  bonusBadgesContainer: { 
+    backgroundColor: '#fef2f2', 
+    borderRadius: 20, 
+    padding: 20, 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  bonusBadgeCard: { width: '48%', alignItems: 'center', marginBottom: 20 },
+  bonusBadgeIcon: { fontSize: 50, marginBottom: 8 },
+  bonusBadgeIconLocked: { opacity: 0.3 },
+  bonusBadgeName: { fontSize: 16, fontWeight: 'bold', color: '#1f2937', marginBottom: 4, textAlign: 'center' },
+  bonusBadgeNameLocked: { opacity: 0.5, color: '#9ca3af' },
+  bonusBadgeDescription: { fontSize: 12, color: '#6b7280', textAlign: 'center' },
+  bonusBadgeDescriptionLocked: { opacity: 0.4 },
+
+  // --- Style Badges (ancien - gardé pour compatibilité) ---
   badgeCard: { width: '48%', backgroundColor: '#F9FAFB', padding: 15, borderRadius: 16, alignItems: 'center', borderWidth: 1, borderColor: '#F3F4F6' },
   badgeTitle: { fontWeight: '600', fontSize: 13, marginTop: 5, textAlign: 'center', color: '#1F2937' },
   badgeDesc: { fontSize: 11, color: '#9CA3AF', textAlign: 'center' },

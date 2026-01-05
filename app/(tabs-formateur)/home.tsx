@@ -1,24 +1,31 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions, useWindowDimensions, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TouchableWithoutFeedback, Modal, TextInput, KeyboardAvoidingView, Platform, Share, StatusBar, Image } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { 
+  View, Text, StyleSheet, useWindowDimensions, ScrollView, TouchableOpacity, 
+  Alert, ActivityIndicator, TouchableWithoutFeedback, StatusBar, Image,
+  Modal, TextInput, KeyboardAvoidingView, Platform, Keyboard, Linking, FlatList,
+  Clipboard
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-import { collection, getDocs, query, orderBy, limit, doc, updateDoc, increment, arrayUnion, arrayRemove, getDoc, addDoc, serverTimestamp, deleteDoc, where } from 'firebase/firestore';
+import { 
+  collection, getDocs, query, orderBy, limit, doc, updateDoc, 
+  increment, arrayUnion, arrayRemove, getDoc, addDoc, serverTimestamp,
+  where, deleteDoc
+} from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Mise à jour de l'interface pour inclure l'avatar
 interface VideoData {
   id: string;
   title: string;
   description: string;
   category: string;
   creatorId: string;
-  creatorName: string; // Nom affiché (enrichi)
-  creatorAvatar?: string | null; // URL de la photo (enrichi)
+  creatorName: string;
+  creatorAvatar?: string;
+  creatorBadge?: 'apprenant' | 'expert' | 'pro';
   videoUrl: string;
   likes: number;
   views: number;
@@ -30,12 +37,18 @@ interface VideoData {
 
 interface UserProfile {
   uid: string;
-  favorites?: string[];
+  favorites?: string[];    
+  likedVideos?: string[];  
+  watchHistory?: string[]; 
   following?: string[];
-  watchHistory?: string[];
+  followers?: string[];
   interests?: string[];
   displayName?: string;
   photoURL?: string;
+  badge?: 'apprenant' | 'expert' | 'pro';
+  prenom?: string;
+  nom?: string;
+  role?: string;
 }
 
 interface Comment {
@@ -62,19 +75,18 @@ interface Reply {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { width: dynamicWidth, height: dynamicHeight } = useWindowDimensions();
-  const currentUserId = auth.currentUser?.uid;
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   
   const [videos, setVideos] = useState<VideoData[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [likedVideos, setLikedVideos] = useState<Set<string>>(new Set());
+  const [likedVideosSet, setLikedVideosSet] = useState<Set<string>>(new Set());
+  const [savedVideosSet, setSavedVideosSet] = useState<Set<string>>(new Set());
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   
-  // États pour les commentaires
   const [showComments, setShowComments] = useState(false);
   const [currentVideoId, setCurrentVideoId] = useState<string>('');
   const [comments, setComments] = useState<Comment[]>([]);
@@ -82,9 +94,49 @@ export default function HomeScreen() {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
-  
+
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showUsersList, setShowUsersList] = useState(false);
+  const [selectedVideoForShare, setSelectedVideoForShare] = useState<VideoData | null>(null);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);
+
   const scrollViewRef = useRef<ScrollView>(null);
   const videoRefs = useRef<Record<string, Video | null>>({});
+
+  useFocusEffect(
+    useCallback(() => {
+      const fetchUserData = async () => {
+        const user = auth.currentUser;
+        if (!user) return;
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            setLikedVideosSet(new Set(data.likedVideos || []));
+            setSavedVideosSet(new Set(data.favorites || []));
+            setUserProfile({
+              uid: user.uid,
+              favorites: data.favorites || [],
+              likedVideos: data.likedVideos || [],
+              watchHistory: data.watchHistory || [],
+              following: data.following || [],
+              followers: data.followers || [],
+              interests: data.interests || [],
+              displayName: data.displayName || `${data.prenom} ${data.nom}`.trim(),
+              photoURL: data.photoURL,
+              badge: data.badge || 'apprenant',
+              prenom: data.prenom,
+              nom: data.nom,
+              role: data.role
+            });
+          }
+        } catch (error) { console.error('Erreur profil:', error); }
+      };
+      fetchUserData();
+    }, [])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -92,30 +144,21 @@ export default function HomeScreen() {
       const timer = setTimeout(async () => {
         const currentVideo = videoRefs.current[videos[currentIndex]?.id];
         if (currentVideo) {
-          try {
-            await currentVideo.playAsync();
-          } catch (error) {
-            console.log('Error playing video:', error);
-          }
+          try { await currentVideo.playAsync(); } catch (e) {}
         }
       }, 100);
 
       return () => {
         clearTimeout(timer);
-        Object.values(videoRefs.current).forEach(async (video) => {
-          if (video) {
-            try { await video.pauseAsync(); } catch (error) {}
-          }
+        Object.values(videoRefs.current).forEach(async (v) => {
+          if (v) try { await v.pauseAsync(); } catch (e) {}
         });
         setIsPlaying(false);
       };
     }, [videos, currentIndex])
   );
 
-  useEffect(() => {
-    loadUserProfile();
-    loadVideos();
-  }, []);
+  useEffect(() => { loadVideos(); }, []);
 
   useEffect(() => {
     const pauseOtherVideos = async () => {
@@ -128,95 +171,78 @@ export default function HomeScreen() {
     pauseOtherVideos();
   }, [currentIndex]);
 
-  const loadUserProfile = async () => {
+  const loadAllUsers = async () => {
     try {
-      const user = auth.currentUser;
-      if (!user) return;
-      
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        setUserProfile({
-          uid: user.uid,
-          favorites: data.favorites || [],
-          following: data.following || [],
-          watchHistory: data.watchHistory || [],
-          interests: data.interests || [],
-          displayName: data.displayName || data.email || 'Utilisateur',
-          photoURL: data.photoURL
-        });
-        
-        if (data.likedVideos && Array.isArray(data.likedVideos)) {
-          setLikedVideos(new Set(data.likedVideos));
-        }
-      }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
+      const currentUserId = auth.currentUser?.uid;
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      const usersData = usersSnapshot.docs
+        .map(d => {
+          const data = d.data();
+          return {
+            uid: d.id,
+            displayName: data.displayName || `${data.prenom} ${data.nom}`.trim(),
+            photoURL: data.photoURL,
+            badge: data.badge,
+            prenom: data.prenom,
+            nom: data.nom,
+            role: data.role
+          } as UserProfile;
+        })
+        .filter(u => u.uid !== currentUserId);
+      setAllUsers(usersData);
+      setFilteredUsers(usersData);
+    } catch (e) {
+      console.error("Erreur chargement utilisateurs:", e);
     }
   };
 
-  // --- AMÉLIORATION : Enrichissement des données (Data Enrichment) ---
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredUsers(allUsers);
+    } else {
+      const filtered = allUsers.filter(user => {
+        const fullName = `${user.prenom || ''} ${user.nom || ''}`.toLowerCase();
+        const displayName = (user.displayName || '').toLowerCase();
+        const search = searchQuery.toLowerCase();
+        return fullName.includes(search) || displayName.includes(search);
+      });
+      setFilteredUsers(filtered);
+    }
+  }, [searchQuery, allUsers]);
+
   const loadVideos = async () => {
     try {
-      const videosQuery = query(
-        collection(db, 'videos'),
-        orderBy('createdAt', 'desc'),
-        limit(20)
-      );
-      
+      const videosQuery = query(collection(db, 'videos'), orderBy('createdAt', 'desc'), limit(20));
       const snapshot = await getDocs(videosQuery);
+      const rawVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as VideoData[];
       
-      // Extraction des données brutes
-      const rawVideos = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as VideoData[];
-
-      // Enrichissement : Récupérer les infos à jour du créateur (Avatar & Nom)
       const enrichedVideos = await Promise.all(rawVideos.map(async (video) => {
-        try {
-            const userDoc = await getDoc(doc(db, 'users', video.creatorId));
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
-                return {
-                    ...video,
-                    // Priorité au nom complet, sinon pseudo, sinon nom stocké dans la vidéo
-                    creatorName: userData.displayName || `${userData.prenom || ''} ${userData.nom || ''}`.trim() || video.creatorName,
-                    creatorAvatar: userData.photoURL || null
-                };
-            }
-            return video;
-        } catch (e) {
-            return video;
-        }
+          try {
+              const userDoc = await getDoc(doc(db, 'users', video.creatorId));
+              if (userDoc.exists()) {
+                  const userData = userDoc.data();
+                  return {
+                      ...video,
+                      creatorName: userData.displayName || `${userData.prenom || ''} ${userData.nom || ''}`.trim() || video.creatorName,
+                      creatorAvatar: userData.photoURL || null,
+                      creatorBadge: userData.badge || 'apprenant'
+                  };
+              }
+              return video;
+          } catch (e) { return video; }
       }));
       
-      // Filtrage par centres d'intérêt (si applicable)
-      if (userProfile?.interests && userProfile.interests.length > 0) {
-        const filteredVideos = enrichedVideos.filter(video =>
-          userProfile.interests?.includes(video.category)
-        );
-        
-        if (filteredVideos.length > 0) {
-          setVideos([...filteredVideos, ...enrichedVideos.filter(v => !filteredVideos.includes(v))]);
-        } else {
-          setVideos(enrichedVideos);
-        }
-      } else {
-        setVideos(enrichedVideos);
-      }
-      
+      setVideos(enrichedVideos);
       setLoading(false);
-    } catch (error) {
-      console.error('Error loading videos:', error);
-      setLoading(false);
+    } catch (error) { 
+      console.error('Erreur chargement vidéos:', error);
+      setLoading(false); 
     }
   };
 
   const handleScroll = (event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
     const index = Math.round(offsetY / SCREEN_HEIGHT);
-    
     if (index !== currentIndex && index >= 0 && index < videos.length) {
       setCurrentIndex(index);
       setIsPlaying(true);
@@ -235,55 +261,170 @@ export default function HomeScreen() {
   const togglePlayPause = async () => {
     const currentVideo = videoRefs.current[videos[currentIndex]?.id];
     if (currentVideo) {
-      if (isPlaying) {
-        await currentVideo.pauseAsync();
-        setIsPlaying(false);
-      } else {
-        await currentVideo.playAsync();
-        setIsPlaying(true);
+      if (isPlaying) { 
+        await currentVideo.pauseAsync(); 
+        setIsPlaying(false); 
+      } else { 
+        await currentVideo.playAsync(); 
+        setIsPlaying(true); 
       }
     }
   };
 
-  const createNotification = async (type: string, videoId: string, creatorId: string) => {
-    try {
-      const user = auth.currentUser;
-      if (!user || user.uid === creatorId) return;
+  const handleCreatorClick = (creatorId: string) => { 
+    router.push(`/profile/${creatorId}` as any); 
+  };
 
+  const shareOnWhatsApp = async () => {
+    if (!selectedVideoForShare) return;
+    
+    const message = `🎓 Découvre cette vidéo sur SwipeSkills!\n\n📹 ${selectedVideoForShare.title}\n👤 Par @${selectedVideoForShare.creatorName}\n\n👉 Ouvre l'app pour la regarder!`;
+    const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
+    
+    try {
+      const supported = await Linking.canOpenURL(whatsappUrl);
+      if (supported) {
+        await Linking.openURL(whatsappUrl);
+        setShowShareModal(false);
+        setSelectedVideoForShare(null);
+      } else {
+        Alert.alert("Erreur", "WhatsApp n'est pas installé sur cet appareil");
+      }
+    } catch (error) {
+      Alert.alert("Erreur", "Impossible d'ouvrir WhatsApp");
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!selectedVideoForShare) return;
+    
+    const videoLink = `https://swipeskills.app/video/${selectedVideoForShare.id}`;
+    const shareMessage = `🎓 Découvre cette vidéo sur SwipeSkills!\n\n📹 ${selectedVideoForShare.title}\n👤 Par @${selectedVideoForShare.creatorName}\n\n🔗 ${videoLink}`;
+    
+    try {
+      if (Platform.OS === 'web') {
+        await navigator.clipboard.writeText(shareMessage);
+        alert('✓ Lien copié !');
+      } else {
+        Clipboard.setString(shareMessage);
+        Alert.alert('✓', 'Lien copié dans le presse-papier !');
+      }
+      setShowShareModal(false);
+      setSelectedVideoForShare(null);
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de copier le lien');
+    }
+  };
+
+  const shareToUser = async (targetUser: UserProfile) => {
+    if (!selectedVideoForShare) return;
+    
+    const currentUserId = auth.currentUser?.uid;
+    if (!currentUserId) return;
+    
+    try {
       await addDoc(collection(db, 'notifications'), {
-        userId: creatorId,
-        fromUserId: user.uid,
+        userId: targetUser.uid,
+        fromUserId: currentUserId,
         fromUserName: userProfile?.displayName || 'Un utilisateur',
-        type: type,
-        videoId: videoId,
+        type: 'video_share',
+        videoId: selectedVideoForShare.id,
+        videoTitle: selectedVideoForShare.title,
         read: false,
         createdAt: serverTimestamp()
       });
+      
+      const conversationId = [currentUserId, targetUser.uid].sort().join('_');
+      await addDoc(collection(db, 'messages'), {
+        conversationId,
+        senderId: currentUserId,
+        senderName: userProfile?.displayName || 'Utilisateur',
+        content: `📹 Je t'ai partagé: ${selectedVideoForShare.title}`,
+        videoId: selectedVideoForShare.id,
+        type: 'video_share',
+        createdAt: serverTimestamp(),
+        read: false
+      });
+      
+      Alert.alert("✓", `Vidéo partagée avec ${targetUser.displayName || targetUser.prenom}`);
+      setShowUsersList(false);
+      setShowShareModal(false);
+      setSelectedVideoForShare(null);
     } catch (error) {
-      console.error('Error creating notification:', error);
+      console.error("Erreur partage:", error);
+      Alert.alert("Erreur", "Impossible de partager la vidéo");
+    }
+  };
+
+  const handleShare = async (video: VideoData) => {
+    setSelectedVideoForShare(video);
+    await loadAllUsers();
+    setShowShareModal(true);
+  };
+
+  const handleFollow = async (creatorId: string, creatorName: string) => {
+    try {
+      const user = auth.currentUser;
+      if (!user || !userProfile) {
+        Alert.alert('Erreur', 'Vous devez être connecté');
+        return;
+      }
+      
+      const isFollowing = userProfile.following?.includes(creatorId) ?? false;
+      const userRef = doc(db, 'users', user.uid);
+      const creatorRef = doc(db, 'users', creatorId);
+      
+      if (isFollowing) {
+        await updateDoc(userRef, { following: arrayRemove(creatorId) });
+        await updateDoc(creatorRef, { followers: arrayRemove(user.uid) });
+        
+        setUserProfile(prev => prev ? { 
+          ...prev, 
+          following: (prev.following || []).filter(id => id !== creatorId) 
+        } : null);
+        
+        Alert.alert('✓', `Vous ne suivez plus ${creatorName}`);
+      } else {
+        await updateDoc(userRef, { following: arrayUnion(creatorId) });
+        await updateDoc(creatorRef, { followers: arrayUnion(user.uid) });
+        
+        setUserProfile(prev => prev ? { 
+          ...prev, 
+          following: [...(prev.following || []), creatorId] 
+        } : null);
+        
+        await addDoc(collection(db, 'notifications'), { 
+          userId: creatorId, 
+          fromUserId: user.uid, 
+          fromUserName: userProfile.displayName || 'Un utilisateur',
+          type: 'follow', 
+          read: false, 
+          createdAt: serverTimestamp() 
+        });
+        
+        Alert.alert('✓', `Vous suivez maintenant ${creatorName}`);
+      }
+    } catch (error: any) { 
+      console.error('Error follow:', error);
+      Alert.alert('Erreur', 'Impossible de s\'abonner: ' + error.message);
     }
   };
 
   const handleMarkVideoAsWatched = async (video: VideoData) => {
     try {
       const user = auth.currentUser;
-      if (!user || !userProfile) return;
-      if (userProfile.watchHistory?.includes(video.id)) return;
-
-      await updateDoc(doc(db, 'users', user.uid), {
-        watchHistory: arrayUnion(video.id)
-      });
-      await updateDoc(doc(db, 'videos', video.id), {
-        views: increment(1)
+      if (!user) return;
+      
+      await updateDoc(doc(db, 'users', user.uid), { 
+        watchHistory: arrayUnion(video.id),
+        'stats.videosWatched': increment(1),
+        lastWatchedAt: serverTimestamp() 
       });
       
-      setUserProfile(prev => prev ? {
-        ...prev,
-        watchHistory: [...(prev.watchHistory || []), video.id]
-      } : null);
-    } catch (error) {
-      console.error('Error marking video as watched:', error);
-    }
+      await updateDoc(doc(db, 'videos', video.id), { 
+        views: increment(1) 
+      });
+    } catch (error) {}
   };
 
   const handleLike = async (videoId: string, creatorId: string) => {
@@ -291,83 +432,76 @@ export default function HomeScreen() {
       const user = auth.currentUser;
       if (!user) return;
       
-      const isLiked = likedVideos.has(videoId);
+      const isLiked = likedVideosSet.has(videoId);
+      const userRef = doc(db, 'users', user.uid);
+      const videoRef = doc(db, 'videos', videoId);
       
       if (isLiked) {
-        setLikedVideos(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(videoId);
-          return newSet;
+        setLikedVideosSet(prev => { 
+          const s = new Set(prev); 
+          s.delete(videoId); 
+          return s; 
         });
-        await updateDoc(doc(db, 'videos', videoId), { likes: increment(-1) });
-        await updateDoc(doc(db, 'users', user.uid), { likedVideos: arrayRemove(videoId) });
-        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, likes: v.likes - 1 } : v));
+        await updateDoc(userRef, { likedVideos: arrayRemove(videoId) });
+        await updateDoc(videoRef, { likes: increment(-1) });
+        setVideos(prev => prev.map(v => 
+          v.id === videoId ? { ...v, likes: v.likes - 1 } : v
+        ));
       } else {
-        setLikedVideos(prev => new Set([...prev, videoId]));
-        await updateDoc(doc(db, 'videos', videoId), { likes: increment(1) });
-        await updateDoc(doc(db, 'users', user.uid), { likedVideos: arrayUnion(videoId) });
-        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, likes: v.likes + 1 } : v));
-        await createNotification('like', videoId, creatorId);
+        setLikedVideosSet(prev => new Set([...prev, videoId]));
+        await updateDoc(userRef, { likedVideos: arrayUnion(videoId) });
+        await updateDoc(videoRef, { likes: increment(1) });
+        setVideos(prev => prev.map(v => 
+          v.id === videoId ? { ...v, likes: v.likes + 1 } : v
+        ));
       }
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de liker la vidéo');
+    } catch (error) { 
+      console.error('Error like:', error); 
     }
   };
 
-  const handleFavorite = async (videoId: string, creatorId: string) => {
+  const handleFavorite = async (videoId: string) => {
     try {
       const user = auth.currentUser;
-      if (!user || !userProfile) return;
+      if (!user) return;
       
-      const isFavorited = userProfile.favorites?.includes(videoId) ?? false;
+      const isSaved = savedVideosSet.has(videoId);
+      const userRef = doc(db, 'users', user.uid);
       
-      if (isFavorited) {
-        await updateDoc(doc(db, 'users', user.uid), { favorites: arrayRemove(videoId) });
-        Alert.alert('✓', 'Retiré des favoris');
-        setUserProfile(prev => prev ? { ...prev, favorites: (prev.favorites || []).filter(id => id !== videoId) } : null);
+      if (isSaved) {
+        setSavedVideosSet(prev => { 
+          const s = new Set(prev); 
+          s.delete(videoId); 
+          return s; 
+        });
+        await updateDoc(userRef, { favorites: arrayRemove(videoId) });
+        Alert.alert('Info', 'Retiré des favoris');
       } else {
-        await updateDoc(doc(db, 'users', user.uid), { favorites: arrayUnion(videoId) });
-        Alert.alert('✓', 'Ajouté aux favoris ⭐');
-        setUserProfile(prev => prev ? { ...prev, favorites: [...(prev.favorites || []), videoId] } : null);
-        await createNotification('save', videoId, creatorId);
+        setSavedVideosSet(prev => new Set([...prev, videoId]));
+        await updateDoc(userRef, { favorites: arrayUnion(videoId) });
+        Alert.alert('Succès', 'Ajouté aux favoris !');
       }
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de mettre à jour les favoris');
+    } catch (error) { 
+      console.error('Error favorite:', error); 
     }
   };
 
-  const handleFollow = async (creatorId: string, creatorName: string) => {
-    try {
-      const user = auth.currentUser;
-      if (!user || !userProfile) return;
-      
-      const isFollowing = userProfile.following?.includes(creatorId) ?? false;
-      
-      if (isFollowing) {
-        await updateDoc(doc(db, 'users', user.uid), { following: arrayRemove(creatorId) });
-        Alert.alert('✓', `Vous ne suivez plus ${creatorName}`);
-        setUserProfile(prev => prev ? { ...prev, following: (prev.following || []).filter(id => id !== creatorId) } : null);
-      } else {
-        await updateDoc(doc(db, 'users', user.uid), { following: arrayUnion(creatorId) });
-        Alert.alert('✓', `Vous suivez maintenant ${creatorName} ✅`);
-        setUserProfile(prev => prev ? { ...prev, following: [...(prev.following || []), creatorId] } : null);
-        await createNotification('follow', '', creatorId);
-      }
-    } catch (error) {
-      Alert.alert('Erreur', 'Impossible de suivre/désuivre');
-    }
-  };
-
-  // --- Commentaires et Réponses ---
   const loadComments = async (videoId: string) => {
     setLoadingComments(true);
     try {
-      const commentsQuery = query(collection(db, 'comments'), where('videoId', '==', videoId));
+      const commentsQuery = query(
+        collection(db, 'comments'), 
+        where('videoId', '==', videoId)
+      );
       const snapshot = await getDocs(commentsQuery);
       
       const commentsData = snapshot.docs.map(doc => {
         const data = doc.data();
-        return { id: doc.id, ...data, replies: data.replies || [] };
+        return { 
+          id: doc.id, 
+          ...data, 
+          replies: data.replies || [] 
+        };
       }) as Comment[];
       
       commentsData.sort((a, b) => {
@@ -379,6 +513,7 @@ export default function HomeScreen() {
       setComments(commentsData);
       setLoadingComments(false);
     } catch (error) {
+      console.error('Erreur chargement commentaires:', error);
       setLoadingComments(false);
     }
   };
@@ -399,6 +534,7 @@ export default function HomeScreen() {
 
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
+    
     try {
       const user = auth.currentUser;
       if (!user) {
@@ -418,19 +554,27 @@ export default function HomeScreen() {
       };
 
       await addDoc(collection(db, 'comments'), commentData);
-      await updateDoc(doc(db, 'videos', currentVideoId), { comments: increment(1) });
-      setVideos(prev => prev.map(v => v.id === currentVideoId ? { ...v, comments: v.comments + 1 } : v));
+      await updateDoc(doc(db, 'videos', currentVideoId), { 
+        comments: increment(1) 
+      });
+      
+      setVideos(prev => prev.map(v => 
+        v.id === currentVideoId ? { ...v, comments: v.comments + 1 } : v
+      ));
 
       setNewComment('');
+      Keyboard.dismiss();
       loadComments(currentVideoId);
       Alert.alert('✓', 'Commentaire ajouté !');
     } catch (error) {
+      console.error('Erreur ajout commentaire:', error);
       Alert.alert('Erreur', 'Impossible d\'ajouter le commentaire');
     }
   };
 
   const handleAddReply = async (commentId: string) => {
     if (!replyText.trim()) return;
+    
     try {
       const user = auth.currentUser;
       if (!user) {
@@ -448,15 +592,24 @@ export default function HomeScreen() {
         createdAt: new Date().toISOString()
       };
 
-      await updateDoc(doc(db, 'comments', commentId), { replies: arrayUnion(reply) });
-      await updateDoc(doc(db, 'videos', currentVideoId), { comments: increment(1) });
-      setVideos(prev => prev.map(v => v.id === currentVideoId ? { ...v, comments: v.comments + 1 } : v));
+      await updateDoc(doc(db, 'comments', commentId), { 
+        replies: arrayUnion(reply) 
+      });
+      await updateDoc(doc(db, 'videos', currentVideoId), { 
+        comments: increment(1) 
+      });
+      
+      setVideos(prev => prev.map(v => 
+        v.id === currentVideoId ? { ...v, comments: v.comments + 1 } : v
+      ));
 
       setReplyText('');
       setReplyTo(null);
+      Keyboard.dismiss();
       loadComments(currentVideoId);
       Alert.alert('✓', 'Réponse ajoutée !');
     } catch (error) {
+      console.error('Erreur ajout réponse:', error);
       Alert.alert('Erreur', 'Impossible d\'ajouter la réponse');
     }
   };
@@ -469,10 +622,19 @@ export default function HomeScreen() {
       const performDelete = async () => {
         try {
           await deleteDoc(doc(db, 'comments', commentId));
-          await updateDoc(doc(db, 'videos', currentVideoId), { comments: increment(-(1 + repliesCount)) });
-          setVideos(prev => prev.map(v => v.id === currentVideoId ? { ...v, comments: v.comments - (1 + repliesCount) } : v));
+          await updateDoc(doc(db, 'videos', currentVideoId), { 
+            comments: increment(-(1 + repliesCount)) 
+          });
+          
+          setVideos(prev => prev.map(v => 
+            v.id === currentVideoId ? { ...v, comments: v.comments - (1 + repliesCount) } : v
+          ));
+          
           loadComments(currentVideoId);
-          Platform.OS === 'web' ? alert('✓ Commentaire supprimé !') : Alert.alert('Succès', 'Commentaire supprimé !');
+          
+          Platform.OS === 'web' 
+            ? alert('✓ Commentaire supprimé !') 
+            : Alert.alert('Succès', 'Commentaire supprimé !');
         } catch (error) {
           Alert.alert('Erreur', 'Impossible de supprimer le commentaire');
         }
@@ -481,10 +643,14 @@ export default function HomeScreen() {
       if (Platform.OS === 'web') {
         if (confirm('Supprimer ce commentaire ?')) await performDelete();
       } else {
-        Alert.alert('Confirmation', 'Supprimer ce commentaire ?', [
-          { text: 'Annuler', style: 'cancel' },
-          { text: 'Supprimer', style: 'destructive', onPress: performDelete }
-        ]);
+        Alert.alert(
+          'Confirmation', 
+          'Supprimer ce commentaire ?', 
+          [
+            { text: 'Annuler', style: 'cancel' },
+            { text: 'Supprimer', style: 'destructive', onPress: performDelete }
+          ]
+        );
       }
     } catch (error) {}
   };
@@ -498,14 +664,26 @@ export default function HomeScreen() {
         try {
           const comment = comments.find(c => c.id === commentId);
           if (!comment) return;
+          
           const replyToDelete = comment.replies.find(r => r.id === replyId);
           if (!replyToDelete) return;
 
-          await updateDoc(doc(db, 'comments', commentId), { replies: arrayRemove(replyToDelete) });
-          await updateDoc(doc(db, 'videos', currentVideoId), { comments: increment(-1) });
-          setVideos(prev => prev.map(v => v.id === currentVideoId ? { ...v, comments: v.comments - 1 } : v));
+          await updateDoc(doc(db, 'comments', commentId), { 
+            replies: arrayRemove(replyToDelete) 
+          });
+          await updateDoc(doc(db, 'videos', currentVideoId), { 
+            comments: increment(-1) 
+          });
+          
+          setVideos(prev => prev.map(v => 
+            v.id === currentVideoId ? { ...v, comments: v.comments - 1 } : v
+          ));
+          
           loadComments(currentVideoId);
-          Platform.OS === 'web' ? alert('✓ Réponse supprimée !') : Alert.alert('Succès', 'Réponse supprimée !');
+          
+          Platform.OS === 'web' 
+            ? alert('✓ Réponse supprimée !') 
+            : Alert.alert('Succès', 'Réponse supprimée !');
         } catch (error) {
           Alert.alert('Erreur', 'Impossible de supprimer la réponse');
         }
@@ -514,10 +692,14 @@ export default function HomeScreen() {
       if (Platform.OS === 'web') {
         if (confirm('Supprimer cette réponse ?')) await performDelete();
       } else {
-        Alert.alert('Confirmation', 'Supprimer cette réponse ?', [
-          { text: 'Annuler', style: 'cancel' },
-          { text: 'Supprimer', style: 'destructive', onPress: performDelete }
-        ]);
+        Alert.alert(
+          'Confirmation', 
+          'Supprimer cette réponse ?', 
+          [
+            { text: 'Annuler', style: 'cancel' },
+            { text: 'Supprimer', style: 'destructive', onPress: performDelete }
+          ]
+        );
       }
     } catch (error) {}
   };
@@ -526,6 +708,7 @@ export default function HomeScreen() {
     try {
       const user = auth.currentUser;
       if (!user) return;
+      
       const comment = comments.find(c => c.id === commentId);
       if (!comment) return;
 
@@ -533,10 +716,17 @@ export default function HomeScreen() {
       const commentRef = doc(db, 'comments', commentId);
 
       if (isLiked) {
-        await updateDoc(commentRef, { likes: increment(-1), likedBy: arrayRemove(user.uid) });
+        await updateDoc(commentRef, { 
+          likes: increment(-1), 
+          likedBy: arrayRemove(user.uid) 
+        });
       } else {
-        await updateDoc(commentRef, { likes: increment(1), likedBy: arrayUnion(user.uid) });
+        await updateDoc(commentRef, { 
+          likes: increment(1), 
+          likedBy: arrayUnion(user.uid) 
+        });
       }
+      
       loadComments(currentVideoId);
     } catch (error) {}
   };
@@ -545,6 +735,7 @@ export default function HomeScreen() {
     try {
       const user = auth.currentUser;
       if (!user) return;
+      
       const comment = comments.find(c => c.id === commentId);
       if (!comment) return;
 
@@ -554,19 +745,25 @@ export default function HomeScreen() {
           return {
             ...reply,
             likes: isLiked ? reply.likes - 1 : reply.likes + 1,
-            likedBy: isLiked ? (reply.likedBy || []).filter(id => id !== user.uid) : [...(reply.likedBy || []), user.uid]
+            likedBy: isLiked 
+              ? (reply.likedBy || []).filter(id => id !== user.uid) 
+              : [...(reply.likedBy || []), user.uid]
           };
         }
         return reply;
       });
 
-      await updateDoc(doc(db, 'comments', commentId), { replies: updatedReplies });
+      await updateDoc(doc(db, 'comments', commentId), { 
+        replies: updatedReplies 
+      });
+      
       loadComments(currentVideoId);
     } catch (error) {}
   };
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return '';
+    
     let date;
     if (timestamp.toDate) date = timestamp.toDate();
     else if (typeof timestamp === 'string') date = new Date(timestamp);
@@ -585,47 +782,27 @@ export default function HomeScreen() {
     return 'À l\'instant';
   };
 
-  const handleShare = async (video: VideoData) => {
-    try {
-      const shareMessage = `🎓 Découvrez cette vidéo sur SwipeSkills !\n\n📹 ${video.title}\n👤 Par @${video.creatorName}\n\n${video.description}\n\n🔗 Lien: https://swipeskills.app/video/${video.id}`;
-      if (Platform.OS === 'web') {
-        if (navigator.share) {
-            try { await navigator.share({ title: video.title, text: shareMessage, url: `https://swipeskills.app/video/${video.id}` }); alert('✓ Partagé !'); } 
-            catch (e: any) { if (e.name !== 'AbortError') { await navigator.clipboard.writeText(shareMessage); alert('✓ Lien copié !'); } }
-        } else { await navigator.clipboard.writeText(shareMessage); alert('✓ Lien copié !'); }
-      } else {
-        const result = await Share.share({ message: shareMessage, title: video.title });
-        if (result.action === Share.sharedAction) Alert.alert('✓', 'Partagé avec succès !');
-      }
-    } catch (error) { Alert.alert('Erreur', 'Impossible de partager'); }
-  };
-
-  const handleCreatorClick = (creatorId: string) => {
-    try {
-        if (creatorId === currentUserId) {
-            // Optionnel : rediriger vers son propre profil si c'est soi-même
-            // router.push('/(tabs)/profile'); 
-            router.push(`/profile/${creatorId}` as any);
-        } else {
-            router.push(`/profile/${creatorId}` as any);
-        }
-    } catch (error) { Alert.alert('Erreur', 'Impossible de charger le profil'); }
+  const getBadgeInfo = (badge?: 'apprenant' | 'expert' | 'pro') => {
+    switch (badge) {
+      case 'expert':
+        return { icon: 'shield-checkmark', color: '#3B82F6', label: 'Expert' };
+      case 'pro':
+        return { icon: 'star', color: '#FBA31A', label: 'Pro' };
+      default:
+        return null;
+    }
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#7459F0" />
-        <Text style={styles.loadingText}>Chargement des vidéos...</Text>
-      </View>
-    );
-  }
-
-  if (videos.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="videocam-off" size={64} color="#7459F0" />
-        <Text style={styles.emptyTitle}>Aucune vidéo disponible</Text>
+        <LinearGradient 
+          colors={['#7459f0', '#242A65']} 
+          style={StyleSheet.absoluteFill}
+        >
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.loadingText}>Chargement...</Text>
+        </LinearGradient>
       </View>
     );
   }
@@ -634,13 +811,8 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Ajout de la StatusBar (Manquait dans Code A) */}
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-
-      <View style={styles.progressIndicator}>
-        <Text style={styles.progressText}>{currentIndex + 1} / {videos.length}</Text>
-      </View>
-
+      <StatusBar barStyle="light-content" />
+      
       <ScrollView
         ref={scrollViewRef}
         pagingEnabled
@@ -653,165 +825,482 @@ export default function HomeScreen() {
         contentContainerStyle={styles.scrollViewContent}
       >
         {videos.map((video, index) => {
-          const isLiked = likedVideos.has(video.id);
-          const isFavorited = userProfile?.favorites?.includes(video.id) ?? false;
+          const isLiked = likedVideosSet.has(video.id);
+          const isSaved = savedVideosSet.has(video.id);
           const isFollowing = userProfile?.following?.includes(video.creatorId) ?? false;
-          const isMyVideo = video.creatorId === currentUserId; // Detection "Ma vidéo"
+          const currentUserId = auth.currentUser?.uid;
+          const isMyVideo = video.creatorId === currentUserId;
+          const badgeInfo = getBadgeInfo(video.creatorBadge);
           
           return (
-            <View key={video.id} style={styles.videoContainer}>
+            <View 
+              key={video.id} 
+              style={[styles.videoContainer, { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }]}
+            >
+              <Video
+                ref={(ref) => { if (ref) videoRefs.current[video.id] = ref; }}
+                source={{ uri: video.videoUrl }}
+                resizeMode={ResizeMode.COVER}
+                shouldPlay={index === currentIndex && isPlaying}
+                isLooping
+                style={StyleSheet.absoluteFillObject}
+                onPlaybackStatusUpdate={index === currentIndex ? handlePlaybackStatusUpdate : undefined}
+                useNativeControls={false}
+              />
+              
               <TouchableWithoutFeedback onPress={togglePlayPause}>
-                <View style={styles.videoWrapper}>
-                  <Video
-                    ref={(ref) => { if (ref) videoRefs.current[video.id] = ref; }}
-                    source={{ uri: video.videoUrl }}
-                    rate={1.0}
-                    volume={1.0}
-                    isMuted={false}
-                    resizeMode={ResizeMode.COVER}
-                    shouldPlay={index === currentIndex && isPlaying}
-                    isLooping
-                    style={StyleSheet.absoluteFillObject}
-                    onPlaybackStatusUpdate={index === currentIndex ? handlePlaybackStatusUpdate : undefined}
-                    useNativeControls={false}
-                    videoStyle={{ width: dynamicWidth, height: dynamicHeight }}
-                  />
+                <View style={styles.touchableOverlay}>
                   {!isPlaying && index === currentIndex && (
-                    <View style={styles.playPauseIcon}>
-                      <Ionicons name="play" size={80} color="rgba(255,255,255,0.8)" />
-                    </View>
+                    <LinearGradient
+                      colors={['rgba(116, 89, 240, 0.3)', 'rgba(36, 42, 101, 0.3)']}
+                      style={styles.playPauseIconBg}
+                    >
+                      <Ionicons name="play" size={60} color="white" />
+                    </LinearGradient>
                   )}
                 </View>
               </TouchableWithoutFeedback>
 
-              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={styles.gradientOverlay} />
-
+              <LinearGradient 
+                colors={['transparent', 'rgba(0,0,0,0.9)']} 
+                style={styles.gradientOverlay} 
+              />
+              
               {index === currentIndex && (
                 <View style={styles.progressBarContainer}>
                   <View style={styles.progressBarBackground}>
-                    <View style={[styles.progressBarFill, { width: `${progressPercentage}%` }]} />
+                    <LinearGradient
+                      colors={['#7459f0', '#9333ea', '#242A65']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[styles.progressBarFill, { width: `${progressPercentage}%` }]}
+                    />
                   </View>
                 </View>
               )}
 
               <View style={styles.leftSide}>
-                <TouchableOpacity style={styles.creatorInfo} onPress={() => handleCreatorClick(video.creatorId)}>
-                  {/* AMÉLIORATION : Gestion d'image d'avatar */}
-                  <View style={[styles.creatorAvatar, video.creatorAvatar ? { borderWidth: 1 } : {}]}>
-                    {video.creatorAvatar ? (
-                        <Image 
+                <TouchableOpacity 
+                  style={styles.creatorInfo} 
+                  onPress={() => handleCreatorClick(video.creatorId)}
+                >
+                  <View style={styles.creatorAvatarWrapper}>
+                    <LinearGradient
+                      colors={['#7459f0', '#242A65']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.creatorAvatarBorder}
+                    >
+                      <View style={styles.creatorAvatar}>
+                        {video.creatorAvatar ? (
+                          <Image 
                             source={{ uri: video.creatorAvatar }} 
                             style={styles.avatarImage} 
-                        />
-                    ) : (
-                        <Text style={styles.creatorInitial}>
+                          />
+                        ) : (
+                          <Text style={styles.creatorInitial}>
                             {video.creatorName.charAt(0).toUpperCase()}
-                        </Text>
-                    )}
+                          </Text>
+                        )}
+                      </View>
+                    </LinearGradient>
                   </View>
-
+                  
                   <View style={styles.creatorDetails}>
-                    <Text style={styles.creatorName}>
-                        @{video.creatorName} {isMyVideo && <Text style={{fontSize: 12, color: '#aaa'}}>(Moi)</Text>}
-                    </Text>
-                    
-                    {!isMyVideo && ( // On ne se suit pas soi-même
-                        <TouchableOpacity 
-                        style={[styles.followButton, isFollowing && styles.followButtonActive]}
-                        onPress={() => handleFollow(video.creatorId, video.creatorName)}
+                    <View style={styles.creatorNameRow}>
+                      <Text style={styles.creatorName}>
+                        @{video.creatorName} 
+                        {isMyVideo && <Text style={styles.meLabel}> (Moi)</Text>}
+                      </Text>
+                      
+                      {badgeInfo && (
+                        <LinearGradient
+                          colors={[badgeInfo.color, badgeInfo.color]}
+                          style={styles.badge}
                         >
-                        <Text style={[styles.followButtonText, isFollowing && styles.followButtonTextActive]}>
-                            {isFollowing ? 'Suivi' : 'Suivre'}
-                        </Text>
-                        </TouchableOpacity>
+                          <Ionicons name={badgeInfo.icon as any} size={10} color="#fff" />
+                          <Text style={styles.badgeText}>{badgeInfo.label}</Text>
+                        </LinearGradient>
+                      )}
+                    </View>
+                    
+                    {!isMyVideo && !isFollowing && (
+                      <TouchableOpacity 
+                        onPress={() => handleFollow(video.creatorId, video.creatorName)}
+                        activeOpacity={0.8}
+                      >
+                        <LinearGradient
+                          colors={['#7459f0', '#9333ea', '#242A65']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={styles.followButtonProminent}
+                        >
+                          <Ionicons name="add" size={16} color="#fff" />
+                          <Text style={styles.followButtonProminentText}>Suivre</Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
                     )}
                   </View>
                 </TouchableOpacity>
-
-                <Text style={styles.title} numberOfLines={1}>{video.title}</Text>
+                
+                <Text style={styles.title} numberOfLines={2}>{video.title}</Text>
                 <Text style={styles.description} numberOfLines={2}>{video.description}</Text>
-
-                <View style={styles.tagsContainer}>
-                  {video.tags?.slice(0, 3).map((tag, idx) => (
-                    <Text key={idx} style={styles.tag}>#{tag}</Text>
-                  ))}
-                </View>
               </View>
 
               <View style={styles.rightSide}>
-                <TouchableOpacity style={styles.avatarLarge} onPress={() => handleCreatorClick(video.creatorId)}>
-                  {/* AMÉLIORATION : Gestion d'image d'avatar grand format */}
-                  <View style={styles.avatarCircle}>
-                    {video.creatorAvatar ? (
-                         <Image source={{ uri: video.creatorAvatar }} style={styles.avatarImageLarge} />
-                    ) : (
-                        <Text style={styles.avatarText}>{video.creatorName.charAt(0).toUpperCase()}</Text>
-                    )}
-                  </View>
-                  {!isFollowing && !isMyVideo && (
-                    <View style={styles.plusIcon}>
-                      <Ionicons name="add" size={16} color="#fff" />
+                <TouchableOpacity 
+                  style={styles.avatarLarge} 
+                  onPress={() => handleCreatorClick(video.creatorId)}
+                >
+                  <LinearGradient
+                    colors={['#7459f0', '#242A65']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.avatarCircleBorder}
+                  >
+                    <View style={styles.avatarCircle}>
+                      {video.creatorAvatar ? (
+                        <Image 
+                          source={{ uri: video.creatorAvatar }} 
+                          style={styles.avatarLargeImage} 
+                        />
+                      ) : (
+                        <Text style={styles.avatarText}>
+                          {video.creatorName.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
                     </View>
+                  </LinearGradient>
+                  
+                  {isFollowing && (
+                    <LinearGradient
+                      colors={['#7459f0', '#9333ea']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.checkIcon}
+                    >
+                      <Ionicons name="checkmark" size={12} color="white" />
+                    </LinearGradient>
                   )}
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(video.id, video.creatorId)}>
-                  <View style={[styles.actionIcon, isLiked && styles.actionIconActive]}>
-                    <Ionicons name={isLiked ? "heart" : "heart-outline"} size={28} color="#fff" />
-                  </View>
+                <TouchableOpacity 
+                  style={styles.actionButton} 
+                  onPress={() => handleLike(video.id, video.creatorId)}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={isLiked ? ['#ef4444', '#dc2626'] : ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.actionIcon}
+                  >
+                    <Ionicons 
+                      name={isLiked ? "heart" : "heart-outline"} 
+                      size={28} 
+                      color="#fff" 
+                    />
+                  </LinearGradient>
                   <Text style={styles.actionCount}>{video.likes}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleComment(video.id, video.creatorId)}>
-                  <View style={styles.actionIcon}>
+                <TouchableOpacity 
+                  style={styles.actionButton} 
+                  onPress={() => handleComment(video.id, video.creatorId)}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={['#7459f0', '#242A65']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.actionIcon}
+                  >
                     <Ionicons name="chatbubble-outline" size={28} color="#fff" />
-                  </View>
+                  </LinearGradient>
                   <Text style={styles.actionCount}>{video.comments || 0}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleFavorite(video.id, video.creatorId)}>
-                  <View style={[styles.actionIcon, isFavorited && styles.actionIconActiveFavorite]}>
-                    <Ionicons name={isFavorited ? "bookmark" : "bookmark-outline"} size={28} color="#fff" />
-                  </View>
-                  <Text style={styles.actionCount}>Sauver</Text>
+                <TouchableOpacity 
+                  style={styles.actionButton} 
+                  onPress={() => handleFavorite(video.id)}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={isSaved ? ['#FBA31A', '#F59E0B'] : ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.actionIcon}
+                  >
+                    <Ionicons 
+                      name={isSaved ? "bookmark" : "bookmark-outline"} 
+                      size={28} 
+                      color="#fff" 
+                    />
+                  </LinearGradient>
+                  <Text style={styles.actionCount}>{isSaved ? 'Enregistré' : 'Sauver'}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleShare(video)}>
-                  <View style={styles.actionIcon}>
+                <TouchableOpacity 
+                  style={styles.actionButton} 
+                  onPress={() => handleShare(video)}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={['#7459f0', '#242A65']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.actionIcon}
+                  >
                     <Ionicons name="share-social-outline" size={28} color="#fff" />
-                  </View>
+                  </LinearGradient>
                   <Text style={styles.actionCount}>Partager</Text>
                 </TouchableOpacity>
               </View>
-
-              {currentIndex > 0 && index === currentIndex && (
-                <View style={styles.swipeUpIndicator}>
-                  <Ionicons name="chevron-up" size={32} color="rgba(255,255,255,0.5)" />
-                </View>
-              )}
-              {currentIndex < videos.length - 1 && index === currentIndex && (
-                <View style={styles.swipeDownIndicator}>
-                  <Ionicons name="chevron-down" size={32} color="rgba(255,255,255,0.5)" />
-                </View>
-              )}
             </View>
           );
         })}
       </ScrollView>
 
-      {/* Modal Commentaires (Reste identique à Code A mais inclus pour complétude) */}
-      <Modal visible={showComments} animationType="slide" transparent={false} onRequestClose={() => setShowComments(false)}>
-        <KeyboardAvoidingView style={styles.modalContainer} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={() => { setShowComments(false); setReplyTo(null); setReplyText(''); }} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="#000" />
+      {/* MODAL PARTAGE */}
+      <Modal visible={showShareModal} transparent animationType="fade">
+        <TouchableOpacity 
+          style={styles.shareOverlay} 
+          activeOpacity={1} 
+          onPress={() => {
+            setShowShareModal(false);
+            setSelectedVideoForShare(null);
+          }}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.shareContentWrapper}>
+            <View style={styles.shareContent}>
+              <LinearGradient 
+                colors={['#7459f0', '#9333ea', '#242A65']} 
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.shareHeader}
+              >
+                <View style={styles.shareHeaderContent}>
+                  <Ionicons name="share-social" size={24} color="white" />
+                  <Text style={styles.shareTitle}>Partager la vidéo</Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setShowShareModal(false);
+                    setSelectedVideoForShare(null);
+                  }}
+                  style={styles.closeButton}
+                >
+                  <Ionicons name="close" size={24} color="white" />
+                </TouchableOpacity>
+              </LinearGradient>
+
+              {selectedVideoForShare && (
+                <View style={styles.videoPreview}>
+                  <LinearGradient
+                    colors={['#F3E8FF', '#E9D5FF']}
+                    style={styles.videoPreviewIcon}
+                  >
+                    <Ionicons name="play-circle" size={32} color="#7459f0" />
+                  </LinearGradient>
+                  <View style={styles.videoPreviewInfo}>
+                    <Text style={styles.videoPreviewTitle} numberOfLines={2}>
+                      {selectedVideoForShare.title}
+                    </Text>
+                    <Text style={styles.videoPreviewCreator}>
+                      Par @{selectedVideoForShare.creatorName}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.shareOptionsGrid}>
+                <TouchableOpacity 
+                  style={styles.shareOptionCard} 
+                  onPress={shareOnWhatsApp}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient 
+                    colors={['#25D366', '#128C7E']} 
+                    style={styles.shareIconGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="logo-whatsapp" size={36} color="white" />
+                  </LinearGradient>
+                  <Text style={styles.shareOptionLabel}>WhatsApp</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.shareOptionCard} 
+                  onPress={() => {
+                    setShowShareModal(false);
+                    setShowUsersList(true);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient 
+                    colors={['#7459f0', '#9333ea', '#242A65']} 
+                    style={styles.shareIconGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="people" size={36} color="white" />
+                  </LinearGradient>
+                  <Text style={styles.shareOptionLabel}>Utilisateurs</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.shareOptionCard} 
+                  onPress={handleCopyLink}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient 
+                    colors={['#3B82F6', '#2563EB']} 
+                    style={styles.shareIconGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="link" size={36} color="white" />
+                  </LinearGradient>
+                  <Text style={styles.shareOptionLabel}>Copier le lien</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* MODAL LISTE UTILISATEURS */}
+      <Modal visible={showUsersList} animationType="slide">
+        <View style={styles.usersListContainer}>
+          <LinearGradient 
+            colors={['#7459f0', '#9333ea', '#242A65']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.usersListHeader}
+          >
+            <TouchableOpacity onPress={() => {
+              setShowUsersList(false);
+              setSearchQuery('');
+            }}>
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+            <Text style={styles.usersListTitle}>Partager avec</Text>
+            <View style={{width: 24}} />
+          </LinearGradient>
+
+          <View style={styles.searchContainer}>
+            <LinearGradient
+              colors={['#F9FAFB', '#F3F4F6']}
+              style={styles.searchInputWrapper}
+            >
+              <Ionicons name="search" size={20} color="#9CA3AF" />
+              <TextInput 
+                style={styles.searchInput}
+                placeholder="Rechercher un utilisateur..."
+                placeholderTextColor="#9CA3AF"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+            </LinearGradient>
+          </View>
+
+          <FlatList
+            data={filteredUsers}
+            keyExtractor={(item) => item.uid}
+            renderItem={({ item }) => (
+              <TouchableOpacity 
+                style={styles.userItem} 
+                onPress={() => shareToUser(item)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.userAvatarWrapper}>
+                  {item.photoURL ? (
+                    <Image source={{ uri: item.photoURL }} style={styles.userAvatarImg} />
+                  ) : (
+                    <LinearGradient 
+                      colors={['#7459f0', '#242A65']} 
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.userAvatarPlaceholder}
+                    >
+                      <Text style={styles.userAvatarText}>
+                        {(item.prenom?.[0] || item.displayName?.[0] || 'U').toUpperCase()}
+                      </Text>
+                    </LinearGradient>
+                  )}
+                </View>
+                <View style={styles.userInfo}>
+                  <Text style={styles.userName}>
+                    {item.displayName || `${item.prenom} ${item.nom}`}
+                  </Text>
+                  <Text style={styles.userRole}>
+                    {item.badge === 'expert' ? '👨‍🎓 Expert' : 
+                     item.badge === 'pro' ? '⭐ Pro' : 
+                     '🎓 Apprenant'}
+                  </Text>
+                </View>
+                <LinearGradient
+                  colors={['#7459f0', '#9333ea']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.sendIconWrapper}
+                >
+                  <Ionicons name="send" size={20} color="white" />
+                </LinearGradient>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyUsersList}>
+                <Ionicons name="people-outline" size={64} color="#ccc" />
+                <Text style={styles.emptyUsersText}>Aucun utilisateur trouvé</Text>
+              </View>
+            }
+          />
+        </View>
+      </Modal>
+
+      {/* MODAL COMMENTAIRES */}
+      <Modal 
+        visible={showComments} 
+        animationType="slide" 
+        transparent={false}
+        onRequestClose={() => {
+          setShowComments(false);
+          setReplyTo(null);
+          setReplyText('');
+        }}
+      >
+        <KeyboardAvoidingView 
+          style={styles.modalContainer} 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
+          <LinearGradient
+            colors={['#7459f0', '#9333ea', '#242A65']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.modalHeader}
+          >
+            <TouchableOpacity 
+              onPress={() => { 
+                setShowComments(false); 
+                setReplyTo(null); 
+                setReplyText(''); 
+              }} 
+              style={styles.backButton}
+            >
+              <Ionicons name="arrow-back" size={24} color="white" />
             </TouchableOpacity>
             <Text style={styles.modalHeaderTitle}>Commentaires</Text>
             <View style={styles.placeholder} />
-          </View>
+          </LinearGradient>
+          
           <ScrollView style={styles.commentsList}>
             {loadingComments ? (
-              <View style={styles.loadingCommentsContainer}><ActivityIndicator size="large" color="#7459F0" /></View>
+              <View style={styles.loadingCommentsContainer}>
+                <ActivityIndicator size="large" color="#7459f0" />
+              </View>
             ) : comments.length === 0 ? (
               <View style={styles.emptyCommentsContainer}>
                 <Ionicons name="chatbubbles-outline" size={64} color="#ccc" />
@@ -822,63 +1311,157 @@ export default function HomeScreen() {
               comments.map((comment) => (
                 <View key={comment.id} style={styles.commentContainer}>
                   <View style={styles.commentHeader}>
-                    <View style={styles.commentAvatar}>
-                      <Text style={styles.commentAvatarText}>{comment.userName.charAt(0).toUpperCase()}</Text>
-                    </View>
+                    <LinearGradient
+                      colors={['#7459f0', '#242A65']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.commentAvatar}
+                    >
+                      <Text style={styles.commentAvatarText}>
+                        {comment.userName.charAt(0).toUpperCase()}
+                      </Text>
+                    </LinearGradient>
+                    
                     <View style={styles.commentContent}>
                       <View style={styles.commentTop}>
                         <Text style={styles.commentUserName}>{comment.userName}</Text>
                         <Text style={styles.commentTimestamp}>{formatDate(comment.createdAt)}</Text>
                       </View>
+                      
                       <Text style={styles.commentText}>{comment.text}</Text>
+                      
                       <View style={styles.commentActions}>
-                        <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleLikeComment(comment.id)}>
-                          <Ionicons name={comment.likedBy?.includes(auth.currentUser?.uid || '') ? "heart" : "heart-outline"} size={16} color={comment.likedBy?.includes(auth.currentUser?.uid || '') ? "#ef4444" : "#666"} />
-                          {comment.likes > 0 && <Text style={styles.commentActionText}>{comment.likes}</Text>}
+                        <TouchableOpacity 
+                          style={styles.commentActionBtn} 
+                          onPress={() => handleLikeComment(comment.id)}
+                        >
+                          <Ionicons 
+                            name={comment.likedBy?.includes(auth.currentUser?.uid || '') ? "heart" : "heart-outline"} 
+                            size={16} 
+                            color={comment.likedBy?.includes(auth.currentUser?.uid || '') ? "#ef4444" : "#666"} 
+                          />
+                          {comment.likes > 0 && (
+                            <Text style={styles.commentActionText}>{comment.likes}</Text>
+                          )}
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.commentActionBtn} onPress={() => setReplyTo(comment.id)}>
+                        
+                        <TouchableOpacity 
+                          style={styles.commentActionBtn} 
+                          onPress={() => setReplyTo(comment.id)}
+                        >
                           <Ionicons name="chatbubble-outline" size={16} color="#666" />
                           <Text style={styles.commentActionText}>Répondre</Text>
                         </TouchableOpacity>
+                        
                         {comment.userId === auth.currentUser?.uid && (
-                          <TouchableOpacity style={styles.commentActionBtn} onPress={() => handleDeleteComment(comment.id, comment.replies.length)}>
+                          <TouchableOpacity 
+                            style={styles.commentActionBtn} 
+                            onPress={() => handleDeleteComment(comment.id, comment.replies.length)}
+                          >
                             <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                            <Text style={[styles.commentActionText, { color: '#ef4444' }]}>Supprimer</Text>
+                            <Text style={[styles.commentActionText, { color: '#ef4444' }]}>
+                              Supprimer
+                            </Text>
                           </TouchableOpacity>
                         )}
                       </View>
                     </View>
                   </View>
+                  
                   {replyTo === comment.id && (
                     <View style={styles.replyInputContainer}>
-                      <TextInput style={styles.replyInput} placeholder="Écrire une réponse..." value={replyText} onChangeText={setReplyText} multiline />
+                      <TextInput 
+                        style={styles.replyInput} 
+                        placeholder="Écrire une réponse..." 
+                        value={replyText} 
+                        onChangeText={setReplyText} 
+                        multiline 
+                        returnKeyType="send"
+                        enablesReturnKeyAutomatically={true}
+                        onSubmitEditing={() => {
+                          if (replyText.trim()) {
+                            handleAddReply(comment.id);
+                          }
+                        }}
+                        blurOnSubmit={false}
+                      />
                       <View style={styles.replyButtons}>
-                        <TouchableOpacity onPress={() => { setReplyTo(null); setReplyText(''); }} style={styles.cancelButton}><Text style={styles.cancelButtonText}>Annuler</Text></TouchableOpacity>
-                        <TouchableOpacity onPress={() => handleAddReply(comment.id)} style={styles.sendReplyButton}><Text style={styles.sendReplyButtonText}>Répondre</Text></TouchableOpacity>
+                        <TouchableOpacity 
+                          onPress={() => { 
+                            setReplyTo(null); 
+                            setReplyText(''); 
+                          }} 
+                          style={styles.cancelButton}
+                        >
+                          <Text style={styles.cancelButtonText}>Annuler</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          onPress={() => {
+                            if (replyText.trim()) {
+                              handleAddReply(comment.id);
+                            }
+                          }} 
+                          disabled={!replyText.trim()}
+                          activeOpacity={0.7}
+                        >
+                          <LinearGradient
+                            colors={!replyText.trim() ? ['#D1D5DB', '#9CA3AF'] : ['#7459f0', '#9333ea']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 0 }}
+                            style={styles.sendReplyButton}
+                          >
+                            <Ionicons name="send" size={16} color="#fff" />
+                            <Text style={styles.sendReplyButtonText}>Envoyer</Text>
+                          </LinearGradient>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   )}
+                  
                   {comment.replies && comment.replies.length > 0 && (
                     <View style={styles.repliesContainer}>
                       {comment.replies.map((reply) => (
                         <View key={reply.id} style={styles.replyItem}>
                           <View style={styles.replyHeader}>
-                            <View style={styles.replyAvatar}>
-                              <Text style={styles.replyAvatarText}>{reply.userName.charAt(0).toUpperCase()}</Text>
-                            </View>
+                            <LinearGradient
+                              colors={['#9333ea', '#7459f0']}
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 1, y: 1 }}
+                              style={styles.replyAvatar}
+                            >
+                              <Text style={styles.replyAvatarText}>
+                                {reply.userName.charAt(0).toUpperCase()}
+                              </Text>
+                            </LinearGradient>
+                            
                             <View style={styles.replyContent}>
                               <View style={styles.replyTop}>
                                 <Text style={styles.replyUserName}>{reply.userName}</Text>
                                 <Text style={styles.replyTimestamp}>{formatDate(reply.createdAt)}</Text>
                               </View>
+                              
                               <Text style={styles.replyText}>{reply.text}</Text>
+                              
                               <View style={styles.replyActions}>
-                                <TouchableOpacity style={styles.replyLikeBtn} onPress={() => handleLikeReply(comment.id, reply.id)}>
-                                  <Ionicons name={reply.likedBy?.includes(auth.currentUser?.uid || '') ? "heart" : "heart-outline"} size={14} color={reply.likedBy?.includes(auth.currentUser?.uid || '') ? "#ef4444" : "#666"} />
-                                  {reply.likes > 0 && <Text style={styles.replyLikeText}>{reply.likes}</Text>}
+                                <TouchableOpacity 
+                                  style={styles.replyLikeBtn} 
+                                  onPress={() => handleLikeReply(comment.id, reply.id)}
+                                >
+                                  <Ionicons 
+                                    name={reply.likedBy?.includes(auth.currentUser?.uid || '') ? "heart" : "heart-outline"} 
+                                    size={14} 
+                                    color={reply.likedBy?.includes(auth.currentUser?.uid || '') ? "#ef4444" : "#666"} 
+                                  />
+                                  {reply.likes > 0 && (
+                                    <Text style={styles.replyLikeText}>{reply.likes}</Text>
+                                  )}
                                 </TouchableOpacity>
+                                
                                 {reply.userId === auth.currentUser?.uid && (
-                                  <TouchableOpacity style={styles.replyDeleteBtn} onPress={() => handleDeleteReply(comment.id, reply.id)}>
+                                  <TouchableOpacity 
+                                    style={styles.replyDeleteBtn} 
+                                    onPress={() => handleDeleteReply(comment.id, reply.id)}
+                                  >
                                     <Ionicons name="trash-outline" size={14} color="#ef4444" />
                                   </TouchableOpacity>
                                 )}
@@ -893,13 +1476,56 @@ export default function HomeScreen() {
               ))
             )}
           </ScrollView>
+          
           <View style={styles.inputContainer}>
-            <View style={styles.inputAvatar}>
-              <Text style={styles.inputAvatarText}>{userProfile?.displayName?.charAt(0).toUpperCase() || 'U'}</Text>
-            </View>
-            <TextInput style={styles.commentInput} placeholder="Ajouter un commentaire..." value={newComment} onChangeText={setNewComment} multiline maxLength={500} />
-            <TouchableOpacity style={[styles.sendButton, !newComment.trim() && styles.sendButtonDisabled]} onPress={handleAddComment} disabled={!newComment.trim()}>
-              <Ionicons name="send" size={24} color={newComment.trim() ? "#7459F0" : "#ccc"} />
+            <LinearGradient
+              colors={['#7459f0', '#242A65']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.inputAvatar}
+            >
+              <Text style={styles.inputAvatarText}>
+                {userProfile?.displayName?.charAt(0).toUpperCase() || 'U'}
+              </Text>
+            </LinearGradient>
+            <TextInput 
+              style={styles.commentInput} 
+              placeholder="Ajouter un commentaire..." 
+              value={newComment} 
+              onChangeText={setNewComment} 
+              multiline 
+              maxLength={500}
+              returnKeyType="send"
+              enablesReturnKeyAutomatically={true}
+              onSubmitEditing={() => {
+                if (newComment.trim()) {
+                  handleAddComment();
+                }
+              }}
+              blurOnSubmit={false}
+            />
+            <TouchableOpacity 
+              style={styles.sendButtonWrapper} 
+              onPress={() => {
+                if (newComment.trim()) {
+                  handleAddComment();
+                }
+              }} 
+              disabled={!newComment.trim()}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={!newComment.trim() ? ['#D1D5DB', '#9CA3AF'] : ['#7459f0', '#9333ea']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.sendButton}
+              >
+                <Ionicons 
+                  name="send" 
+                  size={20} 
+                  color="white"
+                />
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -910,97 +1536,697 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
-  loadingText: { color: '#fff', fontSize: 16, marginTop: 16 },
-  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000', padding: 32 },
-  emptyTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginTop: 16, marginBottom: 8 },
-  progressIndicator: { position: 'absolute', top: 48, left: 0, right: 0, zIndex: 50, alignItems: 'center' },
-  progressText: { color: '#fff', fontSize: 14, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    backgroundColor: '#000' 
+  },
+  loadingText: { 
+    color: '#fff', 
+    fontSize: 16, 
+    marginTop: 16,
+    fontWeight: '600'
+  },
   scrollView: { flex: 1 },
   scrollViewContent: { flexGrow: 1 },
-  videoContainer: { height: SCREEN_HEIGHT, width: SCREEN_WIDTH, position: 'relative', overflow: 'visible' },
-  videoWrapper: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 },
-  playPauseIcon: { position: 'absolute', top: '50%', left: '50%', marginTop: -40, marginLeft: -40, zIndex: 10 },
-  progressBarContainer: { position: 'absolute', bottom: 80, left: 0, right: 0, paddingHorizontal: 16, zIndex: 40 },
-  progressBarBackground: { height: 2, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 1, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: '#7459F0', borderRadius: 1 },
-  gradientOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%', zIndex: 10, pointerEvents: 'none' },
-  leftSide: { position: 'absolute', bottom: 100, left: 16, right: 80, zIndex: 30 },
-  creatorInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  creatorAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#7459F0', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', overflow: 'hidden' },
+  videoContainer: { 
+    width: '100%', 
+    height: '100%', 
+    backgroundColor: '#000', 
+    position: 'relative', 
+    overflow: 'hidden' 
+  },
+  touchableOverlay: { 
+    ...StyleSheet.absoluteFillObject, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    zIndex: 5 
+  },
+  playPauseIconBg: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  progressBarContainer: { 
+    position: 'absolute', 
+    bottom: 120, 
+    left: 0, 
+    right: 0, 
+    paddingHorizontal: 16, 
+    zIndex: 40 
+  },
+  progressBarBackground: { 
+    height: 3, 
+    backgroundColor: 'rgba(255,255,255,0.3)', 
+    borderRadius: 2, 
+    overflow: 'hidden' 
+  },
+  progressBarFill: { 
+    height: '100%', 
+    borderRadius: 2 
+  },
+  gradientOverlay: { 
+    position: 'absolute', 
+    bottom: 0, 
+    left: 0, 
+    right: 0, 
+    height: '50%', 
+    zIndex: 10 
+  },
+  
+  leftSide: { 
+    position: 'absolute', 
+    bottom: 140, 
+    left: 16, 
+    right: 100, 
+    zIndex: 30 
+  },
+  creatorInfo: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12, 
+    marginBottom: 12 
+  },
+  creatorAvatarWrapper: {
+    padding: 2
+  },
+  creatorAvatarBorder: {
+    padding: 2,
+    borderRadius: 26
+  },
+  creatorAvatar: { 
+    width: 48, 
+    height: 48, 
+    borderRadius: 24, 
+    backgroundColor: '#1a1a2e', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    overflow:'hidden' 
+  },
   avatarImage: { width: '100%', height: '100%' },
-  creatorInitial: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  creatorDetails: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  creatorName: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  followButton: { backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20 },
-  followButtonActive: { backgroundColor: 'rgba(255,255,255,0.2)', borderWidth: 1, borderColor: '#fff' },
-  followButtonText: { color: '#000', fontSize: 14, fontWeight: '600' },
-  followButtonTextActive: { color: '#fff' },
-  title: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  description: { color: '#fff', fontSize: 14, marginBottom: 8, lineHeight: 20 },
-  tagsContainer: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  tag: { color: '#7459F0', fontSize: 14, fontWeight: '600' },
-  rightSide: { position: 'absolute', bottom: 120, right: 8, gap: 18, alignItems: 'center', zIndex: 50 },
-  avatarLarge: { marginBottom: 8, position: 'relative' },
-  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#7459F0', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', overflow: 'hidden' },
-  avatarImageLarge: { width: '100%', height: '100%' },
-  avatarText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  plusIcon: { position: 'absolute', bottom: -4, alignSelf: 'center', width: 24, height: 24, borderRadius: 12, backgroundColor: '#7459F0', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
-  actionButton: { alignItems: 'center', gap: 4 },
-  actionIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  actionIconActive: { backgroundColor: '#ef4444' },
-  actionIconActiveFavorite: { backgroundColor: '#FBA31A' },
-  actionCount: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  swipeUpIndicator: { position: 'absolute', top: 80, alignSelf: 'center', zIndex: 20 },
-  swipeDownIndicator: { position: 'absolute', bottom: 150, alignSelf: 'center', zIndex: 20 },
-  // Styles pour le modal des commentaires
+  creatorInitial: { 
+    color: '#fff', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
+  creatorDetails: { 
+    flex: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between' 
+  },
+  creatorNameRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8,
+    flex: 1
+  },
+  creatorName: { 
+    color: '#fff', 
+    fontSize: 15, 
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+  meLabel: { 
+    fontSize: 12, 
+    color: '#aaa',
+    fontWeight: '500'
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  followButtonProminent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  followButtonProminentText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  title: { 
+    color: '#fff', 
+    fontSize: 16, 
+    fontWeight: '700', 
+    marginBottom: 6,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+  description: { 
+    color: '#fff', 
+    fontSize: 14, 
+    marginBottom: 8, 
+    lineHeight: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+  
+  rightSide: { 
+    position: 'absolute', 
+    bottom: 140, 
+    right: 16, 
+    gap: 20, 
+    alignItems: 'center', 
+    zIndex: 30 
+  },
+  avatarLarge: { 
+    marginBottom: 8, 
+    position: 'relative' 
+  },
+  avatarCircleBorder: {
+    padding: 3,
+    borderRadius: 31
+  },
+  avatarCircle: { 
+    width: 56, 
+    height: 56, 
+    borderRadius: 28, 
+    backgroundColor: '#1a1a2e', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    overflow: 'hidden' 
+  },
+  avatarLargeImage: { width: '100%', height: '100%' },
+  avatarText: { 
+    color: '#fff', 
+    fontSize: 20, 
+    fontWeight: 'bold' 
+  },
+  checkIcon: { 
+    position: 'absolute', 
+    bottom: -4, 
+    alignSelf: 'center', 
+    width: 24, 
+    height: 24, 
+    borderRadius: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderWidth: 2, 
+    borderColor: '#fff' 
+  },
+  
+  actionButton: { 
+    alignItems: 'center', 
+    gap: 6 
+  },
+  actionIcon: { 
+    width: 50, 
+    height: 50, 
+    borderRadius: 25, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8
+  },
+  actionCount: { 
+    color: '#fff', 
+    fontSize: 12, 
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+  
+  shareOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.8)', 
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  shareContentWrapper: {
+    width: '100%',
+    maxWidth: 400
+  },
+  shareContent: { 
+    backgroundColor: '#fff', 
+    borderRadius: 24, 
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10
+  },
+  shareHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 20
+  },
+  shareHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  shareTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff'
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  videoPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    padding: 20,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB'
+  },
+  videoPreviewIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  videoPreviewInfo: {
+    flex: 1
+  },
+  videoPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4
+  },
+  videoPreviewCreator: {
+    fontSize: 13,
+    color: '#6B7280'
+  },
+  shareOptionsGrid: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+    gap: 20,
+    justifyContent: 'space-around'
+  },
+  shareOptionCard: {
+    alignItems: 'center',
+    gap: 12,
+    flex: 1
+  },
+  shareIconGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 12
+  },
+  shareOptionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center'
+  },
+
+  usersListContainer: {
+    flex: 1,
+    backgroundColor: '#F8F8F6'
+  },
+  usersListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20
+  },
+  usersListTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff'
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    marginVertical: 16
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937'
+  },
+  userItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  userAvatarWrapper: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden'
+  },
+  userAvatarImg: {
+    width: '100%',
+    height: '100%'
+  },
+  userAvatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  userAvatarText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold'
+  },
+  userInfo: {
+    flex: 1
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2
+  },
+  userRole: {
+    fontSize: 13,
+    color: '#6B7280'
+  },
+  sendIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  emptyUsersList: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64
+  },
+  emptyUsersText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    marginTop: 16,
+    fontWeight: '500'
+  },
+  
   modalContainer: { flex: 1, backgroundColor: '#fff' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#e5e5e5', backgroundColor: '#fff' },
+  modalHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    paddingTop: 50
+  },
   backButton: { padding: 8 },
-  modalHeaderTitle: { fontSize: 18, fontWeight: '600', color: '#000' },
+  modalHeaderTitle: { 
+    fontSize: 18, 
+    fontWeight: '700', 
+    color: '#fff' 
+  },
   placeholder: { width: 40 },
-  commentsList: { flex: 1 },
-  loadingCommentsContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 64 },
-  emptyCommentsContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 64 },
-  emptyCommentsText: { fontSize: 18, fontWeight: '600', color: '#666', marginTop: 16 },
-  emptyCommentsSubtext: { fontSize: 14, color: '#999', marginTop: 8 },
-  commentContainer: { paddingVertical: 16, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  commentHeader: { flexDirection: 'row', gap: 12 },
-  commentAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#7459F0', justifyContent: 'center', alignItems: 'center' },
-  commentAvatarText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  commentsList: { flex: 1, backgroundColor: '#F9FAFB' },
+  loadingCommentsContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingVertical: 64 
+  },
+  emptyCommentsContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    paddingVertical: 64 
+  },
+  emptyCommentsText: { 
+    fontSize: 18, 
+    fontWeight: '600', 
+    color: '#666', 
+    marginTop: 16 
+  },
+  emptyCommentsSubtext: { 
+    fontSize: 14, 
+    color: '#999', 
+    marginTop: 8 
+  },
+  commentContainer: { 
+    paddingVertical: 16, 
+    paddingHorizontal: 16, 
+    backgroundColor: '#fff',
+    marginBottom: 1
+  },
+  commentHeader: { 
+    flexDirection: 'row', 
+    gap: 12 
+  },
+  commentAvatar: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  commentAvatarText: { 
+    color: '#fff', 
+    fontSize: 16, 
+    fontWeight: '600' 
+  },
   commentContent: { flex: 1 },
-  commentTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  commentUserName: { fontSize: 14, fontWeight: '600', color: '#000' },
-  commentTimestamp: { fontSize: 12, color: '#999' },
-  commentText: { fontSize: 14, color: '#333', lineHeight: 20, marginBottom: 8 },
-  commentActions: { flexDirection: 'row', gap: 16, marginTop: 4 },
-  commentActionBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  commentActionText: { fontSize: 12, color: '#666', fontWeight: '500' },
-  repliesContainer: { marginTop: 12, marginLeft: 52, gap: 12 },
+  commentTop: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    marginBottom: 4 
+  },
+  commentUserName: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#000' 
+  },
+  commentTimestamp: { 
+    fontSize: 12, 
+    color: '#999' 
+  },
+  commentText: { 
+    fontSize: 14, 
+    color: '#333', 
+    lineHeight: 20, 
+    marginBottom: 8 
+  },
+  commentActions: { 
+    flexDirection: 'row', 
+    gap: 16, 
+    marginTop: 4 
+  },
+  commentActionBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4 
+  },
+  commentActionText: { 
+    fontSize: 12, 
+    color: '#666', 
+    fontWeight: '500' 
+  },
+  repliesContainer: { 
+    marginTop: 12, 
+    marginLeft: 52, 
+    gap: 12 
+  },
   replyItem: { paddingVertical: 8 },
-  replyHeader: { flexDirection: 'row', gap: 8 },
-  replyAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#7459F0', justifyContent: 'center', alignItems: 'center' },
-  replyAvatarText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  replyHeader: { 
+    flexDirection: 'row', 
+    gap: 8 
+  },
+  replyAvatar: { 
+    width: 32, 
+    height: 32, 
+    borderRadius: 16, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  replyAvatarText: { 
+    color: '#fff', 
+    fontSize: 14, 
+    fontWeight: '600' 
+  },
   replyContent: { flex: 1 },
-  replyTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  replyUserName: { fontSize: 13, fontWeight: '600', color: '#000' },
-  replyTimestamp: { fontSize: 11, color: '#999' },
-  replyText: { fontSize: 13, color: '#333', lineHeight: 18, marginBottom: 6 },
-  replyActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  replyLikeBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  replyLikeText: { fontSize: 11, color: '#666' },
+  replyTop: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8, 
+    marginBottom: 4 
+  },
+  replyUserName: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#000' 
+  },
+  replyTimestamp: { 
+    fontSize: 11, 
+    color: '#999' 
+  },
+  replyText: { 
+    fontSize: 13, 
+    color: '#333', 
+    lineHeight: 18, 
+    marginBottom: 6 
+  },
+  replyActions: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12 
+  },
+  replyLikeBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 4 
+  },
+  replyLikeText: { 
+    fontSize: 11, 
+    color: '#666' 
+  },
   replyDeleteBtn: { padding: 4 },
-  replyInputContainer: { marginTop: 12, marginLeft: 52, padding: 12, backgroundColor: '#f9f9f9', borderRadius: 8 },
-  replyInput: { fontSize: 14, color: '#000', minHeight: 40, maxHeight: 100 },
-  replyButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 8 },
-  cancelButton: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16 },
-  cancelButtonText: { fontSize: 14, color: '#666', fontWeight: '500' },
-  sendReplyButton: { paddingHorizontal: 16, paddingVertical: 6, borderRadius: 16, backgroundColor: '#7459F0' },
-  sendReplyButtonText: { fontSize: 14, color: '#fff', fontWeight: '600' },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#e5e5e5', backgroundColor: '#fff', gap: 12 },
-  inputAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#7459F0', justifyContent: 'center', alignItems: 'center' },
-  inputAvatarText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  commentInput: { flex: 1, fontSize: 14, color: '#000', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#f5f5f5', borderRadius: 20, maxHeight: 100 },
-  sendButton: { padding: 8 },
-  sendButtonDisabled: { opacity: 0.5 },
+  replyInputContainer: { 
+    marginTop: 12, 
+    marginLeft: 52, 
+    padding: 12, 
+    backgroundColor: '#F3E8FF', 
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9D5FF'
+  },
+  replyInput: { 
+    fontSize: 14, 
+    color: '#000', 
+    minHeight: 40, 
+    maxHeight: 100,
+    paddingVertical: 8
+  },
+  replyButtons: { 
+    flexDirection: 'row', 
+    justifyContent: 'flex-end', 
+    gap: 8, 
+    marginTop: 8 
+  },
+  cancelButton: { 
+    paddingHorizontal: 16, 
+    paddingVertical: 8, 
+    borderRadius: 20 
+  },
+  cancelButtonText: { 
+    fontSize: 14, 
+    color: '#666', 
+    fontWeight: '500' 
+  },
+  sendReplyButton: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16, 
+    paddingVertical: 8, 
+    borderRadius: 20
+  },
+  sendReplyButtonText: { 
+    fontSize: 14, 
+    color: '#fff', 
+    fontWeight: '600' 
+  },
+  inputContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 16, 
+    paddingVertical: 12, 
+    paddingBottom: 30,
+    borderTopWidth: 1, 
+    borderTopColor: '#e5e5e5', 
+    backgroundColor: '#fff', 
+    gap: 12 
+  },
+  inputAvatar: { 
+    width: 40, 
+    height: 40, 
+    borderRadius: 20, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  inputAvatarText: { 
+    color: '#fff', 
+    fontSize: 16, 
+    fontWeight: '600' 
+  },
+  commentInput: { 
+    flex: 1, 
+    fontSize: 14, 
+    color: '#000', 
+    paddingHorizontal: 16, 
+    paddingVertical: 10, 
+    backgroundColor: '#f5f5f5', 
+    borderRadius: 20, 
+    maxHeight: 100 
+  },
+  sendButtonWrapper: {},
+  sendButton: { 
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
 });
