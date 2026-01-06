@@ -31,7 +31,7 @@ interface VideoData {
   videoUrl: string;
   likes: number;
   comments: number;
-  creatorBadge?: 'apprenant' | 'expert' | 'pro';
+  creatorBadge?: 'apprenant' | 'expert' | 'pro' | 'diplome';
 }
 
 interface UserProfile {
@@ -65,6 +65,7 @@ export default function HomeScreen() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [likedVideosSet, setLikedVideosSet] = useState<Set<string>>(new Set());
   const [savedVideosSet, setSavedVideosSet] = useState<Set<string>>(new Set());
+  const [likingVideos, setLikingVideos] = useState<Set<string>>(new Set());  // 🆕 Track des likes en cours
   
   // États chargement
   const [loading, setLoading] = useState(true);
@@ -73,13 +74,13 @@ export default function HomeScreen() {
   const [showComments, setShowComments] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
   
-  // 📤 États partage (COMPLETS)
+  // 📤 États partage
   const [showShareModal, setShowShareModal] = useState(false);
   const [showUsersList, setShowUsersList] = useState(false);
   const [selectedVideoForShare, setSelectedVideoForShare] = useState<VideoData | null>(null);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);  // 🆕 AJOUTÉ
+  const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);
 
   const videoRefs = useRef<Record<string, Video | null>>({});
 
@@ -104,7 +105,6 @@ export default function HomeScreen() {
       
       fetchUserData();
       
-      // ▶️ Relance la lecture de la vidéo actuelle après un court délai
       const timer = setTimeout(() => {
         const currentVideo = videoRefs.current[videos[currentIndex]?.id];
         if (currentVideo) {
@@ -117,11 +117,9 @@ export default function HomeScreen() {
         }
       }, 100);
       
-      // 🧹 Nettoyage : pause TOUTES les vidéos quand on quitte la page
       return () => {
         clearTimeout(timer);
         setIsPlaying(false);
-        // ⏸️ Met en pause toutes les vidéos
         Object.values(videoRefs.current).forEach(async (videoRef) => {
           if (videoRef) {
             try {
@@ -137,11 +135,9 @@ export default function HomeScreen() {
 
   useEffect(() => { loadVideos(); }, []);
 
-  // ⏸️ Met en pause les autres vidéos quand on change de vidéo (swipe)
   useEffect(() => {
     const pauseOtherVideos = async () => {
       Object.keys(videoRefs.current).forEach(async (videoId, index) => {
-        // Si ce n'est pas la vidéo actuelle, on la met en pause
         if (videos[index]?.id !== videos[currentIndex]?.id && videoRefs.current[videoId]) {
           try {
             await videoRefs.current[videoId]?.pauseAsync();
@@ -157,47 +153,39 @@ export default function HomeScreen() {
     }
   }, [currentIndex, videos]);
 
-  // 🔄 Listener temps réel
+  // 🔄 LISTENER TEMPS RÉEL pour les compteurs likes/comments
   useEffect(() => {
-    if (videos.length === 0) return;
+    if (videos.length === 0 || !videos[currentIndex]?.id) return;
     
-    const currentVideo = videos[currentIndex];
-    if (!currentVideo?.id) return;
+    const videoId = videos[currentIndex].id;
     
-    const videoId = currentVideo.id;
-    
+    // Écoute les changements en temps réel sur la vidéo actuelle
     const unsubscribe = onSnapshot(
       doc(db, 'videos', videoId),
       (docSnapshot) => {
         if (docSnapshot.exists()) {
           const data = docSnapshot.data();
           
+          // Met à jour les compteurs avec les valeurs Firebase
           setVideos(prev => prev.map(v => {
             if (v.id !== videoId) return v;
             
-            const needsUpdate = 
-              v.comments !== (data.comments || 0) || 
-              v.likes !== (data.likes || 0);
-            
-            if (!needsUpdate) return v;
-            
             return {
               ...v,
-              comments: data.comments || 0,
-              likes: data.likes || 0
+              likes: data.likes || 0,
+              comments: data.comments || 0
             };
           }));
         }
       },
       (error) => {
-        console.error('❌ Erreur listener vidéo:', error);
+        console.error('Erreur listener vidéo:', error);
       }
     );
     
     return () => unsubscribe();
   }, [currentIndex, videos.length]);
 
-  // 🔍 FILTRE UTILISATEURS (NOUVEAU)
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setFilteredUsers(allUsers);
@@ -235,11 +223,60 @@ export default function HomeScreen() {
         const uDoc = await getDoc(doc(db, 'users', v.creatorId));
         const uData = uDoc.exists() ? uDoc.data() : {};
         
+        let badge: 'apprenant' | 'expert' | 'pro' | 'diplome' = 'apprenant';
+        
+        if (uData.badge) {
+          badge = uData.badge;
+        }
+        else if (uData.profileLevel) {
+          switch (uData.profileLevel.toLowerCase()) {
+            case 'expert':
+              badge = 'expert';
+              break;
+            case 'diplome':
+            case 'diplomé':
+              badge = 'diplome';
+              break;
+            case 'pro':
+            case 'professionnel':
+              badge = 'pro';
+              break;
+            case 'amateur':
+            case 'apprenant':
+            default:
+              badge = 'apprenant';
+              break;
+          }
+        }
+        else if (uData.statut) {
+          switch (uData.statut.toLowerCase()) {
+            case 'expert':
+              badge = 'expert';
+              break;
+            case 'diplome':
+            case 'diplomé':
+              badge = 'diplome';
+              break;
+            case 'pro':
+            case 'professionnel':
+              badge = 'pro';
+              break;
+            case 'amateur':
+            case 'apprenant':
+            default:
+              badge = 'apprenant';
+              break;
+          }
+        }
+        else if (uData.role === 'formateur') {
+          badge = 'expert';
+        }
+        
         return { 
           ...v, 
           creatorName: uData.displayName || `${uData.prenom || ''} ${uData.nom || ''}`.trim() || 'Formateur',
           creatorAvatar: uData.photoURL || null,
-          creatorBadge: uData.role === 'formateur' ? 'expert' : 'apprenant'
+          creatorBadge: badge
         };
       }));
       
@@ -288,27 +325,56 @@ export default function HomeScreen() {
   // ========================================
 
   const handleLike = async (videoId: string) => {
+    // ❌ Si déjà en train de liker cette vidéo, ignorer le click
+    if (likingVideos.has(videoId)) {
+      return;
+    }
+    
     const isLiked = likedVideosSet.has(videoId);
     
+    // 🔒 Marquer cette vidéo comme "en cours de like"
+    setLikingVideos(prev => new Set(prev).add(videoId));
+    
+    // 🔄 SEULEMENT optimistic update du STATE (coeur), PAS du compteur
     setLikedVideosSet(prev => { 
       const s = new Set(prev); 
       isLiked ? s.delete(videoId) : s.add(videoId); 
       return s; 
     });
     
-    setVideos(prev => prev.map(v => 
-      v.id === videoId 
-        ? { ...v, likes: v.likes + (isLiked ? -1 : 1) }
-        : v
-    ));
+    // ⚠️ PAS d'optimistic update du compteur !
+    // Le listener onSnapshot s'en occupera automatiquement
     
-    await updateDoc(doc(db, 'videos', videoId), { 
-      likes: increment(isLiked ? -1 : 1) 
-    });
-    
-    await updateDoc(doc(db, 'users', auth.currentUser!.uid), { 
-      likedVideos: isLiked ? arrayRemove(videoId) : arrayUnion(videoId) 
-    });
+    try {
+      // ☁️ Synchronise avec Firebase
+      await updateDoc(doc(db, 'videos', videoId), { 
+        likes: increment(isLiked ? -1 : 1) 
+      });
+      
+      await updateDoc(doc(db, 'users', auth.currentUser!.uid), { 
+        likedVideos: isLiked ? arrayRemove(videoId) : arrayUnion(videoId) 
+      });
+      
+      // ✅ Le listener onSnapshot détectera le changement et mettra à jour le compteur
+    } catch (error) {
+      console.error('Erreur like:', error);
+      
+      // 🔄 Annule uniquement le state liked/unliked en cas d'erreur
+      setLikedVideosSet(prev => { 
+        const s = new Set(prev); 
+        isLiked ? s.add(videoId) : s.delete(videoId); 
+        return s; 
+      });
+      
+      Alert.alert('Erreur', 'Impossible de synchroniser avec le serveur');
+    } finally {
+      // 🔓 Retirer du tracking une fois la synchro terminée
+      setLikingVideos(prev => {
+        const s = new Set(prev);
+        s.delete(videoId);
+        return s;
+      });
+    }
   };
 
   const handleFavorite = async (videoId: string) => {
@@ -380,26 +446,19 @@ export default function HomeScreen() {
   // ========================================
 
   const handleCommentAdded = (videoId: string) => {
-    setVideos(prev => prev.map(v => 
-      v.id === videoId 
-        ? { ...v, comments: (v.comments || 0) + 1 }
-        : v
-    ));
+    // ✅ Le listener onSnapshot s'occupera de mettre à jour le compteur
+    // Pas besoin d'optimistic update ici
   };
 
   const handleCommentDeleted = (videoId: string) => {
-    setVideos(prev => prev.map(v => 
-      v.id === videoId 
-        ? { ...v, comments: Math.max((v.comments || 0) - 1, 0) }
-        : v
-    ));
+    // ✅ Le listener onSnapshot s'occupera de mettre à jour le compteur
+    // Pas besoin d'optimistic update ici
   };
 
   // ========================================
-  // 📤 FONCTIONS PARTAGE (COMPLÈTES)
+  // 📤 FONCTIONS PARTAGE
   // ========================================
 
-  // 📥 Charge tous les utilisateurs
   const loadAllUsers = async () => {
     try {
       const currentUserId = auth.currentUser?.uid;
@@ -425,14 +484,12 @@ export default function HomeScreen() {
     }
   };
 
-  // 📤 Ouvre le modal de partage
   const handleShare = async (video: VideoData) => {
     setSelectedVideoForShare(video);
     await loadAllUsers();
     setShowShareModal(true);
   };
 
-  // 📲 Partage via WhatsApp
   const shareOnWhatsApp = async () => {
     if (!selectedVideoForShare) return;
     
@@ -453,7 +510,6 @@ export default function HomeScreen() {
     }
   };
 
-  // 📋 Copie le lien
   const handleCopyLink = async () => {
     if (!selectedVideoForShare) return;
     
@@ -475,7 +531,6 @@ export default function HomeScreen() {
     }
   };
 
-  // 👥 Partage à un utilisateur
   const shareToUser = async (targetUser: UserProfile) => {
     if (!selectedVideoForShare) return;
     
@@ -539,7 +594,6 @@ export default function HomeScreen() {
           const index = Math.round(e.nativeEvent.contentOffset.y / SCREEN_HEIGHT);
           
           if (index !== currentIndex && index >= 0 && index < videos.length) {
-            // ⏸️ Met en pause l'ancienne vidéo AVANT de changer d'index
             const oldVideo = videoRefs.current[videos[currentIndex]?.id];
             if (oldVideo) {
               try {
@@ -549,13 +603,11 @@ export default function HomeScreen() {
               }
             }
             
-            // 🔄 Change l'index et relance la nouvelle vidéo
             setCurrentIndex(index);
             setProgress(0);
             setIsPlaying(true);
             handleMarkAsWatched(videos[index].id);
             
-            // ▶️ Lance la nouvelle vidéo après un court délai
             setTimeout(() => {
               const newVideo = videoRefs.current[videos[index]?.id];
               if (newVideo) {
@@ -639,7 +691,6 @@ export default function HomeScreen() {
                   
                   <View style={styles.creatorTextInfo}>
                     <View style={styles.nameRow}>
-                      {/* 👆 NOM CLIQUABLE */}
                       <TouchableOpacity 
                         onPress={() => router.push(`/profile/${video.creatorId}`)}
                         activeOpacity={0.7}
@@ -653,6 +704,18 @@ export default function HomeScreen() {
                       {video.creatorBadge === 'expert' && (
                         <View style={styles.expertBadge}>
                           <Text style={styles.expertText}>EXPERT</Text>
+                        </View>
+                      )}
+                      
+                      {video.creatorBadge === 'diplome' && (
+                        <View style={[styles.expertBadge, { backgroundColor: '#3B82F6' }]}>
+                          <Text style={styles.expertText}>DIPLOMÉ</Text>
+                        </View>
+                      )}
+                      
+                      {video.creatorBadge === 'pro' && (
+                        <View style={[styles.expertBadge, { backgroundColor: '#10B981' }]}>
+                          <Text style={styles.expertText}>PRO</Text>
                         </View>
                       )}
                     </View>
@@ -774,7 +837,7 @@ export default function HomeScreen() {
         })}
       </ScrollView>
 
-      {/* MODAL PARTAGE COMPLET */}
+      {/* MODAL PARTAGE */}
       <Modal visible={showShareModal} transparent animationType="fade">
         <TouchableOpacity 
           style={styles.shareOverlay} 
@@ -1037,8 +1100,6 @@ const styles = StyleSheet.create({
   actionBtn: { alignItems: 'center', gap: 4 },
   actionCircle: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   actionCount: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  
-  // Styles modal partage
   shareOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   shareContentWrapper: { width: '100%', maxWidth: 400 },
   shareContent: { backgroundColor: '#fff', borderRadius: 24, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
@@ -1055,8 +1116,6 @@ const styles = StyleSheet.create({
   shareOptionCard: { alignItems: 'center', gap: 12, flex: 1 },
   shareIconGradient: { width: 80, height: 80, borderRadius: 24, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 12 },
   shareOptionLabel: { fontSize: 13, fontWeight: '600', color: '#374151', textAlign: 'center' },
-  
-  // Styles liste utilisateurs
   usersListContainer: { flex: 1, backgroundColor: '#F8F8F6' },
   usersListHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 50, paddingBottom: 20 },
   usersListTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
