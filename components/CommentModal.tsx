@@ -12,12 +12,18 @@ import {
 import { db, auth } from '../firebaseConfig';
 import { useRouter } from 'expo-router';
 
+// ========================================
+// 📦 INTERFACE - Props du composant
+// ========================================
+
 interface CommentModalProps {
   visible: boolean;
   onClose: () => void;
   videoId: string;
   creatorId: string; 
-  videoTitle: string; 
+  videoTitle: string;
+  onCommentAdded?: (videoId: string) => void;     // 🆕 CALLBACK POUR INCRÉMENTER LE COMPTEUR
+  onCommentDeleted?: (videoId: string) => void;   // 🆕 CALLBACK POUR DÉCRÉMENTER LE COMPTEUR
 }
 
 interface CommentData {
@@ -33,19 +39,48 @@ interface CommentData {
   likedBy?: string[];
 }
 
-export default function CommentModal({ visible, onClose, videoId, creatorId, videoTitle }: CommentModalProps) {
-  const router = useRouter();
-  const [comments, setComments] = useState<CommentData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [newComment, setNewComment] = useState('');
-  const [replyingTo, setReplyingTo] = useState<CommentData | null>(null);
-  const inputRef = useRef<TextInput>(null);
+// ========================================
+// 💬 COMPOSANT PRINCIPAL - CommentModal
+// ========================================
 
+export default function CommentModal({ 
+  visible, 
+  onClose, 
+  videoId, 
+  creatorId, 
+  videoTitle,
+  onCommentAdded,     // 🆕 CALLBACK AJOUT
+  onCommentDeleted    // 🆕 CALLBACK SUPPRESSION
+}: CommentModalProps) {
+  const router = useRouter();
+  
+  // ========================================
+  // 📊 ÉTATS (STATES)
+  // ========================================
+  
+  const [comments, setComments] = useState<CommentData[]>([]);        // Liste des commentaires
+  const [loading, setLoading] = useState(true);                       // État de chargement
+  const [newComment, setNewComment] = useState('');                   // Texte du nouveau commentaire
+  const [replyingTo, setReplyingTo] = useState<CommentData | null>(null);  // Commentaire auquel on répond
+  const inputRef = useRef<TextInput>(null);                           // Référence au champ de texte
+
+  // ========================================
+  // 🔄 EFFET - Chargement des commentaires en temps réel
+  // ========================================
+  
   useEffect(() => {
     if (!videoId || !visible) return;
+    
     setLoading(true);
-    const q = query(collection(db, 'comments'), where('videoId', '==', videoId));
+    
+    // 🔍 Requête Firebase : écoute en temps réel des commentaires
+    const q = query(
+      collection(db, 'comments'), 
+      where('videoId', '==', videoId)
+    );
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      // 📥 Transforme les documents Firebase en objets CommentData
       const fetched = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
@@ -61,21 +96,40 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
           likedBy: data.likedBy || []
         } as CommentData;
       });
-      setComments(fetched.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)));
+      
+      // 🔃 Trie les commentaires par date décroissante (plus récents en premier)
+      setComments(fetched.sort((a, b) => 
+        (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+      ));
+      
       setLoading(false);
-    }, (err) => { setLoading(false); });
+    }, (err) => { 
+      setLoading(false); 
+    });
+    
+    // 🧹 Nettoyage : arrête l'écoute quand le modal se ferme
     return () => unsubscribe();
   }, [videoId, visible]);
 
+  // ========================================
+  // 📤 FONCTION - Envoi d'un commentaire
+  // ========================================
+  
   const handleSend = async () => {
     const user = auth.currentUser;
+    
+    // ✅ Vérifications de base
     if (!newComment.trim() || !user) return;
 
     try {
+      // 👤 Récupère les infos de l'utilisateur
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       const userData = userDoc.data();
-      const fullName = `${userData?.prenom || ''} ${userData?.nom || ''}`.trim() || userData?.displayName || "Utilisateur";
+      const fullName = `${userData?.prenom || ''} ${userData?.nom || ''}`.trim() 
+        || userData?.displayName 
+        || "Utilisateur";
 
+      // 💬 Ajoute le commentaire dans Firebase
       await addDoc(collection(db, 'comments'), {
         videoId,
         text: newComment.trim(),
@@ -89,8 +143,17 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
         createdAt: serverTimestamp()
       });
 
-      await updateDoc(doc(db, 'videos', videoId), { comments: increment(1) });
+      // 🔢 Incrémente le compteur de commentaires dans Firebase
+      await updateDoc(doc(db, 'videos', videoId), { 
+        comments: increment(1) 
+      });
 
+      // 🔔 APPEL DU CALLBACK POUR METTRE À JOUR LE COMPTEUR DANS L'UI ⭐
+      if (onCommentAdded) {
+        onCommentAdded(videoId);
+      }
+
+      // 🔔 Notification pour le créateur de la vidéo
       if (creatorId !== user.uid) {
         await addDoc(collection(db, 'notifications'), {
           userId: creatorId,
@@ -106,6 +169,7 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
         });
       }
 
+      // 🔔 Notification pour la personne à qui on répond
       if (replyingTo && replyingTo.userId !== user.uid && replyingTo.userId !== creatorId) {
         await addDoc(collection(db, 'notifications'), {
           userId: replyingTo.userId,
@@ -121,15 +185,21 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
         });
       }
 
+      // ✅ Reset du formulaire
       setNewComment('');
       setReplyingTo(null);
       Keyboard.dismiss();
+      
     } catch (e: any) {
       console.error("❌ Erreur commentaire:", e);
       Alert.alert("Erreur", "Impossible d'ajouter le commentaire");
     }
   };
 
+  // ========================================
+  // ❤️ FONCTION - Like d'un commentaire
+  // ========================================
+  
   const handleLike = async (comment: CommentData) => {
     const user = auth.currentUser;
     if (!user) return;
@@ -139,11 +209,13 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
 
     try {
       if (isLiked) {
+        // ❌ Retirer le like
         await updateDoc(commentRef, {
           likes: increment(-1),
           likedBy: arrayRemove(user.uid)
         });
       } else {
+        // ❤️ Ajouter le like
         await updateDoc(commentRef, {
           likes: increment(1),
           likedBy: arrayUnion(user.uid)
@@ -154,6 +226,10 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
     }
   };
 
+  // ========================================
+  // 🗑️ FONCTION - Suppression d'un commentaire
+  // ========================================
+  
   const handleDelete = async (comment: CommentData) => {
     const user = auth.currentUser;
     if (!user) return;
@@ -161,21 +237,31 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
     const isMyComment = comment.userId === user.uid;
     const isMyVideo = creatorId === user.uid;
 
+    // ✅ Vérification des permissions
     if (!isMyComment && !isMyVideo) {
       Alert.alert("Non autorisé", "Vous ne pouvez supprimer que vos propres commentaires ou ceux sur vos vidéos");
       return;
     }
 
+    // 🗑️ Fonction de suppression
     const performDelete = async () => {
       try {
         await deleteDoc(doc(db, 'comments', comment.id));
-        await updateDoc(doc(db, 'videos', videoId), { comments: increment(-1) });
+        await updateDoc(doc(db, 'videos', videoId), { 
+          comments: increment(-1) 
+        });
+        
+        // 🔔 APPEL DU CALLBACK POUR DÉCRÉMENTER LE COMPTEUR ⭐
+        if (onCommentDeleted) {
+          onCommentDeleted(videoId);
+        }
       } catch (e: any) {
         console.error('❌ Erreur suppression:', e);
         Alert.alert("Erreur", "Impossible de supprimer");
       }
     };
 
+    // 🖥️ Dialogue de confirmation (adapté à la plateforme)
     if (Platform.OS === 'web') {
       if (confirm('Voulez-vous vraiment supprimer ce commentaire ?')) {
         await performDelete();
@@ -192,24 +278,37 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
     }
   };
 
+  // ========================================
+  // 🧭 FONCTION - Navigation vers profil
+  // ========================================
+  
   const handleNavigate = async (uid: string) => {
     onClose();
     const currentUser = auth.currentUser;
+    
     if (uid === currentUser?.uid) {
+      // 👤 Mon propre profil
       router.push('/(tabs)/profile' as any);
     } else {
+      // 👥 Profil d'un autre utilisateur
       router.push(`/profile/${uid}` as any);
     }
   };
 
+  // ========================================
+  // ⏰ FONCTION - Formatage du temps
+  // ========================================
+  
   const formatTime = (timestamp: any) => {
     if (!timestamp) return '';
+    
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
+    
     if (minutes < 1) return "À l'instant";
     if (minutes < 60) return `${minutes}min`;
     if (hours < 24) return `${hours}h`;
@@ -217,31 +316,49 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
     return `${days}j`;
   };
 
+  // 📋 Filtre les commentaires principaux (sans réponse)
   const organizedComments = comments.filter(c => !c.replyToId);
 
+  // ========================================
+  // 🎨 RENDU DE L'INTERFACE
+  // ========================================
+
   return (
-    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+    <Modal 
+      visible={visible} 
+      animationType="slide" 
+      transparent={true} 
+      onRequestClose={onClose}
+    >
       <View style={styles.overlay}>
+        {/* 🌑 Arrière-plan semi-transparent */}
         <TouchableOpacity 
           style={styles.backdrop} 
           activeOpacity={1} 
           onPress={onClose}
         />
         
+        {/* 📱 Conteneur principal du modal */}
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
           style={styles.modalContent}
         >
+          {/* 🎚️ Poignée de glissement */}
           <View style={styles.dragHandle} />
           
+          {/* 📋 En-tête avec titre et bouton fermer */}
           <View style={styles.header}>
-            <Text style={styles.title}>{comments.length} Commentaire{comments.length > 1 ? 's' : ''}</Text>
+            <Text style={styles.title}>
+              {comments.length} Commentaire{comments.length > 1 ? 's' : ''}
+            </Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color="#000" />
             </TouchableOpacity>
           </View>
           
+          {/* 📜 Liste des commentaires */}
           {loading ? (
+            // ⏳ Indicateur de chargement
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#7459f0" />
             </View>
@@ -251,6 +368,8 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
               keyExtractor={item => item.id}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
+              
+              /* 📭 Affichage si aucun commentaire */
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
                   <Ionicons name="chatbubbles-outline" size={64} color="#D1D5DB" />
@@ -258,6 +377,8 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                   <Text style={styles.emptySubtext}>Soyez le premier à commenter !</Text>
                 </View>
               }
+              
+              /* 💬 Rendu de chaque commentaire */
               renderItem={({ item: parentComment }) => {
                 const isLiked = parentComment.likedBy?.includes(auth.currentUser?.uid || '');
                 const isMyComment = parentComment.userId === auth.currentUser?.uid;
@@ -267,7 +388,9 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
 
                 return (
                   <View style={styles.commentWrapper}>
+                    {/* 💬 COMMENTAIRE PRINCIPAL */}
                     <View style={styles.commentItem}>
+                      {/* 🖼️ Avatar du commentateur */}
                       <TouchableOpacity onPress={() => handleNavigate(parentComment.userId)}>
                         <LinearGradient
                           colors={['#7459f0', '#242A65']}
@@ -276,13 +399,17 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                           style={styles.avatarGradient}
                         >
                           <Image 
-                            source={{ uri: parentComment.userAvatar || `https://ui-avatars.com/api/?name=${parentComment.userName}` }} 
+                            source={{ 
+                              uri: parentComment.userAvatar || `https://ui-avatars.com/api/?name=${parentComment.userName}` 
+                            }} 
                             style={styles.avatar} 
                           />
                         </LinearGradient>
                       </TouchableOpacity>
                       
+                      {/* 📝 Contenu du commentaire */}
                       <View style={{flex: 1}}>
+                        {/* 👤 En-tête : nom + temps + bouton supprimer */}
                         <View style={styles.commentHeader}>
                           <View style={{flex: 1}}>
                             <Text style={styles.username}>{parentComment.userName}</Text>
@@ -290,23 +417,45 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                           </View>
                           
                           {canDelete && (
-                            <TouchableOpacity onPress={() => handleDelete(parentComment)} style={styles.deleteBtn}>
+                            <TouchableOpacity 
+                              onPress={() => handleDelete(parentComment)} 
+                              style={styles.deleteBtn}
+                            >
                               <Ionicons name="trash-outline" size={18} color="#EF4444" />
                             </TouchableOpacity>
                           )}
                         </View>
 
+                        {/* 📄 Texte du commentaire */}
                         <Text style={styles.text}>{parentComment.text}</Text>
                         
+                        {/* ⚡ Actions : like + répondre */}
                         <View style={styles.actionsRow}>
-                          <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(parentComment)}>
-                            <Ionicons name={isLiked ? "heart" : "heart-outline"} size={18} color={isLiked ? "#EF4444" : "#6B7280"} />
+                          {/* ❤️ Bouton Like */}
+                          <TouchableOpacity 
+                            style={styles.actionBtn} 
+                            onPress={() => handleLike(parentComment)}
+                          >
+                            <Ionicons 
+                              name={isLiked ? "heart" : "heart-outline"} 
+                              size={18} 
+                              color={isLiked ? "#EF4444" : "#6B7280"} 
+                            />
                             {(parentComment.likes || 0) > 0 && (
-                              <Text style={[styles.actionText, isLiked && {color: '#EF4444'}]}>{parentComment.likes}</Text>
+                              <Text style={[styles.actionText, isLiked && {color: '#EF4444'}]}>
+                                {parentComment.likes}
+                              </Text>
                             )}
                           </TouchableOpacity>
 
-                          <TouchableOpacity style={styles.actionBtn} onPress={() => { setReplyingTo(parentComment); inputRef.current?.focus(); }}>
+                          {/* 💬 Bouton Répondre */}
+                          <TouchableOpacity 
+                            style={styles.actionBtn} 
+                            onPress={() => { 
+                              setReplyingTo(parentComment); 
+                              inputRef.current?.focus(); 
+                            }}
+                          >
                             <Ionicons name="chatbubble-outline" size={16} color="#6B7280" />
                             <Text style={styles.actionText}>Répondre</Text>
                           </TouchableOpacity>
@@ -314,6 +463,7 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                       </View>
                     </View>
 
+                    {/* 💬 RÉPONSES AU COMMENTAIRE */}
                     {replies.length > 0 && (
                       <View style={styles.repliesContainer}>
                         {replies.map(reply => {
@@ -323,6 +473,7 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
 
                           return (
                             <View key={reply.id} style={styles.replyItem}>
+                              {/* 🖼️ Avatar de la réponse */}
                               <TouchableOpacity onPress={() => handleNavigate(reply.userId)}>
                                 <LinearGradient
                                   colors={['#9333ea', '#7459f0']}
@@ -330,10 +481,16 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                                   end={{ x: 1, y: 1 }}
                                   style={styles.replyAvatarGradient}
                                 >
-                                  <Image source={{ uri: reply.userAvatar || `https://ui-avatars.com/api/?name=${reply.userName}` }} style={styles.replyAvatar} />
+                                  <Image 
+                                    source={{ 
+                                      uri: reply.userAvatar || `https://ui-avatars.com/api/?name=${reply.userName}` 
+                                    }} 
+                                    style={styles.replyAvatar} 
+                                  />
                                 </LinearGradient>
                               </TouchableOpacity>
                               
+                              {/* 📝 Contenu de la réponse */}
                               <View style={{flex: 1}}>
                                 <View style={styles.commentHeader}>
                                   <View style={{flex: 1}}>
@@ -342,24 +499,48 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                                   </View>
                                   
                                   {canDeleteReply && (
-                                    <TouchableOpacity onPress={() => handleDelete(reply)} style={styles.deleteBtn}>
+                                    <TouchableOpacity 
+                                      onPress={() => handleDelete(reply)} 
+                                      style={styles.deleteBtn}
+                                    >
                                       <Ionicons name="trash-outline" size={16} color="#EF4444" />
                                     </TouchableOpacity>
                                   )}
                                 </View>
 
-                                <Text style={styles.replyLabel}>En réponse à @{reply.replyToName}</Text>
+                                {/* 🏷️ Label "En réponse à" */}
+                                <Text style={styles.replyLabel}>
+                                  En réponse à @{reply.replyToName}
+                                </Text>
+                                
+                                {/* 📄 Texte de la réponse */}
                                 <Text style={styles.replyText}>{reply.text}</Text>
                                 
+                                {/* ⚡ Actions de la réponse */}
                                 <View style={styles.actionsRow}>
-                                  <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(reply)}>
-                                    <Ionicons name={isReplyLiked ? "heart" : "heart-outline"} size={16} color={isReplyLiked ? "#EF4444" : "#6B7280"} />
+                                  <TouchableOpacity 
+                                    style={styles.actionBtn} 
+                                    onPress={() => handleLike(reply)}
+                                  >
+                                    <Ionicons 
+                                      name={isReplyLiked ? "heart" : "heart-outline"} 
+                                      size={16} 
+                                      color={isReplyLiked ? "#EF4444" : "#6B7280"} 
+                                    />
                                     {(reply.likes || 0) > 0 && (
-                                      <Text style={[styles.actionText, isReplyLiked && {color: '#EF4444'}]}>{reply.likes}</Text>
+                                      <Text style={[styles.actionText, isReplyLiked && {color: '#EF4444'}]}>
+                                        {reply.likes}
+                                      </Text>
                                     )}
                                   </TouchableOpacity>
 
-                                  <TouchableOpacity style={styles.actionBtn} onPress={() => { setReplyingTo(reply); inputRef.current?.focus(); }}>
+                                  <TouchableOpacity 
+                                    style={styles.actionBtn} 
+                                    onPress={() => { 
+                                      setReplyingTo(reply); 
+                                      inputRef.current?.focus(); 
+                                    }}
+                                  >
                                     <Ionicons name="chatbubble-outline" size={14} color="#6B7280" />
                                     <Text style={styles.replyActionText}>Répondre</Text>
                                   </TouchableOpacity>
@@ -376,16 +557,21 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
             />
           )}
 
+          {/* ✍️ ZONE DE SAISIE DE COMMENTAIRE */}
           <View style={styles.inputArea}>
+            {/* 🏷️ Indicateur de réponse */}
             {replyingTo && (
               <View style={styles.replyIndicator}>
-                <Text style={styles.replyIndicatorText}>Réponse à @{replyingTo.userName}</Text>
+                <Text style={styles.replyIndicatorText}>
+                  Réponse à @{replyingTo.userName}
+                </Text>
                 <TouchableOpacity onPress={() => setReplyingTo(null)}>
                   <Ionicons name="close-circle" size={18} color="#7459f0" />
                 </TouchableOpacity>
               </View>
             )}
             
+            {/* 📝 Champ de texte + bouton envoyer */}
             <View style={styles.inputRow}>
               <TextInput 
                 ref={inputRef}
@@ -399,7 +585,13 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
                 onSubmitEditing={handleSend}
                 blurOnSubmit={false}
               />
-              <TouchableOpacity onPress={handleSend} disabled={!newComment.trim()} activeOpacity={0.7}>
+              
+              {/* 📤 Bouton Envoyer */}
+              <TouchableOpacity 
+                onPress={handleSend} 
+                disabled={!newComment.trim()} 
+                activeOpacity={0.7}
+              >
                 <LinearGradient
                   colors={newComment.trim() ? ['#7459f0', '#9333ea'] : ['#D1D5DB', '#9CA3AF']}
                   start={{ x: 0, y: 0 }}
@@ -416,6 +608,10 @@ export default function CommentModal({ visible, onClose, videoId, creatorId, vid
     </Modal>
   );
 }
+
+// ========================================
+// 🎨 STYLES CSS
+// ========================================
 
 const styles = StyleSheet.create({
   overlay: { 
