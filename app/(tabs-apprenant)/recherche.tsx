@@ -1,50 +1,66 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, ScrollView, 
-  TouchableOpacity, Image, Platform, Modal, Dimensions, ActivityIndicator 
+  TouchableOpacity, Image, Platform, Modal, Dimensions, ActivityIndicator, Alert 
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av'; 
+import { LinearGradient } from 'expo-linear-gradient';
 
 // --- IMPORTS FIREBASE ---
-import { collection, getDocs } from 'firebase/firestore'; 
-import { db } from '../../firebaseConfig'; 
+import { 
+  collection, 
+  getDocs, 
+  query, 
+  where, 
+  addDoc, 
+  deleteDoc, 
+  doc,
+  getDoc,
+  serverTimestamp 
+} from 'firebase/firestore'; 
+import { db, auth } from '../../firebaseConfig'; 
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
-// --- CATÉGORIES (Boutons de filtres) ---
+// --- CATÉGORIES ---
 const CATEGORIES = [
-  { id: 'all', label: 'Tout', icon: '🌟' },
-  { id: 'Marketing', label: 'Marketing Digital', icon: '📱' },
-  { id: 'IA', label: 'Intelligence Artificielle', icon: '🤖' },
-  { id: 'E-commerce', label: 'E-commerce', icon: '🛒' },
-  { id: 'Design', label: 'Design', icon: '🎨' },
-  { id: 'Dev', label: 'Développement', icon: '💻' },
+  { id: 'all', label: 'Tout', icon: '🌟', emoji: '✨' },
+  { id: 'digital-marketing', label: 'Marketing Digital', icon: '📱', emoji: '📱' },
+  { id: 'ia', label: 'Intelligence Artificielle', icon: '🤖', emoji: '🤖' },
+  { id: 'ecommerce', label: 'E-commerce', icon: '🛒', emoji: '🛒' },
+  { id: 'design', label: 'Design', icon: '🎨', emoji: '🎨' },
+  { id: 'dev', label: 'Développement', icon: '💻', emoji: '💻' },
+  { id: 'business', label: 'Business', icon: '📊', emoji: '📊' },
 ];
 
-const MOCK_CREATORS = [
-  { id: 'c1', name: 'Marie Dupont', followers: '12.5k', tag: 'Marketing', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150' },
-  { id: 'c2', name: 'Thomas AI', followers: '28.9k', tag: 'IA', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150' },
-  { id: 'c3', name: 'Sophie Dev', followers: '5k', tag: 'Dev', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150' },
-];
+const TOP_MEDALS = ['🥇', '🥈', '🥉'];
 
 // --- TYPES ---
 interface VideoData {
   id: string;
   title: string;
-  creator: string;
+  creatorId: string;
+  creatorName: string;
+  creatorAvatar?: string;
   videoUrl: string;
-  tag: string; 
+  thumbnailUrl?: string;
+  category: string;
   description?: string;
+  views?: number;
+  likes?: number;
+  createdAt?: any;
+  tags?: string[];
 }
 
-// Type pour les créateurs
 interface CreatorData {
   id: string;
   name: string;
-  followers: string;
-  tag: string;
-  avatar: string;
+  photoURL?: string;
+  followers?: number;
+  videosCount?: number;
+  bio?: string;
+  category?: string;
 }
 
 export default function RechercheScreen() {
@@ -57,404 +73,186 @@ export default function RechercheScreen() {
   const [followedIds, setFollowedIds] = useState<string[]>([]);
   
   const [videos, setVideos] = useState<VideoData[]>([]);
+  const [creators, setCreators] = useState<CreatorData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingCreators, setLoadingCreators] = useState(false);
+  const [creatorsLoaded, setCreatorsLoaded] = useState(false);
   
-  // États pour les Modals (Vidéo & Profil)
   const [selectedVideo, setSelectedVideo] = useState<VideoData | null>(null);
   const [selectedCreator, setSelectedCreator] = useState<CreatorData | null>(null);
+  const [creatorVideos, setCreatorVideos] = useState<VideoData[]>([]);
 
-  // --- CHARGEMENT FIREBASE ---
+  // --- UTILITAIRES ---
+  const getCategoryLabel = (category: string) => {
+    const cat = CATEGORIES.find(c => c.id.toLowerCase() === category.toLowerCase());
+    return cat ? cat.label : category;
+  };
+
+  const getCategoryEmoji = (category: string) => {
+    const cat = CATEGORIES.find(c => c.id.toLowerCase() === category.toLowerCase());
+    return cat ? cat.emoji : '📚';
+  };
+
+  // --- CHARGEMENT VIDÉOS ---
   useEffect(() => {
     const fetchVideos = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "videos"));
-        const videoList: VideoData[] = [];
+        setLoading(true);
+        const snapshot = await getDocs(collection(db, "videos"));
+        const videoList: VideoData[] = snapshot.docs.map(docSnap => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        } as VideoData));
+
+        const enriched = await Promise.all(videoList.map(async (v) => {
+          const userDoc = await getDoc(doc(db, 'users', v.creatorId));
+          return {
+            ...v,
+            creatorName: userDoc.exists() ? (userDoc.data().prenom + " " + userDoc.data().nom) : v.creatorName
+          };
+        }));
         
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          
-          // Récupération de la catégorie brute (ex: "dev")
-          const rawCat = data.category ? String(data.category).toLowerCase().trim() : '';
-
-          // ---------------------------------------------------------
-          // 📍 --- ICI TU CHANGES LES NOMS (MAPPING) ---
-          // ---------------------------------------------------------
-          let displayTag = data.category || 'Général'; // Valeur par défaut
-
-          // Si la base de données renvoie 'x', on affiche 'y'
-          if (rawCat === 'dev') displayTag = 'Développeur';
-          else if (rawCat === 'ecommerce') displayTag = 'E-commerce';
-          else if (rawCat === 'ia') displayTag = 'Intelligence Artificielle';
-          else if (rawCat === 'marketing') displayTag = 'Marketing Digital';
-          else if (rawCat === 'design') displayTag = 'Design Graphique';
-          // Tu peux rajouter d'autres lignes ici...
-          // ---------------------------------------------------------
-
-          videoList.push({
-            id: doc.id,
-            title: data.title || 'Sans titre',
-            creator: data.creator || 'Inconnu',
-            videoUrl: data.videoUrl || '',
-            tag: displayTag, // On utilise le nom transformé
-            description: data.description || ''
-          });
-        });
-        setVideos(videoList);
-      } catch (error) {
-        console.error("Erreur Firebase:", error);
-      } finally {
-        setLoading(false);
-      }
+        enriched.sort((a, b) => (b.likes || 0) + (b.views || 0) - ((a.likes || 0) + (a.views || 0)));
+        setVideos(enriched);
+      } catch (error) { console.error(error); } finally { setLoading(false); }
     };
     fetchVideos();
   }, []);
 
-  // --- LOGIQUE DE FILTRE ---
-  const filteredVideos = useMemo(() => {
-    return videos.filter(v => {
-      const searchLower = search.toLowerCase().trim();
-      const videoTagLower = v.tag.toLowerCase(); // ex: "développeur"
-      const videoTitleLower = v.title.toLowerCase();
+  // --- CHARGEMENT FORMATEURS ---
+  useEffect(() => {
+    if (activeTab === 'creators' && !creatorsLoaded) {
+      const fetchCreators = async () => {
+        try {
+          setLoadingCreators(true);
+          const q = query(collection(db, "users"), where("role", "==", "formateur"));
+          const snapshot = await getDocs(q);
+          const results = await Promise.all(snapshot.docs.map(async (d) => {
+            const vSnap = await getDocs(query(collection(db, "videos"), where("creatorId", "==", d.id)));
+            const fSnap = await getDocs(query(collection(db, "abonnements"), where("formateurId", "==", d.id)));
+            return {
+              id: d.id,
+              name: d.data().prenom + " " + d.data().nom,
+              photoURL: d.data().photoURL,
+              followers: fSnap.size,
+              videosCount: vSnap.size,
+              category: d.data().specialite
+            };
+          }));
+          setCreators(results);
+          setCreatorsLoaded(true);
+        } finally { setLoadingCreators(false); }
+      };
+      fetchCreators();
+    }
+  }, [activeTab]);
 
-      // 1. Recherche TEXTUELLE
-      const matchesSearch = 
-          videoTitleLower.includes(searchLower) || 
-          videoTagLower.includes(searchLower);
-
-      // 2. Filtre par ENTONNOIR
-      let matchesCategoryFilter = false;
-      if (selectedCat === 'all') {
-        matchesCategoryFilter = true;
-      } else {
-        const filterId = selectedCat.toLowerCase().trim(); // ex: "dev"
-        
-        // On vérifie si le tag affiché contient l'ID du filtre ou inversement
-        // Cela permet que "Développeur" soit trouvé par le filtre "Dev"
-        matchesCategoryFilter = 
-            videoTagLower.includes(filterId) ||                 
-            filterId.includes(videoTagLower) ||
-            (filterId === 'ia' && videoTagLower.includes('intelligence')) || 
-            (filterId === 'dev' && videoTagLower.includes('développeur')); 
-      }
-
-      return matchesCategoryFilter && matchesSearch;
-    });
-  }, [videos, search, selectedCat]);
-
-  // Filtre Créateurs
-  const filteredCreators = useMemo(() => {
-    return MOCK_CREATORS.filter(c => {
-        const matchesSearch = 
-            c.name.toLowerCase().includes(search.toLowerCase()) || 
-            c.tag.toLowerCase().includes(search.toLowerCase());
-        const matchesCategory = selectedCat === 'all' || c.tag.toLowerCase().includes(selectedCat.toLowerCase());
-        return matchesCategory && matchesSearch;
-    });
-  }, [search, selectedCat]);
-
-  // --- ACTIONS ---
-  const handleSearch = () => {
-    if (search.trim().length > 0) {
-      setHistory(prev => [search, ...prev.filter(item => item !== search)].slice(0, 5));
+  // --- SUIVRE / NE PLUS SUIVRE ---
+  const toggleFollow = async (formateurId: string) => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) return Alert.alert("Erreur", "Connectez-vous");
+    const q = query(collection(db, "abonnements"), where("apprenantId", "==", uid), where("formateurId", "==", formateurId));
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      await addDoc(collection(db, "abonnements"), { apprenantId: uid, formateurId, createdAt: serverTimestamp() });
+      setFollowedIds([...followedIds, formateurId]);
+    } else {
+      await deleteDoc(doc(db, "abonnements", snap.docs[0].id));
+      setFollowedIds(followedIds.filter(id => id !== formateurId));
     }
   };
 
-  const deleteFromHistory = (itemToDelete: string) => {
-    setHistory(prev => prev.filter(item => item !== itemToDelete));
-  };
-
-  const toggleFollow = (id: string) => {
-    setFollowedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  const activeCategoryLabel = CATEGORIES.find(c => c.id === selectedCat)?.label || 'Filtres';
+  // --- FILTRES ---
+  const filteredVideos = useMemo(() => videos.filter(v => 
+    (selectedCat === 'all' || v.category === selectedCat) &&
+    (v.title.toLowerCase().includes(search.toLowerCase()))
+  ), [videos, search, selectedCat]);
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.title}>Recherche</Text>
-        
         <View style={styles.searchRow}>
           <View style={styles.searchBarContainer}>
             <TextInput 
               style={styles.input} 
-              placeholder={activeTab === 'videos' ? "Rechercher (Titre, Sujet...)" : "Rechercher un formateur..."}
+              placeholder="Rechercher..."
               value={search} 
               onChangeText={setSearch}
-              onSubmitEditing={handleSearch}
-              returnKeyType="search"
             />
-            <TouchableOpacity onPress={handleSearch} style={{padding: 5}}>
-              <Ionicons name="search" size={20} color="#9333EA" />
-            </TouchableOpacity>
+            <Ionicons name="search" size={20} color="#9333EA" />
           </View>
-
           <TouchableOpacity style={styles.filterBtn} onPress={() => setShowFilterModal(true)}>
             <Ionicons name="funnel" size={20} color={selectedCat !== 'all' ? "#9333EA" : "#18181B"} />
-            {selectedCat !== 'all' && <View style={styles.filterDot} />}
           </TouchableOpacity>
         </View>
 
-        {/* TABS */}
         <View style={styles.tabContainer}>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'videos' && styles.activeTab]} 
-            onPress={() => setActiveTab('videos')}
-          >
-            <Text style={[styles.tabText, activeTab === 'videos' && styles.activeTabText]}>Vidéos</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.tab, activeTab === 'creators' && styles.activeTab]} 
-            onPress={() => setActiveTab('creators')}
-          >
-            <Text style={[styles.tabText, activeTab === 'creators' && styles.activeTabText]}>Formateurs</Text>
-          </TouchableOpacity>
+          {['videos', 'creators'].map((tab) => (
+            <TouchableOpacity key={tab} style={styles.tab} onPress={() => setActiveTab(tab as any)}>
+              {activeTab === tab ? (
+                <LinearGradient colors={['#7459f0', '#9333ea', '#242A65']} start={{x:0, y:0}} end={{x:1, y:0}} style={styles.activeTabGradient}>
+                  <Text style={styles.activeTabText}>{tab === 'videos' ? 'Vidéos' : 'Formateurs'}</Text>
+                </LinearGradient>
+              ) : (
+                <Text style={styles.tabText}>{tab === 'videos' ? 'Vidéos' : 'Formateurs'}</Text>
+              )}
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
-      {/* CONTENT */}
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardDismissMode="on-drag">
-        
-        {/* BADGE FILTRE ACTIF */}
-        {selectedCat !== 'all' && (
-          <View style={styles.activeFilterBadge}>
-            <Text style={styles.activeFilterText}>Filtre : {activeCategoryLabel}</Text>
-            <TouchableOpacity onPress={() => setSelectedCat('all')}>
-              <Ionicons name="close-circle" size={18} color="#9333EA" style={{marginLeft: 5}}/>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {loading && activeTab === 'videos' ? (
-           <ActivityIndicator size="large" color="#9333EA" style={{marginTop: 50}} />
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {loading || loadingCreators ? (
+          <ActivityIndicator size="large" color="#9333EA" style={{marginTop: 50}} />
         ) : (
-          <>
-            {/* VUE VIDÉOS */}
-            {activeTab === 'videos' && (
-              <>
-                <Text style={styles.sectionTitle}>
-                  {search ? `Résultats` : "🔥 Tendances"}
-                </Text>
-                
-                {filteredVideos.length === 0 ? (
-                  <View style={{alignItems: 'center', marginTop: 30}}>
-                    <Ionicons name="search-outline" size={50} color="#D1D5DB" />
-                    <Text style={styles.emptyText}>Aucune vidéo trouvée pour "{search}"</Text>
-                  </View>
-                ) : (
-                  filteredVideos.map((video, index) => (
-                    <TouchableOpacity 
-                      key={video.id} 
-                      style={styles.textOnlyCard}
-                      onPress={() => setSelectedVideo(video)}
-                    >
-                      {search === '' && (
-                        <Text style={styles.rank}>#{index + 1}</Text>
-                      )}
-                      
-                      <View style={styles.videoInfo}>
-                        <Text style={styles.vTitle} numberOfLines={2}>{video.title}</Text>
-                        <Text style={styles.vCreator}>Par {video.creator}</Text>
-                        
-                        {/* TAG / CATÉGORIE (MODIFIÉ) */}
-                        <View style={[
-                          styles.tagBadge, 
-                          video.tag.toLowerCase().includes(search.toLowerCase()) && search !== '' ? {backgroundColor: '#9333EA'} : {}
-                        ]}>
-                          <Text style={[
-                            styles.tagText,
-                            video.tag.toLowerCase().includes(search.toLowerCase()) && search !== '' ? {color: '#FFF'} : {}
-                          ]}>{video.tag}</Text>
-                        </View>
-                      </View>
-
-                      <Ionicons name="chevron-forward" size={20} color="#D4D4D8" />
-                    </TouchableOpacity>
-                  ))
-                )}
-                
-                {/* Historique... (Code inchangé) */}
-                {history.length > 0 && search === '' && (
-                  <View style={styles.historySection}>
-                     {/* ...Contenu historique... */}
-                     {history.map((item, index) => (
-                      <View key={index} style={styles.historyRow}>
-                        <TouchableOpacity style={styles.historyClickable} onPress={() => setSearch(item)}>
-                            <Ionicons name="time-outline" size={20} color="#A1A1AA" />
-                            <Text style={styles.historyText}>{item}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => deleteFromHistory(item)}>
-                            <Ionicons name="close" size={18} color="#A1A1AA" />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </>
-            )}
-
-            {/* VUE CRÉATEURS (Mise à jour pour être cliquable) */}
-            {activeTab === 'creators' && (
-              <>
-                 <Text style={styles.sectionTitle}>⭐ Formateurs suggérés</Text>
-                 {filteredCreators.length === 0 ? (
-                    <Text style={styles.emptyText}>Aucun formateur trouvé.</Text>
-                 ) : (
-                   filteredCreators.map(creator => (
-                    <TouchableOpacity 
-                      key={creator.id} 
-                      style={styles.creatorCard}
-                      onPress={() => setSelectedCreator(creator)}
-                    >
-                      <Image source={{ uri: creator.avatar }} style={styles.avatar} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.creatorName}>{creator.name}</Text>
-                        <Text style={styles.creatorFollowers}>{creator.followers} abonnés • {creator.tag}</Text>
-                      </View>
-                      <TouchableOpacity
-                        style={[styles.followBtn, followedIds.includes(creator.id) && styles.followedBtnActive]}
-                        onPress={() => toggleFollow(creator.id)}
-                      >
-                        <Text style={[styles.followBtnText, followedIds.includes(creator.id) && styles.followedBtnTextActive]}>
-                          {followedIds.includes(creator.id) ? 'Suivi' : 'Suivre'}
-                        </Text>
-                      </TouchableOpacity>
-                    </TouchableOpacity>
-                  ))
-                 )}
-              </>
-            )}
-          </>
+          activeTab === 'videos' ? (
+            filteredVideos.map((video, index) => (
+              <TouchableOpacity key={video.id} style={[styles.videoCard, index < 3 && search === '' && styles.topVideoCard]} onPress={() => setSelectedVideo(video)}>
+                <View style={styles.emojiContainer}>
+                  <Text style={styles.categoryEmoji}>{getCategoryEmoji(video.category)}</Text>
+                  {index < 3 && search === '' && <Text style={styles.medalEmoji}>{TOP_MEDALS[index]}</Text>}
+                </View>
+                <View style={styles.videoInfo}>
+                  <Text style={styles.vTitle} numberOfLines={2}>{video.title}</Text>
+                  <Text style={styles.vCreator}>Par {video.creatorName}</Text>
+                  <View style={styles.categoryBadge}><Text style={styles.categoryText}>{getCategoryLabel(video.category)}</Text></View>
+                  <Text style={styles.statText}>👁️ {video.views}  ❤️ {video.likes}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#D4D4D8" />
+              </TouchableOpacity>
+            ))
+          ) : (
+            creators.map(creator => (
+              <TouchableOpacity key={creator.id} style={styles.creatorCard} onPress={() => setSelectedCreator(creator)}>
+                <Image source={{ uri: creator.photoURL || 'https://via.placeholder.com/150' }} style={styles.avatar} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.creatorName}>{creator.name}</Text>
+                  <Text style={styles.creatorFollowers}>{creator.followers} abonnés • {creator.videosCount} vidéos</Text>
+                </View>
+                <TouchableOpacity onPress={() => toggleFollow(creator.id)}>
+                  <LinearGradient colors={followedIds.includes(creator.id) ? ['#FBA31A', '#F59E0B'] : ['#7459f0', '#9333ea', '#242A65']} style={styles.followBtn}>
+                    <Text style={styles.followBtnText}>{followedIds.includes(creator.id) ? 'Suivi' : 'Suivre'}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))
+          )
         )}
       </ScrollView>
 
-      {/* --- MODAL FILTRES --- */}
+      {/* MODAL FILTRES */}
       <Modal visible={showFilterModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filtrer par sujet</Text>
-              <TouchableOpacity onPress={() => setShowFilterModal(false)}>
-                <Ionicons name="close" size={24} />
+            <Text style={styles.modalTitle}>Filtrer par sujet</Text>
+            {CATEGORIES.map(cat => (
+              <TouchableOpacity key={cat.id} style={[styles.filterOption, selectedCat === cat.id && {backgroundColor: '#F3E8FF'}]} onPress={() => { setSelectedCat(cat.id); setShowFilterModal(false); }}>
+                <Text style={{ fontSize: 20 }}>{cat.icon}  {cat.label}</Text>
               </TouchableOpacity>
-            </View>
-            <ScrollView>
-              {CATEGORIES.map(cat => (
-                <TouchableOpacity 
-                  key={cat.id} 
-                  style={[styles.filterOption, selectedCat === cat.id && {backgroundColor: '#F3E8FF'}]} 
-                  onPress={() => { setSelectedCat(cat.id); setShowFilterModal(false); }}
-                >
-                  <Text style={{ fontSize: 22 }}>{cat.icon}</Text>
-                  <Text style={[styles.filterLabel, selectedCat === cat.id && { color: '#9333EA', fontWeight: 'bold' }]}>
-                    {cat.label}
-                  </Text>
-                  {selectedCat === cat.id && <Ionicons name="checkmark-circle" size={22} color="#9333EA" />}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            ))}
+            <TouchableOpacity onPress={() => setShowFilterModal(false)} style={{marginTop: 20, alignSelf: 'center'}}><Text style={{color:'#9333EA', fontWeight:'bold'}}>Fermer</Text></TouchableOpacity>
           </View>
-        </View>
-      </Modal>
-
-      {/* --- MODAL PROFIL FORMATEUR (NOUVEAU) --- */}
-      <Modal 
-        visible={selectedCreator !== null} 
-        animationType="slide" 
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSelectedCreator(null)}
-      >
-        <View style={[styles.container, {paddingTop: 20}]}>
-             <View style={{flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20}}>
-                <TouchableOpacity onPress={() => setSelectedCreator(null)} style={{padding: 10, backgroundColor: '#F3F4F6', borderRadius: 20}}>
-                    <Ionicons name="close" size={24} color="#333" />
-                </TouchableOpacity>
-             </View>
-
-             {selectedCreator && (
-                 <ScrollView contentContainerStyle={{padding: 20, alignItems: 'center'}}>
-                    <Image source={{ uri: selectedCreator.avatar }} style={{ width: 100, height: 100, borderRadius: 50, marginBottom: 15 }} />
-                    <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#1F2937' }}>{selectedCreator.name}</Text>
-                    <Text style={{ color: '#6B7280', marginBottom: 20 }}>Expert en {selectedCreator.tag} • {selectedCreator.followers} abonnés</Text>
-                    
-                    <TouchableOpacity
-                        style={[
-                            styles.followBtn, 
-                            { width: 200, alignItems: 'center', marginBottom: 30, paddingVertical: 10 },
-                            followedIds.includes(selectedCreator.id) && styles.followedBtnActive
-                        ]}
-                        onPress={() => toggleFollow(selectedCreator.id)}
-                    >
-                        <Text style={[
-                            styles.followBtnText, 
-                            {fontSize: 16},
-                            followedIds.includes(selectedCreator.id) && styles.followedBtnTextActive
-                        ]}>
-                        {followedIds.includes(selectedCreator.id) ? 'Abonné(e)' : "S'abonner"}
-                        </Text>
-                    </TouchableOpacity>
-
-                    <View style={styles.divider} />
-
-                    <Text style={[styles.sectionTitle, {alignSelf: 'flex-start'}]}>📚 Ses cours disponibles</Text>
-                    
-                    {videos.filter(v => v.creator === selectedCreator.name).length > 0 ? (
-                        videos.filter(v => v.creator === selectedCreator.name).map((video) => (
-                            <TouchableOpacity 
-                                key={video.id} 
-                                style={[styles.textOnlyCard, {width: '100%'}]}
-                                onPress={() => {
-                                    setSelectedCreator(null);
-                                    setTimeout(() => setSelectedVideo(video), 400); 
-                                }}
-                            >
-                                <View style={styles.videoInfo}>
-                                    <Text style={styles.vTitle}>{video.title}</Text>
-                                    <Text style={styles.vCreator}>{video.tag}</Text>
-                                </View>
-                                <Ionicons name="play-circle" size={32} color="#9333EA" />
-                            </TouchableOpacity>
-                        ))
-                    ) : (
-                        <Text style={styles.emptyText}>Ce formateur n'a pas encore publié de vidéo.</Text>
-                    )}
-                 </ScrollView>
-             )}
-        </View>
-      </Modal>
-
-      {/* --- MODAL VIDÉO PLAYER --- */}
-      <Modal 
-        visible={selectedVideo !== null} 
-        animationType="slide" 
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSelectedVideo(null)}
-      >
-        <View style={styles.videoModalContainer}>
-          <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedVideo(null)}>
-            <Ionicons name="chevron-down" size={30} color="#FFF" />
-          </TouchableOpacity>
-
-          {selectedVideo && (
-            <>
-              <Video
-                style={styles.videoPlayer}
-                source={{ uri: selectedVideo.videoUrl }}
-                useNativeControls
-                resizeMode={ResizeMode.CONTAIN}
-                shouldPlay={true}
-              />
-              <View style={styles.videoDetails}>
-                <Text style={styles.videoModalTitle}>{selectedVideo.title}</Text>
-                <Text style={styles.videoModalCreator}>Par {selectedVideo.creator}</Text>
-                <Text style={styles.videoModalDesc}>{selectedVideo.description || "Pas de description."}</Text>
-                <View style={[styles.tagBadge, {marginTop: 15, alignSelf:'flex-start'}]}>
-                   <Text style={styles.tagText}>{selectedVideo.tag}</Text>
-                </View>
-              </View>
-            </>
-          )}
         </View>
       </Modal>
     </View>
@@ -463,79 +261,37 @@ export default function RechercheScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
-  header: { paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 20, paddingBottom: 10 },
-  title: { fontSize: 28, fontWeight: 'bold', marginBottom: 15 },
-  
-  // Search Row
-  searchRow: { flexDirection: 'row', gap: 10, marginBottom: 15, alignItems: 'center' },
-  searchBarContainer: { 
-    flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', 
-    borderRadius: 50, paddingHorizontal: 15, height: 50, borderWidth: 1, borderColor: '#E5E7EB' 
-  },
-  input: { flex: 1, fontSize: 16, color: '#333' },
-  filterBtn: { width: 50, height: 50, backgroundColor: '#F9FAFB', borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
-  filterDot: { position: 'absolute', top: 12, right: 12, width: 8, height: 8, backgroundColor: '#9333EA', borderRadius: 4 },
-
-  // Tabs
-  tabContainer: { flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 12, padding: 4 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
-  activeTab: { backgroundColor: '#9333EA' },
-  tabText: { fontWeight: '600', color: '#71717A' },
-  activeTabText: { color: '#FFF' },
-  activeFilterBadge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', backgroundColor: '#F3E8FF', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginBottom: 15 },
-  activeFilterText: { color: '#9333EA', fontWeight: 'bold', fontSize: 12 },
-
+  header: { paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  title: { fontSize: 26, fontWeight: 'bold', marginBottom: 15 },
+  searchRow: { flexDirection: 'row', gap: 10, marginBottom: 15 },
+  searchBarContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F9FAFB', borderRadius: 12, paddingHorizontal: 15, height: 45, borderWidth: 1, borderColor: '#E5E7EB' },
+  input: { flex: 1, fontSize: 16 },
+  filterBtn: { width: 45, height: 45, backgroundColor: '#F9FAFB', borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB' },
+  tabContainer: { flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 12, padding: 4, marginBottom: 15 },
+  tab: { flex: 1, alignItems: 'center', borderRadius: 10, overflow: 'hidden' },
+  activeTabGradient: { width: '100%', paddingVertical: 8, alignItems: 'center' },
+  tabText: { fontWeight: '600', color: '#71717A', paddingVertical: 8 },
+  activeTabText: { color: '#FFF', fontWeight: '600' },
   scrollContent: { padding: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
-  emptyText: { color: '#999', fontStyle: 'italic', marginTop: 10, textAlign: 'center' },
-
-  // --- STYLE CARTE ---
-  textOnlyCard: { 
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', 
-    borderRadius: 16, padding: 15, marginBottom: 12, 
-    borderWidth: 1, borderColor: '#F3F4F6',
-    shadowColor: "#000", shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1
-  },
-  rank: { fontSize: 18, fontWeight: 'bold', color: '#9333EA', width: 35 },
-  
+  videoCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 16, padding: 15, marginBottom: 12, borderWidth: 1, borderColor: '#F3F4F6', elevation: 2 },
+  topVideoCard: { borderWidth: 2, borderColor: '#7459f0', backgroundColor: '#FEFBFF' },
+  emojiContainer: { width: 60, height: 60, marginRight: 15, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F8F6', borderRadius: 12 },
+  categoryEmoji: { fontSize: 30 },
+  medalEmoji: { position: 'absolute', top: -5, right: -5, fontSize: 18 },
   videoInfo: { flex: 1 },
-  vTitle: { fontWeight: 'bold', fontSize: 15, color: '#1F2937', marginBottom: 2 },
-  vCreator: { color: '#71717A', fontSize: 13, marginBottom: 6 },
-  tagBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: '#F3E8FF' },
-  tagText: { fontSize: 10, fontWeight: 'bold', color: '#9333EA' },
-
-  // Historique, Creator & Modals
-  historySection: { marginTop: 30 },
-  historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  clearAllText: { fontSize: 12, color: '#EF4444', fontWeight: '600' },
-  historyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  historyClickable: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  historyText: { fontSize: 16, color: '#3F3F46', marginLeft: 12 },
-  
-  creatorCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, backgroundColor: '#F9FAFB', padding: 12, borderRadius: 16, borderWidth: 1, borderColor: '#F3F4F6' },
-  avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 15 },
-  creatorName: { fontWeight: 'bold', fontSize: 16 },
+  vTitle: { fontWeight: 'bold', fontSize: 14, color: '#1F2937' },
+  vCreator: { color: '#71717A', fontSize: 12 },
+  categoryBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: '#E9D5FF', marginVertical: 5 },
+  categoryText: { fontSize: 10, fontWeight: 'bold', color: '#7459f0' },
+  statText: { fontSize: 11, color: '#6B7280' },
+  creatorCard: { flexDirection: 'row', alignItems: 'center', marginBottom: 15, backgroundColor: '#F9FAFB', padding: 12, borderRadius: 16 },
+  avatar: { width: 50, height: 50, borderRadius: 25, marginRight: 12 },
+  creatorName: { fontWeight: 'bold', fontSize: 15 },
   creatorFollowers: { color: '#71717A', fontSize: 12 },
-  followBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#9333EA' },
-  followedBtnActive: { backgroundColor: '#9333EA' },
-  followBtnText: { color: '#9333EA', fontWeight: 'bold' },
-  followedBtnTextActive: { color: '#FFF' },
-  
+  followBtn: { paddingHorizontal: 15, paddingVertical: 7, borderRadius: 20 },
+  followBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 25, maxHeight: '80%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold' },
-  filterOption: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', borderRadius: 12 },
-  filterLabel: { flex: 1, marginLeft: 15, fontSize: 16 },
-  
-  videoModalContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
-  closeBtn: { position: 'absolute', top: 50, left: 20, zIndex: 10, padding: 10 },
-  videoPlayer: { width: width, height: 300, backgroundColor: 'black' },
-  videoDetails: { padding: 20 },
-  videoModalTitle: { color: 'white', fontSize: 22, fontWeight: 'bold', marginTop: 10 },
-  videoModalCreator: { color: '#AAA', fontSize: 16, marginVertical: 5 },
-  videoModalDesc: { color: '#DDD', marginTop: 10, lineHeight: 20 },
-  
-  // Style ajouté pour la Modal Profil
-  divider: { width: '100%', height: 1, backgroundColor: '#E5E7EB', marginVertical: 20 }
+  modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 25 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
+  filterOption: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#F3F4F6', borderRadius: 10 }
 });

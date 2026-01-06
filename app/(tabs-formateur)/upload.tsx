@@ -184,49 +184,51 @@ export default function UploadScreen() {
                 <Ionicons name="trash-outline" size={24} color="#EF4444" />
               </TouchableOpacity>
               <View style={styles.playIcon}>
-                <Ionicons name="play-circle" size={50} color="rgba(255,255,255,0.8)" />
+                <Ionicons name="play-circle" size={60} color="rgba(255,255,255,0.9)" />
               </View>
             </View>
           </View>
         ) : (
           <TouchableOpacity style={styles.uploadBox} onPress={pickVideo}>
             <LinearGradient
-              colors={['#F3E8FF', '#F9FAFB']}
+              colors={['#F3E8FF', '#FEFBFF', '#F9FAFB']}
               style={styles.uploadGradient}
             >
               <View style={styles.uploadIconCircle}>
-                <Ionicons name="cloud-upload-outline" size={40} color="#9333ea" />
+                <Ionicons name="cloud-upload-outline" size={44} color="#7459f0" />
               </View>
               <Text style={styles.uploadText}>Sélectionner une vidéo</Text>
-              <Text style={styles.uploadSubText}>Format MP4, max 3 min</Text>
+              <Text style={styles.uploadSubText}>Format MP4, max 3 min • Ratio 9:16 recommandé</Text>
             </LinearGradient>
           </TouchableOpacity>
         )}
 
         {/* Form Fields */}
         <View style={styles.formContainer}>
-          <Text style={styles.label}>Titre de la leçon</Text>
+          <Text style={styles.label}>Titre de la leçon *</Text>
           <TextInput
             style={styles.input}
-            placeholder="Ex: Les bases du SEO..."
+            placeholder="Ex: Les bases du SEO pour débutants..."
             value={title}
             onChangeText={setTitle}
             maxLength={60}
             editable={!uploading}
+            placeholderTextColor="#9CA3AF"
           />
 
           <Text style={styles.label}>Description</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
-            placeholder="Décrivez le contenu de la vidéo..."
+            placeholder="Décrivez le contenu de votre vidéo en quelques mots..."
             value={description}
             onChangeText={setDescription}
             multiline
             numberOfLines={4}
             editable={!uploading}
+            placeholderTextColor="#9CA3AF"
           />
 
-          <Text style={styles.label}>Catégorie</Text>
+          <Text style={styles.label}>Catégorie *</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesRow}>
             {CATEGORIES.map((cat) => (
               <TouchableOpacity
@@ -249,29 +251,48 @@ export default function UploadScreen() {
         {/* Submit Button */}
         <TouchableOpacity 
           style={[
-            styles.submitButton, 
+            styles.submitButtonContainer,
             (!videoUri || !title || !selectedCategory || uploading) && styles.submitButtonDisabled
           ]}
           onPress={handleUpload}
           disabled={!videoUri || !title || !selectedCategory || uploading}
+          activeOpacity={0.8}
         >
-          {uploading ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color="#FFF" />
-              <Text style={styles.submitText}>Upload en cours {progress}%</Text>
-            </View>
-          ) : (
-            <Text style={styles.submitText}>Publier la vidéo</Text>
-          )}
+          <LinearGradient
+            colors={(!videoUri || !title || !selectedCategory || uploading) 
+              ? ['#D1D5DB', '#D1D5DB'] 
+              : ['#7459f0', '#9333ea', '#242A65']
+            }
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.submitButton}
+          >
+            {uploading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color="#FFF" />
+                <Text style={styles.submitText}>Upload en cours {progress}%</Text>
+              </View>
+            ) : (
+              <>
+                <Ionicons name="cloud-upload" size={22} color="#FFF" style={{ marginRight: 8 }} />
+                <Text style={styles.submitText}>Publier la vidéo</Text>
+              </>
+            )}
+          </LinearGradient>
         </TouchableOpacity>
 
       </ScrollView>
 
-      {/* Loading Overlay (Optional, for blocking interaction) */}
+      {/* Loading Overlay with improved progress bar */}
       {uploading && (
         <View style={styles.progressOverlay}>
           <View style={styles.progressBarContainer}>
-            <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
+            <LinearGradient
+              colors={['#7459f0', '#9333ea']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.progressBarFill, { width: `${progress}%` }]}
+            />
           </View>
         </View>
       )}
@@ -293,7 +314,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#1F2937',
   },
@@ -301,9 +322,10 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
-  // Upload Box
+  
+  // Upload Box avec Gradient Violet harmonisé
   uploadBox: {
-    height: 200,
+    height: 260,
     borderRadius: 20,
     overflow: 'hidden',
     marginBottom: 24,
@@ -317,81 +339,100 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   uploadIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: '#FFF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#9333ea',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 3,
+    marginBottom: 20,
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 3,
+    borderColor: '#E9D5FF',
   },
   uploadText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#4B5563',
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 6,
   },
   uploadSubText: {
     fontSize: 13,
-    color: '#9CA3AF',
-    marginTop: 4,
+    color: '#71717A',
+    textAlign: 'center',
+    paddingHorizontal: 30,
   },
-  // Preview
+  
+  // Preview amélioré avec meilleur aspect ratio (9:16 pour vidéos verticales)
   previewContainer: {
-    height: 220,
+    height: 480,
     borderRadius: 20,
     overflow: 'hidden',
     marginBottom: 24,
     backgroundColor: '#000',
     position: 'relative',
+    borderWidth: 3,
+    borderColor: '#7459f0',
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   thumbnail: {
     width: '100%',
     height: '100%',
-    opacity: 0.8,
   },
   previewOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
   },
   clearBtn: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    padding: 8,
-    borderRadius: 20,
+    top: 20,
+    right: 20,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    padding: 12,
+    borderRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   playIcon: {
-    opacity: 0.8,
+    opacity: 0.95,
   },
+  
   // Form
   formContainer: {
     marginBottom: 30,
   },
   label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-    marginTop: 16,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 10,
+    marginTop: 20,
   },
   input: {
     backgroundColor: '#F9FAFB',
     borderWidth: 1,
     borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 14,
+    padding: 16,
     fontSize: 16,
     color: '#1F2937',
+    fontWeight: '500',
   },
   textArea: {
-    height: 100,
+    height: 130,
     textAlignVertical: 'top',
   },
   categoriesRow: {
@@ -399,60 +440,72 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   categoryChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 25,
     backgroundColor: '#F3F4F6',
-    marginRight: 8,
+    marginRight: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
   categoryChipSelected: {
-    backgroundColor: '#9333ea',
-    borderColor: '#9333ea',
+    backgroundColor: '#7459f0',
+    borderColor: '#7459f0',
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 4,
   },
   categoryText: {
     fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
+    color: '#71717A',
+    fontWeight: '600',
   },
   categoryTextSelected: {
     color: '#FFF',
+    fontWeight: '700',
   },
-  // Button
-  submitButton: {
-    backgroundColor: '#9333ea',
-    paddingVertical: 16,
+  
+  // Button avec Gradient harmonisé
+  submitButtonContainer: {
     borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: '#9333ea',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    overflow: 'hidden',
     marginBottom: 40,
   },
+  submitButton: {
+    paddingVertical: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#7459f0',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+  },
   submitButtonDisabled: {
-    backgroundColor: '#D1D5DB',
     shadowOpacity: 0,
+    elevation: 0,
   },
   submitText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold',
   },
   loadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
-  // Progress Overlay
+  
+  // Progress Overlay amélioré avec gradient
   progressOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 4,
+    height: 6,
     backgroundColor: '#E5E7EB',
   },
   progressBarContainer: {
@@ -461,6 +514,5 @@ const styles = StyleSheet.create({
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#10B981',
   },
 });

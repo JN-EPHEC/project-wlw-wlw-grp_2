@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, useWindowDimensions, ScrollView, TouchableOpacity, 
-  Alert, ActivityIndicator, TouchableWithoutFeedback, StatusBar, Share, Image 
+  Alert, ActivityIndicator, TouchableWithoutFeedback, StatusBar, Image,
+  Modal, TextInput, Platform, Linking, FlatList, Clipboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,33 +14,29 @@ import {
 import { db, auth } from '../../firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-// Import du composant commentaire
 import CommentModal from '../../components/CommentModal';
 
+// --- INTERFACES ---
 interface VideoData {
   id: string;
   title: string;
   description: string;
-  category: string;
   creatorId: string;
   creatorName: string;
   creatorAvatar?: string;
   videoUrl: string;
   likes: number;
-  views: number;
   comments: number;
-  tags: string[];
-  duration: number;
-  createdAt: any;
+  creatorBadge?: 'apprenant' | 'expert' | 'pro';
 }
 
 interface UserProfile {
   uid: string;
-  favorites?: string[];    
-  likedVideos?: string[];  
-  watchHistory?: string[]; 
-  following?: string[];    
-  interests?: string[];
+  displayName?: string;
+  photoURL?: string;
+  badge?: string;
+  prenom?: string;
+  nom?: string;
 }
 
 export default function HomeScreen() {
@@ -50,17 +47,21 @@ export default function HomeScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [likedVideosSet, setLikedVideosSet] = useState<Set<string>>(new Set());
   const [savedVideosSet, setSavedVideosSet] = useState<Set<string>>(new Set());
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   
-  // Gestion Commentaires
+  // États Partage & Commentaires
   const [showComments, setShowComments] = useState(false);
   const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showUsersList, setShowUsersList] = useState(false);
+  const [selectedVideoForShare, setSelectedVideoForShare] = useState<VideoData | null>(null);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  const scrollViewRef = useRef<ScrollView>(null);
   const videoRefs = useRef<Record<string, Video | null>>({});
 
   useFocusEffect(
@@ -68,292 +69,173 @@ export default function HomeScreen() {
       const fetchUserData = async () => {
         const user = auth.currentUser;
         if (!user) return;
-        try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            setLikedVideosSet(new Set(data.likedVideos || []));
-            setSavedVideosSet(new Set(data.favorites || []));
-            setUserProfile({
-              uid: user.uid,
-              favorites: data.favorites || [],
-              likedVideos: data.likedVideos || [],
-              watchHistory: data.watchHistory || [],
-              following: data.following || [],
-              interests: data.interests || [],
-            });
-          }
-        } catch (error) { console.error('Erreur profil:', error); }
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          setUserProfile(data);
+          setLikedVideosSet(new Set(data.likedVideos || []));
+          setSavedVideosSet(new Set(data.favorites || []));
+        }
       };
       fetchUserData();
-    }, [])
-  );
-
-  useFocusEffect(
-    useCallback(() => {
       setIsPlaying(true);
-      const timer = setTimeout(async () => {
-        const currentVideo = videoRefs.current[videos[currentIndex]?.id];
-        if (currentVideo) try { await currentVideo.playAsync(); } catch (e) {}
-      }, 100);
-      return () => {
-        clearTimeout(timer);
-        Object.values(videoRefs.current).forEach(async (v) => {
-          if (v) try { await v.pauseAsync(); } catch (e) {}
-        });
-        setIsPlaying(false);
-      };
-    }, [videos, currentIndex])
+      return () => setIsPlaying(false);
+    }, [currentIndex])
   );
 
   useEffect(() => { loadVideos(); }, []);
 
   const loadVideos = async () => {
     try {
-      const videosQuery = query(collection(db, 'videos'), orderBy('createdAt', 'desc'), limit(20));
-      const snapshot = await getDocs(videosQuery);
-      const rawVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as VideoData[];
-      
-      const enrichedVideos = await Promise.all(rawVideos.map(async (video) => {
-          try {
-              const userDoc = await getDoc(doc(db, 'users', video.creatorId));
-              if (userDoc.exists()) {
-                  const userData = userDoc.data();
-                  return {
-                      ...video,
-                      creatorName: `${userData.prenom || ''} ${userData.nom || ''}`.trim() || video.creatorName,
-                      creatorAvatar: userData.photoURL || null
-                  };
-              }
-              return video;
-          } catch (e) { return video; }
+      const snapshot = await getDocs(query(collection(db, 'videos'), orderBy('createdAt', 'desc'), limit(20)));
+      const rawVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+      const enriched = await Promise.all(rawVideos.map(async (v) => {
+        const uDoc = await getDoc(doc(db, 'users', v.creatorId));
+        const uData = uDoc.exists() ? uDoc.data() : {};
+        return { ...v, 
+          creatorName: uData.displayName || `${uData.prenom || ''} ${uData.nom || ''}`.trim() || 'Formateur',
+          creatorAvatar: uData.photoURL || null,
+          creatorBadge: uData.role === 'formateur' ? 'expert' : 'apprenant'
+        };
       }));
-      setVideos(enrichedVideos);
-      setLoading(false);
-    } catch (error) { setLoading(false); }
+      setVideos(enriched);
+      if (enriched.length > 0) handleMarkAsWatched(enriched[0].id);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  const handleScroll = (event: any) => {
-    const offsetY = event.nativeEvent.contentOffset.y;
-    const index = Math.round(offsetY / SCREEN_HEIGHT);
-    if (index !== currentIndex && index >= 0 && index < videos.length) {
-      setCurrentIndex(index);
-      setIsPlaying(true);
-      setProgress(0);
-      handleMarkVideoAsWatched(videos[index]);
-    }
-  };
-
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      setProgress(status.positionMillis);
-      setDuration(status.durationMillis || 0);
-    }
+  const handleMarkAsWatched = async (videoId: string) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    await updateDoc(doc(db, 'users', user.uid), { watchHistory: arrayUnion(videoId), lastWatchedAt: serverTimestamp() });
+    await updateDoc(doc(db, 'videos', videoId), { views: increment(1) });
   };
 
   const togglePlayPause = async () => {
-    const currentVideo = videoRefs.current[videos[currentIndex]?.id];
-    if (currentVideo) {
-      if (isPlaying) { await currentVideo.pauseAsync(); setIsPlaying(false); } 
-      else { await currentVideo.playAsync(); setIsPlaying(true); }
+    const ref = videoRefs.current[videos[currentIndex]?.id];
+    if (ref) {
+      isPlaying ? await ref.pauseAsync() : await ref.playAsync();
+      setIsPlaying(!isPlaying);
     }
   };
 
-  const handleCreatorClick = (creatorId: string) => { router.push(`/profile/${creatorId}` as any); };
-  
-  // Ouverture du modal commentaire
-  const handleComment = (videoId: string) => { 
-      setSelectedVideoId(videoId);
-      setShowComments(true);
-  };
-  
-  const handleShare = async () => { try { await Share.share({ message: 'Regarde cette vidéo sur SwipeSkills !' }); } catch (e) {} };
-
-  const handleFollow = async (creatorId: string, creatorName: string) => {
-    try {
-      const user = auth.currentUser;
-      if (!user || !userProfile) return;
-      const isFollowing = userProfile.following?.includes(creatorId) ?? false;
-      const userRef = doc(db, 'users', user.uid);
-      if (isFollowing) {
-        await updateDoc(userRef, { following: arrayRemove(creatorId) });
-        Alert.alert('Info', `Vous ne suivez plus ${creatorName}`);
-        setUserProfile(prev => prev ? { ...prev, following: (prev.following || []).filter(id => id !== creatorId) } : null);
-      } else {
-        await updateDoc(userRef, { following: arrayUnion(creatorId) });
-        Alert.alert('Succès', `Vous suivez maintenant ${creatorName}`);
-        setUserProfile(prev => prev ? { ...prev, following: [...(prev.following || []), creatorId] } : null);
-        await addDoc(collection(db, 'notifications'), { userId: creatorId, fromUserId: user.uid, type: 'follow', read: false, createdAt: serverTimestamp() });
-      }
-    } catch (error) { console.error('Error follow:', error); }
-  };
-
-  const handleMarkVideoAsWatched = async (video: VideoData) => {
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-      await updateDoc(doc(db, 'users', user.uid), { watchHistory: arrayUnion(video.id), 'stats.videosWatched': increment(1), lastWatchedAt: serverTimestamp() });
-      await updateDoc(doc(db, 'videos', video.id), { views: increment(1) });
-    } catch (error) {}
-  };
-
-  const handleLike = async (videoId: string, creatorId: string) => {
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-      const isLiked = likedVideosSet.has(videoId);
-      const userRef = doc(db, 'users', user.uid);
-      const videoRef = doc(db, 'videos', videoId);
-      if (isLiked) {
-        setLikedVideosSet(prev => { const s = new Set(prev); s.delete(videoId); return s; });
-        await updateDoc(userRef, { likedVideos: arrayRemove(videoId) });
-        await updateDoc(videoRef, { likes: increment(-1) });
-      } else {
-        setLikedVideosSet(prev => new Set([...prev, videoId]));
-        await updateDoc(userRef, { likedVideos: arrayUnion(videoId) });
-        await updateDoc(videoRef, { likes: increment(1) });
-      }
-      setVideos(prev => prev.map(v => v.id === videoId ? { ...v, likes: isLiked ? v.likes - 1 : v.likes + 1 } : v));
-    } catch (error) { console.error('Error like:', error); }
+  const handleLike = async (videoId: string) => {
+    const isLiked = likedVideosSet.has(videoId);
+    setLikedVideosSet(prev => { const s = new Set(prev); isLiked ? s.delete(videoId) : s.add(videoId); return s; });
+    await updateDoc(doc(db, 'videos', videoId), { likes: increment(isLiked ? -1 : 1) });
+    await updateDoc(doc(db, 'users', auth.currentUser!.uid), { likedVideos: isLiked ? arrayRemove(videoId) : arrayUnion(videoId) });
   };
 
   const handleFavorite = async (videoId: string) => {
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-      const isSaved = savedVideosSet.has(videoId);
-      const userRef = doc(db, 'users', user.uid);
-      if (isSaved) {
-        setSavedVideosSet(prev => { const s = new Set(prev); s.delete(videoId); return s; });
-        await updateDoc(userRef, { favorites: arrayRemove(videoId) });
-        Alert.alert('Info', 'Retiré des favoris');
-      } else {
-        setSavedVideosSet(prev => new Set([...prev, videoId]));
-        await updateDoc(userRef, { favorites: arrayUnion(videoId) });
-        Alert.alert('Succès', 'Ajouté aux favoris !');
-      }
-    } catch (error) { console.error('Error favorite:', error); }
+    const isSaved = savedVideosSet.has(videoId);
+    setSavedVideosSet(prev => { const s = new Set(prev); isSaved ? s.delete(videoId) : s.add(videoId); return s; });
+    await updateDoc(doc(db, 'users', auth.currentUser!.uid), { favorites: isSaved ? arrayRemove(videoId) : arrayUnion(videoId) });
+    Alert.alert("Favoris", isSaved ? "Retiré des favoris" : "Ajouté aux favoris !");
   };
 
-  if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#9333ea" /></View>;
-  const progressPercentage = duration > 0 ? (progress / duration) * 100 : 0;
+  // --- LOGIQUE PARTAGE (STYLE FORMATEUR) ---
+  const handleOpenShare = async (video: VideoData) => {
+    setSelectedVideoForShare(video);
+    setShowShareModal(true);
+    const usersSnap = await getDocs(collection(db, 'users'));
+    setAllUsers(usersSnap.docs.map(d => ({ uid: d.id, ...d.data() })).filter(u => u.uid !== auth.currentUser?.uid));
+  };
+
+  const shareWhatsApp = () => {
+    const msg = `Découvre cette vidéo "${selectedVideoForShare?.title}" sur SwipeSkills !`;
+    Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`);
+  };
+
+  const copyLink = () => {
+    Clipboard.setString(`https://swipeskills.app/video/${selectedVideoForShare?.id}`);
+    Alert.alert("Lien copié !");
+    setShowShareModal(false);
+  };
+
+  if (loading) return <View style={styles.loading}><ActivityIndicator size="large" color="#7459f0" /></View>;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       <ScrollView
-        ref={scrollViewRef} pagingEnabled showsVerticalScrollIndicator={false}
-        onScroll={handleScroll} scrollEventThrottle={16} snapToInterval={SCREEN_HEIGHT} decelerationRate="fast"
-        style={styles.scrollView} contentContainerStyle={styles.scrollViewContent}
+        pagingEnabled showsVerticalScrollIndicator={false}
+        onScroll={(e) => {
+          const index = Math.round(e.nativeEvent.contentOffset.y / SCREEN_HEIGHT);
+          if (index !== currentIndex) { 
+            setCurrentIndex(index); setProgress(0); setIsPlaying(true);
+            handleMarkAsWatched(videos[index].id);
+          }
+        }}
+        scrollEventThrottle={16} snapToInterval={SCREEN_HEIGHT} decelerationRate="fast"
       >
         {videos.map((video, index) => {
           const isLiked = likedVideosSet.has(video.id);
           const isSaved = savedVideosSet.has(video.id);
-          const isFollowing = userProfile?.following?.includes(video.creatorId) ?? false;
+          const isFollowing = userProfile?.following?.includes(video.creatorId);
           
           return (
-            <View key={video.id} style={[styles.videoContainer, { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }]}>
+            <View key={video.id} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}>
               <Video
-                ref={(ref) => { if (ref) videoRefs.current[video.id] = ref; }}
+                ref={(ref) => { videoRefs.current[video.id] = ref; }}
                 source={{ uri: video.videoUrl }}
                 resizeMode={ResizeMode.COVER}
                 shouldPlay={index === currentIndex && isPlaying}
-                isLooping
-                style={StyleSheet.absoluteFillObject}
-                onPlaybackStatusUpdate={index === currentIndex ? handlePlaybackStatusUpdate : undefined}
-                useNativeControls={false}
+                isLooping style={StyleSheet.absoluteFillObject}
+                onPlaybackStatusUpdate={(s) => index === currentIndex && s.isLoaded && (setProgress(s.positionMillis), setDuration(s.durationMillis || 0))}
               />
+              
               <TouchableWithoutFeedback onPress={togglePlayPause}>
                 <View style={styles.touchableOverlay}>
-                  {!isPlaying && index === currentIndex && (
-                    <View style={styles.playPauseIcon}><Ionicons name="play" size={80} color="rgba(255,255,255,0.8)" /></View>
-                  )}
+                  {!isPlaying && index === currentIndex && <Ionicons name="play" size={80} color="rgba(255,255,255,0.8)" />}
                 </View>
               </TouchableWithoutFeedback>
 
-              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.8)']} style={styles.gradientOverlay} />
-              
+              <LinearGradient colors={['transparent', 'rgba(0,0,0,0.85)']} style={styles.bottomGradient} />
+
               {index === currentIndex && (
-                <View style={styles.progressBarContainer}>
-                  <View style={styles.progressBarBackground}>
-                    <View style={[styles.progressBarFill, { width: `${progressPercentage}%` }]} />
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBg}>
+                    <LinearGradient colors={['#7459f0', '#9333ea', '#242A65']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.progressFill, { width: `${duration > 0 ? (progress / duration) * 100 : 0}%` }]} />
                   </View>
                 </View>
               )}
 
-              {/* GAUCHE : INFOS */}
               <View style={styles.leftSide}>
-                <TouchableOpacity style={styles.creatorInfo} onPress={() => handleCreatorClick(video.creatorId)}>
-                  <View style={styles.creatorAvatar}>
-                    {video.creatorAvatar ? (
-                        <Image source={{ uri: video.creatorAvatar }} style={styles.avatarImage} />
-                    ) : (
-                        <Text style={styles.creatorInitial}>{video.creatorName.charAt(0).toUpperCase()}</Text>
-                    )}
-                  </View>
-                  <View style={styles.creatorDetails}>
+                <View style={styles.creatorHeader}>
+                  <TouchableOpacity style={styles.avatarWrapper} onPress={() => router.push(`/profile/${video.creatorId}`)}>
+                    <Image source={{ uri: video.creatorAvatar || 'https://via.placeholder.com/150' }} style={styles.avatar} />
+                  </TouchableOpacity>
+                  <View style={styles.creatorTextInfo}>
                     <Text style={styles.creatorName}>@{video.creatorName}</Text>
-                    {/* Bouton Suivre (Seulement si pas déjà abonné, car si abonné on a le V à droite) */}
-                    {!isFollowing && (
-                        <TouchableOpacity 
-                            style={styles.followButton}
-                            onPress={() => handleFollow(video.creatorId, video.creatorName)}
-                        >
-                        <Text style={styles.followButtonText}>Suivre</Text>
-                        </TouchableOpacity>
-                    )}
+                    {video.creatorBadge === 'expert' && <View style={styles.expertBadge}><Text style={styles.expertText}>EXPERT</Text></View>}
                   </View>
-                </TouchableOpacity>
-                <Text style={styles.title} numberOfLines={1}>{video.title}</Text>
-                <Text style={styles.description} numberOfLines={2}>{video.description}</Text>
+                </View>
+                <Text style={styles.videoTitle}>{video.title}</Text>
+                <Text style={styles.videoDesc} numberOfLines={2}>{video.description}</Text>
               </View>
 
-              {/* DROITE : ACTIONS */}
               <View style={styles.rightSide}>
-                <TouchableOpacity style={styles.avatarLarge} onPress={() => handleCreatorClick(video.creatorId)}>
-                  <View style={styles.avatarCircle}>
-                    {video.creatorAvatar ? (
-                        <Image source={{ uri: video.creatorAvatar }} style={styles.avatarLargeImage} />
-                    ) : (
-                        <Text style={styles.avatarText}>{video.creatorName.charAt(0).toUpperCase()}</Text>
-                    )}
-                  </View>
-                  
-                  {/* LOGIQUE DU CHECK (V) */}
-                  {isFollowing ? (
-                    <View style={[styles.plusIcon, {backgroundColor:'#10B981'}]}>
-                        <Ionicons name="checkmark" size={12} color="white" />
-                    </View>
-                  ) : (
-                    <View style={styles.plusIcon}><Ionicons name="add" size={16} color="white" /></View>
-                  )}
+                <TouchableOpacity style={styles.profileAction} onPress={() => router.push(`/profile/${video.creatorId}`)}>
+                  <View style={styles.profileCircle}><Image source={{ uri: video.creatorAvatar || 'https://via.placeholder.com/150' }} style={styles.profileImg} /></View>
+                  <View style={[styles.plusBadge, { backgroundColor: isFollowing ? '#10B981' : '#EF4444' }]}><Ionicons name={isFollowing ? "checkmark" : "add"} size={12} color="white" /></View>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleLike(video.id, video.creatorId)}>
-                  <View style={[styles.actionIcon, isLiked && styles.actionIconActive]}>
-                    <Ionicons name={isLiked ? "heart" : "heart-outline"} size={28} color="#fff" />
-                  </View>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => handleLike(video.id)}>
+                  <LinearGradient colors={isLiked ? ['#ef4444', '#dc2626'] : ['#7459f0', '#242A65']} style={styles.actionCircle}><Ionicons name={isLiked ? "heart" : "heart-outline"} size={28} color="white" /></LinearGradient>
                   <Text style={styles.actionCount}>{video.likes}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleComment(video.id)}>
-                  <View style={styles.actionIcon}>
-                    <Ionicons name="chatbubble-outline" size={28} color="#fff" />
-                  </View>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => { setSelectedVideoId(video.id); setShowComments(true); }}>
+                  <LinearGradient colors={['#7459f0', '#242A65']} style={styles.actionCircle}><Ionicons name="chatbubble-outline" size={26} color="white" /></LinearGradient>
                   <Text style={styles.actionCount}>{video.comments || 0}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleFavorite(video.id)}>
-                  <View style={[styles.actionIcon, isSaved && styles.actionIconActiveFavorite]}>
-                    <Ionicons name={isSaved ? "bookmark" : "bookmark-outline"} size={28} color="#fff" />
-                  </View>
-                  <Text style={styles.actionCount}>{isSaved ? 'Enregistré' : 'Sauver'}</Text>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => handleFavorite(video.id)}>
+                  <LinearGradient colors={isSaved ? ['#FBA31A', '#F59E0B'] : ['#7459f0', '#242A65']} style={styles.actionCircle}><Ionicons name={isSaved ? "bookmark" : "bookmark-outline"} size={26} color="white" /></LinearGradient>
+                  <Text style={styles.actionCount}>{isSaved ? 'Favoris' : 'Sauver'}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-                  <View style={styles.actionIcon}>
-                    <Ionicons name="share-social-outline" size={28} color="#fff" />
-                  </View>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => handleOpenShare(video)}>
+                  <LinearGradient colors={['#7459f0', '#242A65']} style={styles.actionCircle}><Ionicons name="share-social-outline" size={26} color="white" /></LinearGradient>
                   <Text style={styles.actionCount}>Partager</Text>
                 </TouchableOpacity>
               </View>
@@ -362,15 +244,27 @@ export default function HomeScreen() {
         })}
       </ScrollView>
 
-     {/* MODAL COMMENTAIRES DANS HOME APPRENANT */}
+      {/* MODAL PARTAGE IDENTIQUE FORMATEUR */}
+      <Modal visible={showShareModal} transparent animationType="fade">
+        <TouchableOpacity style={styles.shareOverlay} activeOpacity={1} onPress={() => setShowShareModal(false)}>
+          <View style={styles.shareContent}>
+            <LinearGradient colors={['#7459f0', '#9333ea']} style={styles.shareHeader}><Text style={styles.shareTitle}>Partager</Text></LinearGradient>
+            <View style={styles.shareOptionsGrid}>
+              <TouchableOpacity style={styles.shareOption} onPress={shareWhatsApp}><Ionicons name="logo-whatsapp" size={40} color="#25D366" /><Text>WhatsApp</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.shareOption} onPress={() => { setShowShareModal(false); setShowUsersList(true); }}><Ionicons name="people" size={40} color="#7459f0" /><Text>Utilisateurs</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.shareOption} onPress={copyLink}><Ionicons name="link" size={40} color="#3B82F6" /><Text>Lien</Text></TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* MODAL COMMENTAIRES FIX */}
       {selectedVideoId && (
         <CommentModal 
-            visible={showComments} 
-            videoId={selectedVideoId} 
-            // On récupère le créateur et le titre depuis la liste des vidéos
-            creatorId={videos.find(v => v.id === selectedVideoId)?.creatorId || ''}
-            videoTitle={videos.find(v => v.id === selectedVideoId)?.title || 'Vidéo'}
-            onClose={() => setShowComments(false)} 
+          visible={showComments} videoId={selectedVideoId} 
+          creatorId={videos.find(v => v.id === selectedVideoId)?.creatorId || ''}
+          videoTitle={videos.find(v => v.id === selectedVideoId)?.title || 'Vidéo'}
+          onClose={() => setShowComments(false)} 
         />
       )}
     </View>
@@ -379,43 +273,34 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
-  scrollView: { flex: 1 },
-  scrollViewContent: { flexGrow: 1 },
-  videoContainer: { width: '100%', height: '100%', backgroundColor: '#000', position: 'relative', overflow: 'hidden' },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A2E' },
   touchableOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
-  playPauseIcon: { zIndex: 10 },
-  progressBarContainer: { position: 'absolute', bottom: 80, left: 0, right: 0, paddingHorizontal: 16, zIndex: 40 },
-  progressBarBackground: { height: 2, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 1, overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: '#9333ea', borderRadius: 1 },
-  gradientOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '50%', zIndex: 10 },
-  
-  leftSide: { position: 'absolute', bottom: 100, left: 16, right: 80, zIndex: 30 },
-  creatorInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  creatorAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', overflow:'hidden' },
-  avatarImage: { width: '100%', height: '100%' },
-  creatorInitial: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  creatorDetails: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  creatorName: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  followButton: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginLeft: 8 },
-  followButtonActive: { backgroundColor: 'rgba(255,255,255,0)', borderWidth: 1, borderColor: '#fff' },
-  followButtonText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  followButtonTextActive: { color: '#ddd' },
-  title: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  description: { color: '#fff', fontSize: 14, marginBottom: 8, lineHeight: 20 },
-  
-  rightSide: { position: 'absolute', bottom: 100, right: 16, gap: 24, alignItems: 'center', zIndex: 30 },
-  avatarLarge: { marginBottom: 8, position: 'relative' },
-  avatarCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', overflow: 'hidden' },
-  avatarLargeImage: { width: '100%', height: '100%' },
-  avatarText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  
-  // Style de base pour l'icône +
-  plusIcon: { position: 'absolute', bottom: -4, alignSelf: 'center', width: 24, height: 24, borderRadius: 12, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
-  
-  actionButton: { alignItems: 'center', gap: 4 },
-  actionIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  actionIconActive: { backgroundColor: '#ef4444' },
-  actionIconActiveFavorite: { backgroundColor: '#FBA31A' },
+  bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%', zIndex: 10 },
+  progressContainer: { position: 'absolute', bottom: 90, left: 20, right: 20, zIndex: 40 },
+  progressBg: { height: 3, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', borderRadius: 2 },
+  leftSide: { position: 'absolute', bottom: 120, left: 20, right: 100, zIndex: 30 },
+  creatorHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  avatarWrapper: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', overflow:'hidden' },
+  avatar: { width: '100%', height: '100%' },
+  creatorTextInfo: { gap: 4, marginLeft: 12 },
+  creatorName: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  expertBadge: { backgroundColor: '#FBA31A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  expertText: { color: '#000', fontSize: 9, fontWeight: '900' },
+  videoTitle: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  videoDesc: { color: '#fff', fontSize: 14, lineHeight: 20 },
+  rightSide: { position: 'absolute', bottom: 120, right: 16, gap: 24, alignItems: 'center', zIndex: 30 },
+  profileAction: { marginBottom: 8, position: 'relative' },
+  profileCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', overflow: 'hidden' },
+  profileImg: { width: '100%', height: '100%' },
+  plusBadge: { position: 'absolute', bottom: -4, alignSelf: 'center', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
+  actionBtn: { alignItems: 'center', gap: 4 },
+  actionCircle: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   actionCount: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  shareOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
+  shareContent: { backgroundColor: '#fff', borderRadius: 20, overflow: 'hidden' },
+  shareHeader: { padding: 15, alignItems: 'center' },
+  shareTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  shareOptionsGrid: { flexDirection: 'row', justifyContent: 'space-around', padding: 30 },
+  shareOption: { alignItems: 'center', gap: 10 }
 });

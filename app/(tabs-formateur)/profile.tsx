@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  Image, Dimensions, TextInput, ActivityIndicator, Alert, Modal, RefreshControl, StatusBar, FlatList, Platform
+  Image, Dimensions, TextInput, ActivityIndicator, Alert, Modal, RefreshControl, StatusBar, Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
-
+import SettingsScreen from '../../components/SettingsScreen';
 // ===== IMPORTS FIREBASE =====
 import { auth, db, storage } from '../../firebaseConfig'; 
 import { 
@@ -43,6 +43,15 @@ interface Playlist {
   videoIds: string[];
 }
 
+interface VideoStats {
+  totalViews: number;
+  totalLikes: number;
+  totalComments: number;
+  averageViewsPerVideo: number;
+  mostViewedVideo?: CreatorVideo;
+  mostLikedVideo?: CreatorVideo;
+}
+
 export default function ProfileFormateurScreen() {
   const router = useRouter();
   
@@ -64,6 +73,8 @@ export default function ProfileFormateurScreen() {
   // Data
   const [myVideos, setMyVideos] = useState<CreatorVideo[]>([]);
   const [myPlaylists, setMyPlaylists] = useState<Playlist[]>([]);
+  const [videoStats, setVideoStats] = useState<VideoStats | null>(null);
+  const [showStats, setShowStats] = useState(false);
   
   // --- PLAYER STATES ---
   const [showPlayer, setShowPlayer] = useState(false);
@@ -87,18 +98,10 @@ export default function ProfileFormateurScreen() {
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
   const [selectedPlaylistVideos, setSelectedPlaylistVideos] = useState<CreatorVideo[]>([]);
   const [showAddVideoModal, setShowAddVideoModal] = useState(false);
-  const [likedVideosList, setLikedVideosList] = useState<CreatorVideo[]>([]);
   
   // Stats
   const totalViews = myVideos.reduce((acc, curr) => acc + (curr.views || 0), 0);
   const totalLikes = myVideos.reduce((acc, curr) => acc + (curr.likes || 0), 0);
-
-  // Progression (simulée pour l'exemple)
-  const progressData = {
-    videosWatched: 0, // L'apprenant regardera ses vidéos, pas le formateur
-    totalVideos: myVideos.length,
-    progressPercent: 0
-  };
 
   // --- LOADING ---
   useFocusEffect(
@@ -133,6 +136,9 @@ export default function ProfileFormateurScreen() {
              return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
           });
           setMyVideos(videosData);
+          
+          // Calculer les statistiques
+          calculateStats(videosData);
       } catch (e) { console.error("Erreur vidéos:", e); }
 
       // Playlists
@@ -143,14 +149,14 @@ export default function ProfileFormateurScreen() {
           setMyPlaylists(pSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Playlist)));
       } catch (e) { console.log("Erreur playlists:", e); }
 
-      // Historique (dernières vidéos vues)
+      // Historique
       try {
         const historyRef = collection(db, 'watchHistory');
         const historyQuery = query(
           historyRef, 
           where('userId', '==', user.uid), 
           orderBy('watchedAt', 'desc'),
-          limit(20)
+          limit(50)
         );
         const historySnapshot = await getDocs(historyQuery);
         const historyVideoIds = historySnapshot.docs.map(d => d.data().videoId);
@@ -159,7 +165,10 @@ export default function ProfileFormateurScreen() {
           const historyVideos = await fetchVideosByIds(historyVideoIds);
           setWatchHistory(historyVideos);
         }
-      } catch (e) { console.log("Erreur historique:", e); }
+      } catch (e) { 
+        console.log("Erreur historique:", e);
+        setWatchHistory([]);
+      }
 
     } catch (error) {
       console.error("Erreur générale:", error);
@@ -167,6 +176,35 @@ export default function ProfileFormateurScreen() {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  // Calculer les statistiques détaillées
+  const calculateStats = (videos: CreatorVideo[]) => {
+    if (videos.length === 0) {
+      setVideoStats(null);
+      return;
+    }
+
+    const totalV = videos.reduce((acc, v) => acc + (v.views || 0), 0);
+    const totalL = videos.reduce((acc, v) => acc + (v.likes || 0), 0);
+    const totalC = videos.reduce((acc, v) => acc + (v.comments || 0), 0);
+
+    const mostViewed = videos.reduce((prev, current) => 
+      (current.views || 0) > (prev.views || 0) ? current : prev
+    );
+
+    const mostLiked = videos.reduce((prev, current) => 
+      (current.likes || 0) > (prev.likes || 0) ? current : prev
+    );
+
+    setVideoStats({
+      totalViews: totalV,
+      totalLikes: totalL,
+      totalComments: totalC,
+      averageViewsPerVideo: Math.round(totalV / videos.length),
+      mostViewedVideo: mostViewed,
+      mostLikedVideo: mostLiked
+    });
   };
 
   const signOut = async () => {
@@ -178,7 +216,6 @@ export default function ProfileFormateurScreen() {
     const user = auth.currentUser;
     if (!user) return;
     
-    // Limiter la bio à 200 caractères (ID 65, 275)
     if (editedBio.length > 200) {
       Alert.alert("Erreur", "La biographie ne peut pas dépasser 200 caractères");
       return;
@@ -279,7 +316,6 @@ export default function ProfileFormateurScreen() {
     } catch (e) { Alert.alert("Erreur", "Action échouée"); }
   };
 
-  // ID 49 - Modifier une vidéo
   const openEditVideo = () => {
     if (!selectedVideo) return;
     setEditedVideoTitle(selectedVideo.title);
@@ -380,7 +416,6 @@ export default function ProfileFormateurScreen() {
   };
 
   const openAddVideoModal = async () => {
-    // Pour le formateur, on ajoute ses propres vidéos à la playlist
     if (myVideos.length === 0) {
       Alert.alert("Info", "Vous n'avez pas encore de vidéos");
       return;
@@ -391,7 +426,6 @@ export default function ProfileFormateurScreen() {
   const addVideoToPlaylist = async (video: CreatorVideo) => {
     if (!selectedPlaylist) return;
     
-    // Vérifier si la vidéo est déjà dans la playlist
     if (selectedPlaylist.videoIds.includes(video.id)) {
       Alert.alert("Info", "Cette vidéo est déjà dans la playlist");
       return;
@@ -460,10 +494,12 @@ export default function ProfileFormateurScreen() {
           />
         }
       >
-        {/* HEADER avec gradient SwipeSkills */}
+        {/* HEADER avec gradient violet harmonisé */}
         <View style={styles.headerWrapper}>
             <LinearGradient 
-              colors={['#7459f0', '#5b3fd1']} 
+              colors={['#7459f0', '#9333ea', '#242A65']} 
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
               style={styles.headerGradient}
             >
                 <View style={styles.topIcons}>
@@ -517,20 +553,23 @@ export default function ProfileFormateurScreen() {
         <View style={styles.identitySection}>
             {isEditing ? (
                 <View style={styles.editForm}>
+                    <Text style={styles.editLabel}>Nom complet</Text>
                     <TextInput 
                       style={styles.input} 
                       value={editedName} 
                       onChangeText={setEditedName} 
-                      placeholder="Nom complet" 
+                      placeholder="Prénom Nom" 
                       placeholderTextColor="#9CA3AF"
                     />
+                    
+                    <Text style={styles.editLabel}>Biographie</Text>
                     <View>
                       <TextInput 
-                        style={[styles.input, { height: 80 }]} 
+                        style={[styles.input, { height: 100 }]} 
                         value={editedBio} 
                         onChangeText={handleBioChange} 
                         multiline 
-                        placeholder="Biographie (max 200 caractères)"
+                        placeholder="Parlez de vous... (max 200 caractères)"
                         placeholderTextColor="#9CA3AF"
                         maxLength={200}
                       />
@@ -538,6 +577,7 @@ export default function ProfileFormateurScreen() {
                         {bioCharCount}/200
                       </Text>
                     </View>
+                    
                     <View style={styles.editButtons}>
                         <TouchableOpacity 
                           style={styles.cancelBtn} 
@@ -563,7 +603,7 @@ export default function ProfileFormateurScreen() {
                     <Text style={styles.name}>
                       {userProfile.prenom} {userProfile.nom}
                     </Text>
-                    <Text style={styles.bio}>{userProfile.bio}</Text>
+                    <Text style={styles.bio}>{userProfile.bio || "Formateur expert 🎓"}</Text>
                     <TouchableOpacity 
                       style={styles.modifyBtn} 
                       onPress={() => setIsEditing(true)}
@@ -575,7 +615,7 @@ export default function ProfileFormateurScreen() {
             )}
         </View>
 
-        {/* STATS */}
+        {/* STATS PRINCIPALES */}
         <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <Text style={styles.statNum}>{totalViews}</Text>
@@ -591,11 +631,27 @@ export default function ProfileFormateurScreen() {
             </View>
         </View>
 
-        {/* TABLEAU DE PROGRESSION (ID 62) */}
+        {/* BOUTON STATISTIQUES DÉTAILLÉES */}
+        {videoStats && myVideos.length > 0 && (
+          <TouchableOpacity 
+            style={styles.statsDetailBtn}
+            onPress={() => setShowStats(true)}
+          >
+            <LinearGradient
+              colors={['#F3E8FF', '#E9D5FF']}
+              style={styles.statsDetailGradient}
+            >
+              <Ionicons name="bar-chart" size={20} color="#7459f0" />
+              <Text style={styles.statsDetailText}>Voir les statistiques détaillées</Text>
+              <Ionicons name="chevron-forward" size={20} color="#7459f0" />
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
+
+        {/* TABLEAU DE PROGRESSION */}
         <View style={styles.progressSection}>
           <View style={styles.progressHeader}>
             <Text style={styles.progressTitle}>Ma progression</Text>
-            {/* ID 43, 398 - Icône historique */}
             <TouchableOpacity 
               style={styles.historyBtn}
               onPress={() => setShowHistory(true)}
@@ -686,21 +742,21 @@ export default function ProfileFormateurScreen() {
                                   />
                                 ) : (
                                   <LinearGradient
-                                    colors={['#7459f0', '#5b3fd1']}
+                                    colors={['#7459f0', '#9333ea', '#242A65']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
                                     style={styles.thumbGradient}
                                   >
                                     <Ionicons name="play" size={30} color="white" />
                                   </LinearGradient>
                                 )}
                                 
-                                {/* ID 60 - Badge épinglé */}
                                 {video.isPinned && (
                                   <View style={styles.pinBadge}>
-                                    <Ionicons name="bookmark" size={12} color="white" />
+                                    <Ionicons name="bookmark" size={14} color="white" />
                                   </View>
                                 )}
                                 
-                                {/* ID 47, 48 - Vues et Likes sur la vidéo */}
                                 <View style={styles.videoStats}>
                                   <View style={styles.statBadge}>
                                     <Ionicons name="play" size={10} color="white" />
@@ -797,12 +853,10 @@ export default function ProfileFormateurScreen() {
                         )}
                     </TouchableOpacity>
                     
-                    {/* Barre de progression */}
                     <View style={styles.progressBarContainer}>
                       <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
                     </View>
                     
-                    {/* Infos vidéo */}
                     <View style={styles.leftSide}>
                         <Text style={styles.videoTitleFull}>{selectedVideo.title}</Text>
                         <Text style={styles.videoDescFull}>
@@ -820,7 +874,6 @@ export default function ProfileFormateurScreen() {
                         </View>
                     </View>
                     
-                    {/* Actions */}
                     <View style={styles.rightSide}>
                         <TouchableOpacity 
                           style={styles.actionBtn} 
@@ -838,7 +891,6 @@ export default function ProfileFormateurScreen() {
                         </TouchableOpacity>
                     </View>
                     
-                    {/* Bouton fermer */}
                     <TouchableOpacity 
                       onPress={() => {
                         setShowPlayer(false);
@@ -864,7 +916,7 @@ export default function ProfileFormateurScreen() {
         />
       )}
 
-      {/* OPTIONS VIDEO (ID 49 - Ajout de "Modifier") */}
+      {/* OPTIONS VIDEO */}
       <Modal visible={showVideoOptions} transparent animationType="fade">
         <TouchableOpacity 
           style={styles.modalOverlay}
@@ -916,7 +968,7 @@ export default function ProfileFormateurScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL MODIFIER VIDÉO (ID 49) */}
+      {/* MODAL MODIFIER VIDÉO */}
       <Modal visible={showEditVideo} transparent animationType="fade">
         <TouchableOpacity 
           style={styles.modalOverlay}
@@ -999,7 +1051,7 @@ export default function ProfileFormateurScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL DÉTAILS PLAYLIST (ID 45, 58) */}
+      {/* MODAL DÉTAILS PLAYLIST */}
       <Modal 
         visible={selectedPlaylist !== null} 
         animationType="slide"
@@ -1007,7 +1059,6 @@ export default function ProfileFormateurScreen() {
       >
         <View style={styles.playlistDetailOverlay}>
           <View style={styles.playlistDetailContainer}>
-            {/* Header */}
             <View style={styles.playlistDetailHeader}>
               <TouchableOpacity 
                 onPress={() => setSelectedPlaylist(null)}
@@ -1028,7 +1079,6 @@ export default function ProfileFormateurScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Bouton ajouter vidéo */}
             <TouchableOpacity 
               style={styles.addVideoToPlBtn}
               onPress={openAddVideoModal}
@@ -1037,7 +1087,6 @@ export default function ProfileFormateurScreen() {
               <Text style={styles.addVideoToPlText}>Ajouter une vidéo</Text>
             </TouchableOpacity>
 
-            {/* Liste des vidéos */}
             <ScrollView style={styles.playlistVideosScroll}>
               {selectedPlaylistVideos.length === 0 ? (
                 <View style={styles.emptyState}>
@@ -1061,7 +1110,9 @@ export default function ProfileFormateurScreen() {
                         />
                       ) : (
                         <LinearGradient
-                          colors={['#7459f0', '#5b3fd1']}
+                          colors={['#7459f0', '#9333ea', '#242A65']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
                           style={styles.playlistVideoThumbImg}
                         >
                           <Ionicons name="play" size={20} color="white" />
@@ -1078,7 +1129,6 @@ export default function ProfileFormateurScreen() {
                       </Text>
                     </View>
                     
-                    {/* ID 51 - Supprimer de la playlist */}
                     <TouchableOpacity 
                       style={styles.removeVideoBtn}
                       onPress={() => removeVideoFromPlaylist(video.id)}
@@ -1124,7 +1174,9 @@ export default function ProfileFormateurScreen() {
                       />
                     ) : (
                       <LinearGradient
-                        colors={['#7459f0', '#5b3fd1']}
+                        colors={['#7459f0', '#9333ea', '#242A65']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
                         style={styles.modalVideoThumbImg}
                       >
                         <Ionicons name="play" size={16} color="white" />
@@ -1148,7 +1200,7 @@ export default function ProfileFormateurScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL HISTORIQUE (ID 43, 398) */}
+      {/* MODAL HISTORIQUE */}
       <Modal 
         visible={showHistory} 
         animationType="slide"
@@ -1175,7 +1227,7 @@ export default function ProfileFormateurScreen() {
                   <Ionicons name="time-outline" size={60} color="#D1D5DB" />
                   <Text style={styles.emptyText}>Aucun historique</Text>
                   <Text style={styles.emptySubtext}>
-                    Vos vidéos regardées apparaîtront ici
+                    Les vidéos que vous visionnez apparaîtront ici
                   </Text>
                 </View>
               ) : (
@@ -1196,7 +1248,9 @@ export default function ProfileFormateurScreen() {
                         />
                       ) : (
                         <LinearGradient
-                          colors={['#7459f0', '#5b3fd1']}
+                          colors={['#7459f0', '#9333ea', '#242A65']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
                           style={styles.historyThumbImg}
                         >
                           <Ionicons name="play" size={20} color="white" />
@@ -1219,6 +1273,145 @@ export default function ProfileFormateurScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* MODAL STATISTIQUES DÉTAILLÉES */}
+      <Modal 
+        visible={showStats} 
+        animationType="slide"
+        transparent
+      >
+        <View style={styles.statsOverlay}>
+          <View style={styles.statsContainer}>
+            <View style={styles.statsModalHeader}>
+              <TouchableOpacity 
+                onPress={() => setShowStats(false)}
+                style={styles.backBtn}
+              >
+                <Ionicons name="arrow-back" size={24} color="#1F2937" />
+              </TouchableOpacity>
+              
+              <Text style={styles.statsModalTitle}>Statistiques détaillées</Text>
+              
+              <View style={{ width: 24 }} />
+            </View>
+
+            <ScrollView style={styles.statsScroll}>
+              {videoStats && (
+                <View>
+                  <View style={styles.statsSection}>
+                    <Text style={styles.statsSectionTitle}>📊 Vue d'ensemble</Text>
+                    
+                    <View style={styles.statsGrid}>
+                      <View style={styles.statsGridItem}>
+                        <Ionicons name="eye" size={24} color="#7459f0" />
+                        <Text style={styles.statsGridValue}>{videoStats.totalViews}</Text>
+                        <Text style={styles.statsGridLabel}>Vues totales</Text>
+                      </View>
+                      
+                      <View style={styles.statsGridItem}>
+                        <Ionicons name="heart" size={24} color="#7459f0" />
+                        <Text style={styles.statsGridValue}>{videoStats.totalLikes}</Text>
+                        <Text style={styles.statsGridLabel}>Likes totaux</Text>
+                      </View>
+                      
+                      <View style={styles.statsGridItem}>
+                        <Ionicons name="chatbubble" size={24} color="#7459f0" />
+                        <Text style={styles.statsGridValue}>{videoStats.totalComments}</Text>
+                        <Text style={styles.statsGridLabel}>Commentaires</Text>
+                      </View>
+                      
+                      <View style={styles.statsGridItem}>
+                        <Ionicons name="trending-up" size={24} color="#7459f0" />
+                        <Text style={styles.statsGridValue}>{videoStats.averageViewsPerVideo}</Text>
+                        <Text style={styles.statsGridLabel}>Moy. vues/vidéo</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.statsSection}>
+                    <Text style={styles.statsSectionTitle}>🏆 Meilleures performances</Text>
+                    
+                    {videoStats.mostViewedVideo && (
+                      <View style={styles.topVideoCard}>
+                        <Text style={styles.topVideoLabel}>📺 Vidéo la plus vue</Text>
+                        <View style={styles.topVideoContent}>
+                          {videoStats.mostViewedVideo.thumbnail && (
+                            <Image 
+                              source={{ uri: videoStats.mostViewedVideo.thumbnail }}
+                              style={styles.topVideoThumb}
+                            />
+                          )}
+                          <View style={styles.topVideoInfo}>
+                            <Text style={styles.topVideoTitle} numberOfLines={2}>
+                              {videoStats.mostViewedVideo.title}
+                            </Text>
+                            <Text style={styles.topVideoStat}>
+                              {videoStats.mostViewedVideo.views} vues
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    )}
+
+                    {videoStats.mostLikedVideo && (
+                      <View style={styles.topVideoCard}>
+                        <Text style={styles.topVideoLabel}>❤️ Vidéo la plus aimée</Text>
+                        <View style={styles.topVideoContent}>
+                          {videoStats.mostLikedVideo.thumbnail && (
+                            <Image 
+                              source={{ uri: videoStats.mostLikedVideo.thumbnail }}
+                              style={styles.topVideoThumb}
+                            />
+                          )}
+                          <View style={styles.topVideoInfo}>
+                            <Text style={styles.topVideoTitle} numberOfLines={2}>
+                              {videoStats.mostLikedVideo.title}
+                            </Text>
+                            <Text style={styles.topVideoStat}>
+                              {videoStats.mostLikedVideo.likes} likes
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.statsSection}>
+                    <Text style={styles.statsSectionTitle}>💬 Engagement</Text>
+                    
+                    <View style={styles.engagementBar}>
+                      <Text style={styles.engagementLabel}>Taux d'engagement</Text>
+                      <View style={styles.engagementBarBg}>
+                        <LinearGradient
+                          colors={['#7459f0', '#9333ea']}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          style={[
+                            styles.engagementBarFill, 
+                            { 
+                              width: `${Math.min(100, (videoStats.totalLikes / (videoStats.totalViews || 1)) * 100)}%` 
+                            }
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.engagementPercent}>
+                        {((videoStats.totalLikes / (videoStats.totalViews || 1)) * 100).toFixed(1)}%
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      {/* MODAL PARAMÈTRES */}
+      <SettingsScreen 
+        visible={showSettings}
+        onClose={() => setShowSettings(false)}
+        userProfile={userProfile}
+        userRole="formateur"
+      />
     </View>
   );
 }
@@ -1385,6 +1578,13 @@ const styles = StyleSheet.create({
   editForm: { 
     width: '100%' 
   },
+  editLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+    marginTop: 12
+  },
   input: { 
     backgroundColor: '#F9FAFB', 
     borderWidth: 1, 
@@ -1470,7 +1670,168 @@ const styles = StyleSheet.create({
     marginTop: 4 
   },
 
-  // Progression Section (ID 62)
+  // Statistiques détaillées
+  statsDetailBtn: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  statsDetailGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+  },
+  statsDetailText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#7459f0',
+    marginLeft: 12,
+  },
+  statsOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end'
+  },
+  statsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    height: '85%',
+    paddingTop: 20
+  },
+  statsModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  statsModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937'
+  },
+  statsScroll: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20
+  },
+  statsSection: {
+    marginBottom: 30
+  },
+  statsSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginBottom: 16
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between'
+  },
+  statsGridItem: {
+    width: '48%',
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB'
+  },
+  statsGridValue: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#7459f0',
+    marginTop: 8,
+    marginBottom: 4
+  },
+  statsGridLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center'
+  },
+  topVideoCard: {
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB'
+  },
+  topVideoLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12
+  },
+  topVideoContent: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  topVideoThumb: {
+    width: 80,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: '#E5E7EB'
+  },
+  topVideoInfo: {
+    flex: 1
+  },
+  topVideoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 6,
+    lineHeight: 18
+  },
+  topVideoStat: {
+    fontSize: 13,
+    color: '#7459f0',
+    fontWeight: '500'
+  },
+  engagementBar: {
+    backgroundColor: '#F9FAFB',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB'
+  },
+  engagementLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 12
+  },
+  engagementBarBg: {
+    height: 12,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 8
+  },
+  engagementBarFill: {
+    height: '100%',
+    borderRadius: 6
+  },
+  engagementPercent: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#7459f0',
+    textAlign: 'center'
+  },
+
+  // Progression Section
   progressSection: {
     paddingHorizontal: 20,
     marginTop: 20
@@ -1622,7 +1983,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center'
   },
-  // ID 47, 48 - Stats sur la vidéo (vues + likes)
   videoStats: {
     position: 'absolute',
     bottom: 6,
@@ -2023,7 +2383,7 @@ const styles = StyleSheet.create({
     padding: 8
   },
 
-  // History Modal (ID 43, 398)
+  // History Modal
   historyOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
