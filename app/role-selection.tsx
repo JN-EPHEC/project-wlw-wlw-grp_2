@@ -7,12 +7,12 @@ export default function RoleSelectionScreen() {
   const router = useRouter();
 
   const handleSelectRole = (role: 'formateur' | 'apprenant') => {
-  if (role === 'formateur') {
-    router.push('/signup-formateur');
-  } else {
-    router.push('/signup-apprenant');
-  }
-};
+    if (role === 'formateur') {
+      router.push('/signup-formateur');
+    } else {
+      router.push('/signup-apprenant');
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -34,14 +34,16 @@ export default function RoleSelectionScreen() {
           {/* Formateur */}
           <View style={styles.card}>
             <LinearGradient
-              colors={['#dcfce7', '#fef3c7']}
+              colors={['#ffedd5', '#fed7aa', '#fffbeb']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={styles.cardGradient}
             >
               <View style={styles.decorativeCircle} />
               <View style={styles.cardContent}>
                 <View style={styles.illustrationContainer}>
                   <LinearGradient
-                    colors={['#4ade80', '#facc15']}
+                    colors={['#fb923c', '#fdba74']}
                     style={styles.illustration}
                   >
                     <Ionicons name="book" size={64} color="#fff" />
@@ -55,7 +57,14 @@ export default function RoleSelectionScreen() {
                   style={styles.roleButton}
                   onPress={() => handleSelectRole('formateur')}
                 >
-                  <Text style={styles.roleButtonText}>Formateur</Text>
+                  <LinearGradient
+                    colors={['#7459f0', '#9333ea', '#242A65']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.gradientButton}
+                  >
+                    <Text style={styles.roleButtonText}>Formateur</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
             </LinearGradient>
@@ -64,14 +73,16 @@ export default function RoleSelectionScreen() {
           {/* Apprenant */}
           <View style={styles.card}>
             <LinearGradient
-              colors={['#fce7f3', '#f3e8ff']}
+              colors={['#ffedd5', '#fef3c7', '#fffbeb']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={styles.cardGradient}
             >
               <View style={styles.decorativeCircle} />
               <View style={styles.cardContent}>
                 <View style={styles.illustrationContainer}>
                   <LinearGradient
-                    colors={['#f472b6', '#a855f7']}
+                    colors={['#fdba74', '#fbbf24']}
                     style={styles.illustration}
                   >
                     <Ionicons name="bulb" size={64} color="#fff" />
@@ -85,7 +96,14 @@ export default function RoleSelectionScreen() {
                   style={styles.roleButton}
                   onPress={() => handleSelectRole('apprenant')}
                 >
-                  <Text style={styles.roleButtonText}>Apprenant</Text>
+                  <LinearGradient
+                    colors={['#7459f0', '#9333ea', '#242A65']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.gradientButton}
+                  >
+                    <Text style={styles.roleButtonText}>Apprenant</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
             </LinearGradient>
@@ -167,7 +185,7 @@ const styles = StyleSheet.create({
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: 'rgba(74, 222, 128, 0.3)',
+    backgroundColor: 'rgba(253, 186, 116, 0.25)',
   },
   cardContent: {
     position: 'relative',
@@ -199,11 +217,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   roleButton: {
-    backgroundColor: '#f97316',
     height: 44,
     borderRadius: 22,
+    overflow: 'hidden',
+  },
+  gradientButton: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    height: '100%',
   },
   roleButtonText: {
     color: '#fff',

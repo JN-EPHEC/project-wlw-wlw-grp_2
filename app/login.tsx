@@ -4,6 +4,7 @@ import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential } 
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Import de la config Firebase
 import { auth, db } from '../firebaseConfig';
@@ -201,9 +202,16 @@ export default function LoginScreen() {
             onPress={handleSubmit}
             disabled={loading}
           >
-            <Text style={styles.submitButtonText}>
-              {loading ? 'Connexion...' : 'Se connecter'}
-            </Text>
+            <LinearGradient
+              colors={['#7459f0', '#9333ea', '#242A65']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gradientButton}
+            >
+              <Text style={styles.submitButtonText}>
+                {loading ? 'Connexion...' : 'Se connecter'}
+              </Text>
+            </LinearGradient>
           </TouchableOpacity>
 
           {/* Mot de passe oublié */}
@@ -261,7 +269,6 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingBottom: 32,
   },
-  // Les styles logoContainer et logoText peuvent être supprimés si plus utilisés
   title: {
     fontSize: 28,
     fontWeight: 'bold',
@@ -324,14 +331,18 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     height: 48,
-    backgroundColor: '#9333ea',
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginTop: 8,
+    overflow: 'hidden',
   },
   submitButtonDisabled: {
     opacity: 0.5,
+  },
+  gradientButton: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
   },
   submitButtonText: {
     color: '#fff',

@@ -4,6 +4,7 @@ import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
@@ -72,7 +73,14 @@ export default function ForgotPasswordScreen() {
             style={styles.backToLoginButton}
             onPress={() => router.back()}
           >
-            <Text style={styles.backToLoginButtonText}>Retour à la connexion</Text>
+            <LinearGradient
+              colors={['#7459f0', '#9333ea', '#242A65']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gradientButton}
+            >
+              <Text style={styles.backToLoginButtonText}>Retour à la connexion</Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
@@ -124,9 +132,16 @@ export default function ForgotPasswordScreen() {
             onPress={handleSubmit}
             disabled={loading}
           >
-            <Text style={styles.submitButtonText}>
-              {loading ? 'Envoi en cours...' : 'Réinitialiser le mot de passe'}
-            </Text>
+            <LinearGradient
+              colors={['#7459f0', '#9333ea', '#242A65']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.gradientButton}
+            >
+              <Text style={styles.submitButtonText}>
+                {loading ? 'Envoi en cours...' : 'Réinitialiser le mot de passe'}
+              </Text>
+            </LinearGradient>
           </TouchableOpacity>
 
           <View style={styles.securityBox}>
@@ -208,14 +223,18 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     height: 48,
-    backgroundColor: '#9333ea', // Mis à jour avec le violet demandé
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 24,
+    overflow: 'hidden',
   },
   submitButtonDisabled: {
     opacity: 0.5,
+  },
+  gradientButton: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100%',
   },
   submitButtonText: {
     color: '#fff',
@@ -262,7 +281,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   footerLink: {
-    color: '#9333ea', // Mis à jour pour s'accorder au bouton
+    color: '#9333ea',
     fontSize: 14,
     textDecorationLine: 'underline',
   },
@@ -321,13 +340,10 @@ const styles = StyleSheet.create({
   },
   backToLoginButton: {
     height: 48,
-    backgroundColor: '#9333ea',
     borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
     width: '100%',
     maxWidth: 400,
+    overflow: 'hidden',
   },
   backToLoginButtonText: {
     color: '#fff',
