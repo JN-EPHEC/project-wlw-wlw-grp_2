@@ -190,7 +190,7 @@ export default function ProfileApprenantScreen() {
 
   // Modals
   const [showCreatePlaylist, setShowCreatePlaylist] = useState(false);
-  const [showSettings, setShowSettings] = useState(false); // État déjà présent mais non utilisé
+  const [showSettings, setShowSettings] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [selectedPlaylist, setSelectedPlaylist] = useState<any>(null);
   const [selectedPlaylistVideos, setSelectedPlaylistVideos] = useState<any[]>([]);
@@ -240,15 +240,23 @@ export default function ProfileApprenantScreen() {
     return videosData;
   };
 
+  // ✅ CORRECTION : Fonction loadBadges avec logs
   const loadBadges = async () => {
     try {
+      console.log('🔄 Chargement des badges...');
+      
       const allBadges = getBadgesWithProgress();
       const allBonusBadges = getBonusBadgesWithProgress();
+      
+      console.log('🎯 Badges calculés:', allBadges.filter(b => b.unlocked).map(b => b.name));
       
       setBadges(allBadges);
       setBonusBadges(allBonusBadges);
       
+      // ✅ IMPORTANT : Cette ligne vérifie et sauvegarde les nouveaux badges
       const newBadges = await checkNewBadges(allBadges);
+      console.log('🎉 Nouveaux badges débloqués:', newBadges.length);
+      
       if (newBadges.length > 0) {
         const badge = allBadges.find(b => b.id === newBadges[0].id);
         if (badge) {
@@ -257,7 +265,7 @@ export default function ProfileApprenantScreen() {
         }
       }
     } catch (error) {
-      console.error('Erreur chargement badges:', error);
+      console.error('❌ Erreur chargement badges:', error);
     }
   };
 
@@ -292,6 +300,7 @@ export default function ProfileApprenantScreen() {
     return badges.find(badge => !badge.unlocked);
   };
 
+  // ✅ CORRECTION : Fonction loadProfile avec source unique pour watchCount
   const loadProfile = async () => {
     try {
       const user = auth.currentUser;
@@ -304,7 +313,16 @@ export default function ProfileApprenantScreen() {
         setEditedName(`${data.prenom || ''} ${data.nom || ''}`.trim());
         setEditedBio(data.bio || "Passionné d'apprentissage continu 📚");
         
-        const watchCount = data.watchHistory ? data.watchHistory.length : (data.stats?.videosWatched || 0);
+        // ✅ CORRECTION : Source unique = watchHistory.length
+        const watchCount = data.watchHistory ? data.watchHistory.length : 0;
+        
+        // ✅ AJOUT : Logs de debug
+        console.log('📊 Statistiques chargées:', {
+          watchHistory: data.watchHistory?.length || 0,
+          unlockedBadges: data.unlockedBadges?.length || 0,
+          videosWatched: watchCount
+        });
+        
         setStats({
           videosWatched: watchCount,
           streak: data.stats?.streak || 0,
@@ -312,6 +330,7 @@ export default function ProfileApprenantScreen() {
           followers: data.stats?.followers || 0,
         });
 
+        // ✅ Appel de loadBadges qui va maintenant sauvegarder automatiquement
         await loadBadges();
 
         if (activeTab === 'playlists') await loadPlaylists(user.uid);
@@ -333,7 +352,7 @@ export default function ProfileApprenantScreen() {
         setUnlockedBadges(badgesList);
       }
     } catch (error) {
-      console.error("Erreur chargement profil:", error);
+      console.error("❌ Erreur chargement profil:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -486,7 +505,6 @@ export default function ProfileApprenantScreen() {
         <View style={styles.headerWrapper}>
             <LinearGradient colors={['#9333ea', '#7e22ce']} style={styles.headerGradient}>
                 <View style={styles.topIcons}>
-                    {/* MODIFICATION: Correction du déclencheur ici */}
                     <TouchableOpacity 
                         style={styles.glassIcon}
                         onPress={() => setShowSettings(true)}
@@ -691,7 +709,6 @@ export default function ProfileApprenantScreen() {
         <View style={{height: 100}} />
       </ScrollView>
 
-      {/* MODIFICATION: Appel correct du composant SettingsScreen */}
       <SettingsScreen 
         visible={showSettings}
         onClose={() => setShowSettings(false)}
@@ -733,7 +750,6 @@ export default function ProfileApprenantScreen() {
   );
 }
 
-// Les styles restent identiques à votre code d'origine...
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFF' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },

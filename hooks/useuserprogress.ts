@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doc, getDoc, collection, query, getDocs, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 
 interface ProgressData {
@@ -8,12 +8,21 @@ interface ProgressData {
   nextLevelXP: number;
 }
 
+interface UnlockedBadge {
+  badgeId: string;
+  unlockedAt: any;
+  badgeName: string;
+  badgeIcon: string;
+}
+
 interface UserStats {
   videosVues: number;
   joursConsecutifs: number;
   minutesVisionnees: number;
   progressData: ProgressData;
   badges: any[];
+  unlockedBadges: UnlockedBadge[];
+  watchHistory: string[];
 }
 
 interface VideoProgress {
@@ -35,7 +44,9 @@ export const useUserProgress = () => {
       level: 1,
       nextLevelXP: 100
     },
-    badges: []
+    badges: [],
+    unlockedBadges: [],
+    watchHistory: []
   });
   const [videosProgress, setVideosProgress] = useState<VideoProgress[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,14 +58,19 @@ export const useUserProgress = () => {
       return;
     }
 
-    // Écouter les changements en temps réel des stats utilisateur
+    // ✅ CORRECTION : Écouter les changements en temps réel
     const unsubscribeUser = onSnapshot(
       doc(db, 'users', user.uid),
       (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
+          
+          // ✅ CORRECTION : Source unique de vérité pour les vidéos vues
+          const watchHistory = data.watchHistory || [];
+          const videosVuesCount = watchHistory.length;
+          
           setStats({
-            videosVues: data.videosVues || 0,
+            videosVues: videosVuesCount,
             joursConsecutifs: data.joursConsecutifs || 0,
             minutesVisionnees: data.minutesVisionnees || 0,
             progressData: data.progressData || {
@@ -62,42 +78,21 @@ export const useUserProgress = () => {
               level: 1,
               nextLevelXP: 100
             },
-            badges: data.badges || []
+            badges: data.badges || [],
+            unlockedBadges: data.unlockedBadges || [],
+            watchHistory: watchHistory
           });
         }
         setLoading(false);
       },
       (error) => {
-        console.error('Erreur stats:', error);
+        console.error('❌ Erreur stats:', error);
         setLoading(false);
       }
     );
 
-    // Charger la progression des vidéos
-    loadVideosProgress();
-
     return () => unsubscribeUser();
   }, []);
-
-  const loadVideosProgress = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-
-    try {
-      const progressRef = collection(db, 'users', user.uid, 'progression');
-      const q = query(progressRef);
-      const querySnapshot = await getDocs(q);
-      
-      const videos: VideoProgress[] = [];
-      querySnapshot.forEach((doc) => {
-        videos.push({ ...doc.data() } as VideoProgress);
-      });
-      
-      setVideosProgress(videos);
-    } catch (error) {
-      console.error('Erreur chargement progression:', error);
-    }
-  };
 
   // Calculer le pourcentage XP pour la barre de progression
   const getXPProgressPercentage = () => {
@@ -105,9 +100,10 @@ export const useUserProgress = () => {
     return (currentXP / nextLevelXP) * 100;
   };
 
-  // Fonction pour calculer les badges avec progression
+  // ✅ CORRECTION : Fonction pour calculer les badges avec progression
   const getBadgesWithProgress = () => {
     const videosWatched = stats.videosVues;
+    const unlockedBadgeIds = stats.unlockedBadges.map(b => b.badgeId);
     
     const allBadges = [
       {
@@ -117,7 +113,7 @@ export const useUserProgress = () => {
         icon: '🌱',
         requirement: 5,
         description: '5 vidéos regardées',
-        unlocked: videosWatched >= 5,
+        unlocked: unlockedBadgeIds.includes('badge_1') || videosWatched >= 5,
         progress: Math.min(100, Math.round((videosWatched / 5) * 100)),
       },
       {
@@ -127,7 +123,7 @@ export const useUserProgress = () => {
         icon: '🔥',
         requirement: 15,
         description: '15 vidéos regardées',
-        unlocked: videosWatched >= 15,
+        unlocked: unlockedBadgeIds.includes('badge_2') || videosWatched >= 15,
         progress: Math.min(100, Math.round((videosWatched / 15) * 100)),
       },
       {
@@ -137,7 +133,7 @@ export const useUserProgress = () => {
         icon: '⭐',
         requirement: 30,
         description: '30 vidéos regardées',
-        unlocked: videosWatched >= 30,
+        unlocked: unlockedBadgeIds.includes('badge_3') || videosWatched >= 30,
         progress: Math.min(100, Math.round((videosWatched / 30) * 100)),
       },
       {
@@ -147,7 +143,7 @@ export const useUserProgress = () => {
         icon: '❤️',
         requirement: 60,
         description: '60 vidéos regardées',
-        unlocked: videosWatched >= 60,
+        unlocked: unlockedBadgeIds.includes('badge_4') || videosWatched >= 60,
         progress: Math.min(100, Math.round((videosWatched / 60) * 100)),
       },
       {
@@ -157,7 +153,7 @@ export const useUserProgress = () => {
         icon: '🎯',
         requirement: 100,
         description: '100 vidéos regardées',
-        unlocked: videosWatched >= 100,
+        unlocked: unlockedBadgeIds.includes('badge_5') || videosWatched >= 100,
         progress: Math.min(100, Math.round((videosWatched / 100) * 100)),
       },
       {
@@ -167,17 +163,24 @@ export const useUserProgress = () => {
         icon: '👑',
         requirement: 250,
         description: '250 vidéos regardées',
-        unlocked: videosWatched >= 250,
+        unlocked: unlockedBadgeIds.includes('badge_6') || videosWatched >= 250,
         progress: Math.min(100, Math.round((videosWatched / 250) * 100)),
       },
     ];
     
+    console.log('📊 Stats badges:', {
+      videosWatched,
+      unlockedBadgeIds,
+      calculatedBadges: allBadges.filter(b => b.unlocked).map(b => b.name)
+    });
+    
     return allBadges;
   };
 
-  // Fonction pour calculer les badges bonus
+  // ✅ CORRECTION : Fonction pour calculer les badges bonus
   const getBonusBadgesWithProgress = () => {
     const joursConsecutifs = stats.joursConsecutifs;
+    const unlockedBadgeIds = stats.unlockedBadges.map(b => b.badgeId);
     
     return [
       {
@@ -185,28 +188,28 @@ export const useUserProgress = () => {
         name: 'Régulier',
         icon: '⚡',
         description: '3 jours consécutifs',
-        unlocked: joursConsecutifs >= 3,
+        unlocked: unlockedBadgeIds.includes('bonus_1') || joursConsecutifs >= 3,
       },
       {
         id: 'bonus_2',
         name: 'Marathonien',
         icon: '🏃',
         description: '20 vidéos/jour',
-        unlocked: false,
+        unlocked: unlockedBadgeIds.includes('bonus_2'),
       },
       {
         id: 'bonus_3',
         name: 'Noctambule',
         icon: '🌙',
         description: '5 vidéos 22h-6h',
-        unlocked: false,
+        unlocked: unlockedBadgeIds.includes('bonus_3'),
       },
       {
         id: 'bonus_4',
         name: 'Matinal',
         icon: '☀️',
         description: '5 vidéos avant 8h',
-        unlocked: false,
+        unlocked: unlockedBadgeIds.includes('bonus_4'),
       },
     ];
   };
@@ -218,6 +221,5 @@ export const useUserProgress = () => {
     getXPProgressPercentage,
     getBadgesWithProgress,
     getBonusBadgesWithProgress,
-    refreshProgress: loadVideosProgress
   };
 };
