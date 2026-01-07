@@ -607,21 +607,33 @@ export default function ProfileApprenantScreen() {
             </ScrollView>
         </View>
 
-        {/* TABS */}
+        {/* TABS - ✅ CORRECTION : Ajout de 'history' */}
         <View style={styles.tabBar}>
-            {['progress', 'saved', 'liked', 'playlists'].map((tab) => (
-                <TouchableOpacity 
+{['progress', 'saved', 'liked', 'playlists'].map((tab) => (                <TouchableOpacity 
                     key={tab} 
                     style={[styles.tabItem, activeTab === tab && styles.tabItemActive]}
                     onPress={() => setActiveTab(tab)}
                 >
+                    {/* ✅ CORRECTION : Ajout de l'icône et du texte pour 'history' */}
                     <Ionicons 
-                        name={tab === 'progress' ? 'stats-chart' : tab === 'saved' ? 'star' : tab === 'liked' ? 'heart' : 'list'} 
+                        name={
+                            tab === 'progress' ? 'stats-chart' : 
+                            tab === 'saved' ? 'star' : 
+                            tab === 'liked' ? 'heart' : 
+                            tab === 'history' ? 'time-outline' : 
+                            'list'
+                        } 
                         size={20} 
                         color={activeTab === tab ? '#9333ea' : '#71717A'} 
                     />
                     <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                        {tab === 'progress' ? 'Progrès' : tab === 'saved' ? 'Favoris' : tab === 'liked' ? "J'aime" : 'Playlists'}
+                        {
+                            tab === 'progress' ? 'Progrès' : 
+                            tab === 'saved' ? 'Favoris' : 
+                            tab === 'liked' ? "J'aime" : 
+                            tab === 'history' ? 'Historique' : 
+                            'Playlists'
+                        }
                     </Text>
                 </TouchableOpacity>
             ))}
@@ -702,8 +714,39 @@ export default function ProfileApprenantScreen() {
                 </View>
             )}
 
-            {activeTab === 'saved' && <VideoGrid videos={favorites} type="favorites" emptyMsg="Aucun favori" icon="bookmark" onSelect={setSelectedVideo} onRemove={handleRemoveAction} />}
-            {activeTab === 'liked' && <VideoGrid videos={likedVideos} type="likedVideos" emptyMsg="Aucun like" icon="heart" onSelect={setSelectedVideo} onRemove={handleRemoveAction} />}
+            {activeTab === 'saved' && (
+                <VideoGrid 
+                    videos={favorites} 
+                    type="favorites" 
+                    emptyMsg="Aucun favori" 
+                    icon="bookmark" 
+                    onSelect={setSelectedVideo} 
+                    onRemove={handleRemoveAction} 
+                />
+            )}
+
+            {activeTab === 'liked' && (
+                <VideoGrid 
+                    videos={likedVideos} 
+                    type="likedVideos" 
+                    emptyMsg="Aucun like" 
+                    icon="heart" 
+                    onSelect={setSelectedVideo} 
+                    onRemove={handleRemoveAction} 
+                />
+            )}
+
+            {/* ✅ CORRECTION : Ajout du rendu de l'historique */}
+            {activeTab === 'history' && (
+                <VideoGrid 
+                    videos={history} 
+                    type="watchHistory" 
+                    emptyMsg="Aucune vidéo dans l'historique" 
+                    icon="time-outline" 
+                    onSelect={setSelectedVideo} 
+                    onRemove={handleRemoveAction} 
+                />
+            )}
         </View>
 
         <View style={{height: 100}} />
