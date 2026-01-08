@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, ScrollView, 
-  TouchableOpacity, Image, Platform, Modal, Dimensions, ActivityIndicator, Alert, FlatList, Clipboard, Linking
+  TouchableOpacity, Image, Platform, Modal, Dimensions, ActivityIndicator, Alert, FlatList, Clipboard, Linking,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av'; 
@@ -132,29 +133,64 @@ export default function RechercheScreen() {
     return cat ? cat.emoji : '📚';
   };
 
-  // --- CHARGEMENT USER PROFILE ---
-  useEffect(() => {
-    const fetchUserData = async () => {
-      const user = auth.currentUser;
-      if (!user) return;
-      
+  // ✅ CORRECTION 1 : CHARGEMENT USER PROFILE EN PREMIER - PRIORITAIRE
+  // ✅ CORRECTION 1 : CHARGEMENT USER PROFILE EN PREMIER - PRIORITAIRE
+useEffect(() => {
+  const fetchUserData = async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    
+    try {
+      console.log('🔄 [RECHERCHE] Chargement données utilisateur...');
       const userDoc = await getDoc(doc(db, 'users', user.uid));
+      
       if (userDoc.exists()) {
         const data = userDoc.data();
+        
+        console.log('✅ [RECHERCHE] Données utilisateur chargées:', {
+          likedVideos: data.likedVideos?.length || 0,
+          favorites: data.favorites?.length || 0,
+          following: data.following?.length || 0
+        });
+        
         setUserProfile(data);
-        setLikedVideosSet(new Set(data.likedVideos || []));
-        setSavedVideosSet(new Set(data.favorites || []));
-        setFollowedIds(data.following || []);
+        
+        // ✅ FIX : Typage explicite des Sets
+        const likedSet = new Set<string>(data.likedVideos || []);
+        const savedSet = new Set<string>(data.favorites || []);
+        const followingList = data.following || [];
+        
+        setLikedVideosSet(likedSet);
+        setSavedVideosSet(savedSet);
+        setFollowedIds(followingList);
+        
+        console.log('🎯 [RECHERCHE] Sets initialisés:', {
+          likedVideosSetSize: likedSet.size,
+          savedVideosSetSize: savedSet.size,
+          followedIdsLength: followingList.length
+        });
       }
-    };
-    fetchUserData();
-  }, []);
+    } catch (error) {
+      console.error('❌ [RECHERCHE] Erreur chargement profil:', error);
+    }
+  };
+  
+  fetchUserData();
+}, []);
 
-  // --- CHARGEMENT VIDÉOS ---
+  // ✅ CORRECTION 2 : CHARGEMENT VIDÉOS APRÈS USER PROFILE
   useEffect(() => {
+    // ⚠️ N'exécute PAS si userProfile n'est pas encore chargé
+    if (!userProfile) {
+      console.log('⏳ [RECHERCHE] En attente du profil utilisateur...');
+      return;
+    }
+    
     const fetchVideos = async () => {
       try {
+        console.log('🔄 [RECHERCHE] Chargement des vidéos...');
         setLoading(true);
+        
         const snapshot = await getDocs(collection(db, "videos"));
         const videoList: VideoData[] = snapshot.docs.map(docSnap => ({
           id: docSnap.id,
@@ -200,12 +236,24 @@ export default function RechercheScreen() {
           };
         }));
         
+        console.log('✅ [RECHERCHE] Vidéos chargées:', {
+          totalVideos: enriched.length,
+          likedVideosInSet: likedVideosSet.size,
+          savedVideosInSet: savedVideosSet.size,
+          followedCreators: followedIds.length
+        });
+        
         enriched.sort((a, b) => (b.likes || 0) + (b.views || 0) - ((a.likes || 0) + (a.views || 0)));
         setVideos(enriched);
-      } catch (error) { console.error(error); } finally { setLoading(false); }
+      } catch (error) { 
+        console.error('❌ [RECHERCHE] Erreur chargement vidéos:', error); 
+      } finally { 
+        setLoading(false); 
+      }
     };
+    
     fetchVideos();
-  }, []);
+  }, [userProfile]); // ✅ Se déclenche SEULEMENT quand userProfile est chargé
 
   // --- LISTENER TEMPS RÉEL VIDÉO SÉLECTIONNÉE ---
   useEffect(() => {
@@ -285,6 +333,12 @@ export default function RechercheScreen() {
     
     const isLiked = likedVideosSet.has(videoId);
     
+    console.log(`❤️ [RECHERCHE] Like action:`, {
+      videoId,
+      wasLiked: isLiked,
+      willBeLiked: !isLiked
+    });
+    
     setLikingVideos(prev => new Set(prev).add(videoId));
     
     setLikedVideosSet(prev => { 
@@ -301,8 +355,10 @@ export default function RechercheScreen() {
       await updateDoc(doc(db, 'users', auth.currentUser!.uid), { 
         likedVideos: isLiked ? arrayRemove(videoId) : arrayUnion(videoId) 
       });
+      
+      console.log(`✅ [RECHERCHE] Like synchronisé`);
     } catch (error) {
-      console.error('Erreur like:', error);
+      console.error('❌ [RECHERCHE] Erreur like:', error);
       setLikedVideosSet(prev => { 
         const s = new Set(prev); 
         isLiked ? s.add(videoId) : s.delete(videoId); 
@@ -320,6 +376,12 @@ export default function RechercheScreen() {
 
   const handleFavorite = async (videoId: string) => {
     const isSaved = savedVideosSet.has(videoId);
+    
+    console.log(`🔖 [RECHERCHE] Favorite action:`, {
+      videoId,
+      wasSaved: isSaved,
+      willBeSaved: !isSaved
+    });
     
     setSavedVideosSet(prev => { 
       const s = new Set(prev); 
@@ -343,6 +405,14 @@ export default function RechercheScreen() {
       }
       
       const isFollowing = followedIds.includes(creatorId);
+      
+      console.log(`👥 [RECHERCHE] Follow action:`, {
+        creatorId,
+        creatorName,
+        wasFollowing: isFollowing,
+        willFollow: !isFollowing
+      });
+      
       const userRef = doc(db, 'users', user.uid);
       const creatorRef = doc(db, 'users', creatorId);
       
@@ -367,8 +437,10 @@ export default function RechercheScreen() {
         
         Alert.alert('✓', `Vous suivez maintenant ${creatorName}`);
       }
+      
+      console.log(`✅ [RECHERCHE] Follow synchronisé`);
     } catch (error: any) { 
-      console.error('Error follow:', error);
+      console.error('❌ [RECHERCHE] Error follow:', error);
       Alert.alert('Erreur', 'Impossible de s\'abonner');
     }
   };
@@ -511,6 +583,18 @@ export default function RechercheScreen() {
 
   // --- NAVIGATION ---
   const handleVideoPress = (video: VideoData) => {
+    // ✅ Debug : Vérifier les états au moment du clic
+    console.log(`🎬 [RECHERCHE] Ouverture vidéo:`, {
+      videoId: video.id,
+      videoTitle: video.title,
+      creatorId: video.creatorId,
+      isLiked: likedVideosSet.has(video.id),
+      isSaved: savedVideosSet.has(video.id),
+      isFollowing: followedIds.includes(video.creatorId),
+      likedVideosSetSize: likedVideosSet.size,
+      savedVideosSetSize: savedVideosSet.size
+    });
+    
     setSelectedVideo(video);
   };
 
@@ -563,26 +647,38 @@ export default function RechercheScreen() {
           <ActivityIndicator size="large" color="#9333EA" style={{marginTop: 50}} />
         ) : (
           activeTab === 'videos' ? (
-            filteredVideos.map((video, index) => (
-              <TouchableOpacity 
-                key={video.id} 
-                style={[styles.videoCard, index < 3 && search === '' && styles.topVideoCard]} 
-                onPress={() => handleVideoPress(video)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.emojiContainer}>
-                  <Text style={styles.categoryEmoji}>{getCategoryEmoji(video.category)}</Text>
-                  {index < 3 && search === '' && <Text style={styles.medalEmoji}>{TOP_MEDALS[index]}</Text>}
-                </View>
-                <View style={styles.videoInfo}>
-                  <Text style={styles.vTitle} numberOfLines={2}>{video.title}</Text>
-                  <Text style={styles.vCreator}>Par {video.creatorName}</Text>
-                  <View style={styles.categoryBadge}><Text style={styles.categoryText}>{getCategoryLabel(video.category)}</Text></View>
-                  <Text style={styles.statText}>👁️ {video.views}  ❤️ {video.likes}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#D4D4D8" />
-              </TouchableOpacity>
-            ))
+            filteredVideos.map((video, index) => {
+              // ✅ Debug : Logs pour chaque vidéo affichée
+              const isLiked = likedVideosSet.has(video.id);
+              const isSaved = savedVideosSet.has(video.id);
+              const isFollowing = followedIds.includes(video.creatorId);
+              
+              return (
+                <TouchableOpacity 
+                  key={video.id} 
+                  style={[styles.videoCard, index < 3 && search === '' && styles.topVideoCard]} 
+                  onPress={() => handleVideoPress(video)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.emojiContainer}>
+                    <Text style={styles.categoryEmoji}>{getCategoryEmoji(video.category)}</Text>
+                    {index < 3 && search === '' && <Text style={styles.medalEmoji}>{TOP_MEDALS[index]}</Text>}
+                  </View>
+                  <View style={styles.videoInfo}>
+                    <Text style={styles.vTitle} numberOfLines={2}>{video.title}</Text>
+                    <Text style={styles.vCreator}>Par {video.creatorName}</Text>
+                    <View style={styles.categoryBadge}><Text style={styles.categoryText}>{getCategoryLabel(video.category)}</Text></View>
+                    <Text style={styles.statText}>
+                      👁️ {video.views}  
+                      {isLiked ? '❤️' : '🤍'} {video.likes}
+                      {isSaved ? ' 🔖' : ''}
+                      {isFollowing ? ' ✅' : ''}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#D4D4D8" />
+                </TouchableOpacity>
+              );
+            })
           ) : (
             creators.map(creator => (
               <TouchableOpacity 
@@ -607,7 +703,7 @@ export default function RechercheScreen() {
         )}
       </ScrollView>
 
-      {/* MODAL VIDÉO COMPLET AVEC TOUTES LES FONCTIONNALITÉS */}
+      {/* MODAL VIDÉO COMPLET - FORMAT CORRIGÉ */}
       <Modal 
         visible={selectedVideo !== null} 
         animationType="slide" 
@@ -630,18 +726,21 @@ export default function RechercheScreen() {
 
             <Video
               source={{ uri: selectedVideo.videoUrl }}
-              style={styles.fullScreenVideo}
-              resizeMode={ResizeMode.CONTAIN}
+              style={StyleSheet.absoluteFillObject}
+              resizeMode={ResizeMode.COVER}
               shouldPlay
               isLooping
-              useNativeControls
+              useNativeControls={false}
             />
+
+            <TouchableWithoutFeedback>
+              <View style={{ ...StyleSheet.absoluteFillObject, zIndex: 1 }} />
+            </TouchableWithoutFeedback>
 
             <LinearGradient 
               colors={['transparent', 'rgba(0,0,0,0.85)']} 
               style={styles.videoInfoOverlay}
             >
-              {/* INFOS CRÉATEUR */}
               <View style={styles.creatorInfo}>
                 <TouchableOpacity 
                   style={styles.creatorAvatarContainer}
@@ -709,9 +808,7 @@ export default function RechercheScreen() {
               )}
             </LinearGradient>
 
-            {/* ACTIONS À DROITE */}
             <View style={styles.actionsContainer}>
-              {/* PROFIL */}
               <TouchableOpacity 
                 onPress={() => {
                   setSelectedVideo(null);
@@ -732,7 +829,6 @@ export default function RechercheScreen() {
                 </View>
               </TouchableOpacity>
 
-              {/* LIKE */}
               <TouchableOpacity 
                 style={styles.actionBtn} 
                 onPress={() => handleLike(selectedVideo.id)}
@@ -750,7 +846,6 @@ export default function RechercheScreen() {
                 <Text style={styles.actionCount}>{selectedVideo.likes || 0}</Text>
               </TouchableOpacity>
 
-              {/* COMMENTAIRES */}
               <TouchableOpacity 
                 style={styles.actionBtn} 
                 onPress={() => setShowComments(true)}
@@ -764,7 +859,6 @@ export default function RechercheScreen() {
                 <Text style={styles.actionCount}>{selectedVideo.comments || 0}</Text>
               </TouchableOpacity>
 
-              {/* FAVORIS */}
               <TouchableOpacity 
                 style={styles.actionBtn} 
                 onPress={() => handleFavorite(selectedVideo.id)}
@@ -784,7 +878,6 @@ export default function RechercheScreen() {
                 </Text>
               </TouchableOpacity>
 
-              {/* PARTAGER */}
               <TouchableOpacity 
                 style={styles.actionBtn} 
                 onPress={() => handleShare(selectedVideo)}
@@ -1070,12 +1163,10 @@ const styles = StyleSheet.create({
   followBtn: { paddingHorizontal: 15, paddingVertical: 7, borderRadius: 20 },
   followBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
   
-  // Styles Modal Vidéo
-  videoModalContainer: { flex: 1, backgroundColor: '#000', justifyContent: 'center' },
+  videoModalContainer: { flex: 1, backgroundColor: '#000' },
   closeButton: { position: 'absolute', top: Platform.OS === 'ios' ? 60 : 40, left: 20, zIndex: 100 },
   closeButtonGradient: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  fullScreenVideo: { width: '100%', height: '100%' },
-  videoInfoOverlay: { position: 'absolute', bottom: 0, left: 0, right: 100, padding: 20, paddingBottom: 40 },
+  videoInfoOverlay: { position: 'absolute', bottom: 0, left: 0, right: 100, padding: 20, paddingBottom: 40, zIndex: 20 },
   creatorInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   creatorAvatarContainer: { marginRight: 12 },
   creatorAvatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: '#fff' },
@@ -1088,7 +1179,6 @@ const styles = StyleSheet.create({
   modalCreatorName: { fontSize: 16, color: '#FFF', fontWeight: '700' },
   modalDescription: { fontSize: 14, color: '#FFF', opacity: 0.8, lineHeight: 20 },
   
-  // Actions à droite
   actionsContainer: { position: 'absolute', bottom: 100, right: 16, gap: 20, alignItems: 'center', zIndex: 50 },
   actionCircleWrapper: { position: 'relative', marginBottom: 8 },
   actionProfileImg: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#fff' },
@@ -1097,7 +1187,6 @@ const styles = StyleSheet.create({
   actionCircle: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   actionCount: { color: '#fff', fontSize: 11, fontWeight: '600', textAlign: 'center' },
   
-  // Modal Partage
   shareOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   shareContentWrapper: { width: '100%', maxWidth: 400 },
   shareContent: { backgroundColor: '#fff', borderRadius: 24, overflow: 'hidden' },
@@ -1115,7 +1204,6 @@ const styles = StyleSheet.create({
   shareIconGradient: { width: 80, height: 80, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
   shareOptionLabel: { fontSize: 13, fontWeight: '600', color: '#374151', textAlign: 'center' },
   
-  // Modal Utilisateurs
   usersListContainer: { flex: 1, backgroundColor: '#F8F8F6' },
   usersListHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 50, paddingBottom: 20 },
   usersListTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
@@ -1134,7 +1222,6 @@ const styles = StyleSheet.create({
   emptyUsersList: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 64 },
   emptyUsersText: { fontSize: 16, color: '#9CA3AF', marginTop: 16, fontWeight: '500' },
   
-  // Modal Filtres
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 25 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15 },

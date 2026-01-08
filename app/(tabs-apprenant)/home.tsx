@@ -65,7 +65,7 @@ export default function HomeScreen() {
   const [userProfile, setUserProfile] = useState<any>(null);
   const [likedVideosSet, setLikedVideosSet] = useState<Set<string>>(new Set());
   const [savedVideosSet, setSavedVideosSet] = useState<Set<string>>(new Set());
-  const [likingVideos, setLikingVideos] = useState<Set<string>>(new Set());  // 🆕 Track des likes en cours
+  const [likingVideos, setLikingVideos] = useState<Set<string>>(new Set());
   
   // États chargement
   const [loading, setLoading] = useState(true);
@@ -88,6 +88,7 @@ export default function HomeScreen() {
   // 🔄 EFFETS
   // ========================================
 
+  // ✅ ANCIEN CODE QUI FONCTIONNAIT (avec fix TypeScript uniquement)
   useFocusEffect(
     useCallback(() => {
       const fetchUserData = async () => {
@@ -98,24 +99,27 @@ export default function HomeScreen() {
         if (userDoc.exists()) {
           const data = userDoc.data();
           setUserProfile(data);
-          setLikedVideosSet(new Set(data.likedVideos || []));
-          setSavedVideosSet(new Set(data.favorites || []));
+          // ✅ FIX : Ajout <string> pour TypeScript
+          setLikedVideosSet(new Set<string>(data.likedVideos || []));
+setSavedVideosSet(new Set<string>(data.favorites || []));
         }
       };
       
       fetchUserData();
       
-      const timer = setTimeout(() => {
-        const currentVideo = videoRefs.current[videos[currentIndex]?.id];
-        if (currentVideo) {
-          try {
-            currentVideo.playAsync();
-            setIsPlaying(true);
-          } catch (e) {
-            console.error('Erreur lecture vidéo:', e);
-          }
+    const timer = setTimeout(() => {
+  const currentVideo = videoRefs.current[videos[currentIndex]?.id];
+  if (currentVideo) {
+    currentVideo.playAsync()
+      .catch(error => {
+        // ✅ Ignore l'erreur AbortError (normale)
+        if (error.name !== 'AbortError') {
+          console.error('Erreur lecture vidéo:', error);
         }
-      }, 100);
+      });
+    setIsPlaying(true);
+  }
+}, 100);
       
       return () => {
         clearTimeout(timer);
@@ -159,14 +163,12 @@ export default function HomeScreen() {
     
     const videoId = videos[currentIndex].id;
     
-    // Écoute les changements en temps réel sur la vidéo actuelle
     const unsubscribe = onSnapshot(
       doc(db, 'videos', videoId),
       (docSnapshot) => {
         if (docSnapshot.exists()) {
           const data = docSnapshot.data();
           
-          // Met à jour les compteurs avec les valeurs Firebase
           setVideos(prev => prev.map(v => {
             if (v.id !== videoId) return v;
             
@@ -325,28 +327,19 @@ export default function HomeScreen() {
   // ========================================
 
   const handleLike = async (videoId: string) => {
-    // ❌ Si déjà en train de liker cette vidéo, ignorer le click
-    if (likingVideos.has(videoId)) {
-      return;
-    }
+    if (likingVideos.has(videoId)) return;
     
     const isLiked = likedVideosSet.has(videoId);
     
-    // 🔒 Marquer cette vidéo comme "en cours de like"
     setLikingVideos(prev => new Set(prev).add(videoId));
     
-    // 🔄 SEULEMENT optimistic update du STATE (coeur), PAS du compteur
     setLikedVideosSet(prev => { 
       const s = new Set(prev); 
       isLiked ? s.delete(videoId) : s.add(videoId); 
       return s; 
     });
     
-    // ⚠️ PAS d'optimistic update du compteur !
-    // Le listener onSnapshot s'en occupera automatiquement
-    
     try {
-      // ☁️ Synchronise avec Firebase
       await updateDoc(doc(db, 'videos', videoId), { 
         likes: increment(isLiked ? -1 : 1) 
       });
@@ -354,12 +347,9 @@ export default function HomeScreen() {
       await updateDoc(doc(db, 'users', auth.currentUser!.uid), { 
         likedVideos: isLiked ? arrayRemove(videoId) : arrayUnion(videoId) 
       });
-      
-      // ✅ Le listener onSnapshot détectera le changement et mettra à jour le compteur
     } catch (error) {
       console.error('Erreur like:', error);
       
-      // 🔄 Annule uniquement le state liked/unliked en cas d'erreur
       setLikedVideosSet(prev => { 
         const s = new Set(prev); 
         isLiked ? s.add(videoId) : s.delete(videoId); 
@@ -368,7 +358,6 @@ export default function HomeScreen() {
       
       Alert.alert('Erreur', 'Impossible de synchroniser avec le serveur');
     } finally {
-      // 🔓 Retirer du tracking une fois la synchro terminée
       setLikingVideos(prev => {
         const s = new Set(prev);
         s.delete(videoId);
@@ -446,13 +435,11 @@ export default function HomeScreen() {
   // ========================================
 
   const handleCommentAdded = (videoId: string) => {
-    // ✅ Le listener onSnapshot s'occupera de mettre à jour le compteur
-    // Pas besoin d'optimistic update ici
+    // Le listener s'en occupe
   };
 
   const handleCommentDeleted = (videoId: string) => {
-    // ✅ Le listener onSnapshot s'occupera de mettre à jour le compteur
-    // Pas besoin d'optimistic update ici
+    // Le listener s'en occupe
   };
 
   // ========================================
@@ -639,6 +626,7 @@ export default function HomeScreen() {
                 resizeMode={ResizeMode.COVER}
                 shouldPlay={index === currentIndex && isPlaying}
                 isLooping
+                 isMuted={Platform.OS === 'web'} 
                 style={StyleSheet.absoluteFillObject}
                 onPlaybackStatusUpdate={(s) => {
                   if (index === currentIndex && s.isLoaded) {
