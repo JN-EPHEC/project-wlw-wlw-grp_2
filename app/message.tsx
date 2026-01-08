@@ -62,26 +62,27 @@ export default function MessageScreen() {
   const [searchLoading, setSearchLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  const handleGoBack = async () => {
-    const user = auth.currentUser;
-    if (!user) {
-      router.push('/(tabs)/home' as any);
-      return;
-    }
+const handleGoBack = async () => {
+  const user = auth.currentUser;
+  if (!user) {
+    // Utilise le groupe apprenant par défaut ou le groupe principal
+    router.push('/(tabs-apprenant)/home' as any); 
+    return;
+  }
 
-    try {
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      const role = userDoc.data()?.role;
-      
-      if (role === 'formateur') {
-        router.push('/(tabs-formateur)/notifications' as any);
-      } else {
-        router.push('/(tabs)/home' as any);
-      }
-    } catch (error) {
-      router.push('/(tabs)/home' as any);
+  try {
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    const role = userDoc.data()?.role;
+    
+    if (role === 'formateur') {
+      router.push('/(tabs-formateur)/notifications' as any);
+    } else {
+      router.push('/(tabs-apprenant)/notifications' as any);
     }
-  };
+  } catch (error) {
+    router.back();
+  }
+};
 
   const searchUsers = async (searchText: string) => {
     if (!searchText.trim()) {

@@ -42,7 +42,6 @@ export default function NotificationsApprenantScreen() {
       return;
     }
 
-    // 📧 LISTENER NOTIFICATIONS
     const notifQuery = query(
       collection(db, 'notifications'),
       where('userId', '==', user.uid),
@@ -78,7 +77,6 @@ export default function NotificationsApprenantScreen() {
       setLoading(false);
     });
 
-    // 📨 LISTENER MESSAGES
     const messagesQuery = query(collection(db, 'messages'), where('read', '==', false));
     const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
       const unreadMessages = snapshot.docs.filter(doc => {
@@ -141,7 +139,6 @@ export default function NotificationsApprenantScreen() {
     } else if (notif.type === 'badge') {
       router.push('/(tabs-apprenant)/profile' as any);
     } else if (notif.videoId) {
-      // Pour les commentaires et likes de commentaires, on ouvre la vidéo avec les comms ouverts
       const isCommentType = notif.type.includes('comment');
       router.push(`/(tabs-apprenant)/home?videoId=${notif.videoId}${isCommentType ? '&openComments=true' : ''}` as any);
     }
@@ -159,19 +156,21 @@ export default function NotificationsApprenantScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.headerTitle}>Notifications</Text>
-            {unreadCount > 0 && (
+            {/* CORRECTION ICI : Utilisation de !! pour éviter Unexpected text node */}
+            {!!unreadCount && unreadCount > 0 ? (
               <LinearGradient colors={['#7459f0', '#9333ea']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.unreadBadge}>
                 <Text style={styles.unreadBadgeText}>{unreadCount} nouvelle{unreadCount > 1 ? 's' : ''}</Text>
               </LinearGradient>
-            )}
+            ) : null}
           </View>
           <TouchableOpacity onPress={() => router.push('/message' as any)} style={styles.iconBtnWrapper}>
             <LinearGradient colors={['#7459f0', '#9333ea', '#242A65']} style={styles.iconBtn}>
-              {messageCount > 0 && (
+              {/* CORRECTION ICI : Utilisation de !! */}
+              {!!messageCount && messageCount > 0 ? (
                 <LinearGradient colors={['#FBA31A', '#F59E0B']} style={styles.msgBadge}>
                   <Text style={styles.badgeText}>{messageCount}</Text>
                 </LinearGradient>
-              )}
+              ) : null}
               <Ionicons name="chatbubble" size={20} color="#FFF" />
             </LinearGradient>
           </TouchableOpacity>
@@ -198,8 +197,13 @@ export default function NotificationsApprenantScreen() {
                   <View style={styles.notifInfo}>
                     <Text style={styles.notifUser}>{item.user}</Text>
                     <Text style={[styles.notifMsg, isBadge && styles.badgeMsg]}>{item.msg}</Text>
-                    {item.title && <View style={styles.videoTitleBadge}><Text style={styles.videoTitleText} numberOfLines={1}>📹 {item.title}</Text></View>}
-                    {item.comment && <View style={styles.commentPreview}><Text style={styles.commentPreviewText} numberOfLines={1}>"{item.comment}"</Text></View>}
+                    {/* CORRECTION ICI : Utilisation de !! */}
+                    {!!item.title ? (
+                      <View style={styles.videoTitleBadge}><Text style={styles.videoTitleText} numberOfLines={1}>📹 {item.title}</Text></View>
+                    ) : null}
+                    {!!item.comment ? (
+                      <View style={styles.commentPreview}><Text style={styles.commentPreviewText} numberOfLines={1}>"{item.comment}"</Text></View>
+                    ) : null}
                     <View style={styles.timeRow}><Ionicons name="time-outline" size={12} color="#9CA3AF" /><Text style={styles.notifTime}>{item.time}</Text></View>
                   </View>
                   <TouchableOpacity onPress={() => deleteNotif(item.id)} style={styles.deleteBtnWrapper}>
@@ -214,7 +218,6 @@ export default function NotificationsApprenantScreen() {
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F9FAFB' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -251,3 +254,4 @@ const styles = StyleSheet.create({
   deleteBtnWrapper: { marginLeft: 10 },
   deleteBtn: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' }
 });
+// ... gardez vos styles identiques ... //
