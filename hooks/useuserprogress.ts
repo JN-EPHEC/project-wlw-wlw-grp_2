@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebaseConfig';
 
 interface ProgressData {
@@ -65,22 +65,30 @@ export const useUserProgress = () => {
         if (docSnap.exists()) {
           const data = docSnap.data();
           
-          // ✅ CORRECTION : Source unique de vérité pour les vidéos vues
+          // ✅ CORRECTION : Mapper les vrais champs Firebase
           const watchHistory = data.watchHistory || [];
           const videosVuesCount = watchHistory.length;
           
           setStats({
             videosVues: videosVuesCount,
-            joursConsecutifs: data.joursConsecutifs || 0,
-            minutesVisionnees: data.minutesVisionnees || 0,
+            joursConsecutifs: data.stats?.streak || 0, // ✅ Corrigé
+            minutesVisionnees: data.stats?.totalMinutes || 0, // ✅ Corrigé
             progressData: data.progressData || {
-              currentXP: 0,
-              level: 1,
-              nextLevelXP: 100
+              currentXP: videosVuesCount * 10, // 10 XP par vidéo
+              level: Math.floor(videosVuesCount / 10) + 1,
+              nextLevelXP: (Math.floor(videosVuesCount / 10) + 1) * 100
             },
             badges: data.badges || [],
             unlockedBadges: data.unlockedBadges || [],
             watchHistory: watchHistory
+          });
+          
+          console.log('📊 Hook useUserProgress - Stats chargées:', {
+            videosVues: videosVuesCount,
+            watchHistory: watchHistory.length,
+            unlockedBadges: data.unlockedBadges?.length || 0,
+            streak: data.stats?.streak || 0,
+            totalMinutes: data.stats?.totalMinutes || 0
           });
         }
         setLoading(false);
@@ -97,7 +105,8 @@ export const useUserProgress = () => {
   // Calculer le pourcentage XP pour la barre de progression
   const getXPProgressPercentage = () => {
     const { currentXP, nextLevelXP } = stats.progressData;
-    return (currentXP / nextLevelXP) * 100;
+    if (nextLevelXP === 0) return 0;
+    return Math.min(100, (currentXP / nextLevelXP) * 100);
   };
 
   // ✅ CORRECTION : Fonction pour calculer les badges avec progression
@@ -168,10 +177,11 @@ export const useUserProgress = () => {
       },
     ];
     
-    console.log('📊 Stats badges:', {
+    console.log('🎯 Badges calculés dans hook:', {
       videosWatched,
       unlockedBadgeIds,
-      calculatedBadges: allBadges.filter(b => b.unlocked).map(b => b.name)
+      badgesUnlocked: allBadges.filter(b => b.unlocked).length,
+      badgesList: allBadges.filter(b => b.unlocked).map(b => b.name)
     });
     
     return allBadges;

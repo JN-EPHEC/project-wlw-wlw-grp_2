@@ -207,14 +207,16 @@ export default function ProfileApprenantScreen() {
       loadProfile();
     }, [activeTab])
   );
+// ✅ NOUVEAU CODE : Charger les badges uniquement sur l'onglet "progress"
 useEffect(() => {
-  if (userProfile && stats.videosWatched >= 0) {
-    // ✅ Petit délai pour que React finisse de mettre à jour les states
+  // ✅ Charger les badges UNIQUEMENT sur l'onglet "progress"
+  if (activeTab === 'progress' && userProfile && stats.videosWatched >= 0) {
+    console.log('🎯 Onglet Progrès actif, chargement des badges...');
     setTimeout(() => {
       loadBadges();
     }, 100);
   }
-}, [userProfile?.uid, stats.videosWatched]);
+}, [activeTab, userProfile?.uid, stats.videosWatched]);
 
   const signOut = async () => {
     try {
@@ -248,33 +250,44 @@ useEffect(() => {
   };
 
   // ✅ CORRECTION : Fonction loadBadges avec logs
-  const loadBadges = async () => {
-    try {
-      console.log('🔄 Chargement des badges...');
-      
-      const allBadges = getBadgesWithProgress();
-      const allBonusBadges = getBonusBadgesWithProgress();
-      
-      console.log('🎯 Badges calculés:', allBadges.filter(b => b.unlocked).map(b => b.name));
-      
-      setBadges(allBadges);
-      setBonusBadges(allBonusBadges);
-      
-      // ✅ IMPORTANT : Cette ligne vérifie et sauvegarde les nouveaux badges
-      const newBadges = await checkNewBadges(allBadges);
-      console.log('🎉 Nouveaux badges débloqués:', newBadges.length);
-      
-      if (newBadges.length > 0) {
-        const badge = allBadges.find(b => b.id === newBadges[0].id);
-        if (badge) {
-          setNewlyUnlockedBadge(badge);
-          showBadgeUnlockedToast();
-        }
+// ✅ OPTIMISÉ : Ne se déclenche que sur l'onglet "progress"
+const loadBadges = async () => {
+  // ✅ BLOQUER si on n'est pas sur l'onglet progress
+  if (activeTab !== 'progress') {
+    console.log('⏭️ Pas sur l\'onglet Progrès, skip loadBadges');
+    return;
+  }
+
+  try {
+    console.log('🔄 Chargement des badges (onglet Progrès)...');
+    
+    const allBadges = getBadgesWithProgress();
+    const allBonusBadges = getBonusBadgesWithProgress();
+    
+    console.log('📊 Badges calculés:', {
+      total: allBadges.length,
+      unlocked: allBadges.filter(b => b.unlocked).length,
+      badges: allBadges.filter(b => b.unlocked).map(b => b.name)
+    });
+    
+    setBadges(allBadges);
+    setBonusBadges(allBonusBadges);
+    
+    // ✅ Vérifier et sauvegarder les nouveaux badges dans Firebase
+    const newBadges = await checkNewBadges(allBadges);
+    
+    if (newBadges.length > 0) {
+      console.log('🎉 Nouveaux badges débloqués:', newBadges.map(b => b.name));
+      const badge = allBadges.find(b => b.id === newBadges[0].id);
+      if (badge) {
+        setNewlyUnlockedBadge(badge);
+        showBadgeUnlockedToast();
       }
-    } catch (error) {
-      console.error('❌ Erreur chargement badges:', error);
     }
-  };
+  } catch (error) {
+    console.error('❌ Erreur chargement badges:', error);
+  }
+};
 
   const showBadgeUnlockedToast = () => {
     setShowToast(true);
@@ -329,13 +342,6 @@ useEffect(() => {
           unlockedBadges: data.unlockedBadges?.length || 0,
           videosWatched: watchCount
         });
-        
-        setStats({
-          videosWatched: watchCount,
-          streak: data.stats?.streak || 0,
-          totalMinutes: data.stats?.totalMinutes || 0,
-          followers: data.stats?.followers || 0,
-        });
 
         // ✅ Appel de loadBadges qui va maintenant sauvegarder automatiquement
      setStats({
@@ -344,14 +350,12 @@ useEffect(() => {
   totalMinutes: data.stats?.totalMinutes || 0,
   followers: data.stats?.followers || 0,
 });
-
-// ❌ SUPPRIMER : await loadBadges();
-
-if (activeTab === 'playlists') await loadPlaylists(user.uid);
-if (activeTab === 'saved') setFavorites(await fetchVideosByIds(data.favorites || []));
-if (activeTab === 'history') setHistory(await fetchVideosByIds(data.watchHistory || []));
-if (activeTab === 'liked') setLikedVideos(await fetchVideosByIds(data.likedVideos || []));
-
+console.log('🔍 Debug Firebase User:', {
+  uid: user.uid,
+  watchHistory: data.watchHistory?.length || 0,
+  unlockedBadges: data.unlockedBadges || [],
+  stats: data.stats
+});
         if (activeTab === 'playlists') await loadPlaylists(user.uid);
         if (activeTab === 'saved') setFavorites(await fetchVideosByIds(data.favorites || []));
         if (activeTab === 'history') setHistory(await fetchVideosByIds(data.watchHistory || []));

@@ -55,7 +55,7 @@ export const saveBadgeUnlock = async (badge: {
       unlockedBadges: arrayUnion(newBadge),
     });
 
-    console.log(`✅ Badge ${badge.name} débloqué !`);
+    console.log(`✅ Badge ${badge.name} débloqué et sauvegardé dans Firebase !`);
     return true;
   } catch (error) {
     console.error('❌ Erreur sauvegarde badge:', error);
@@ -93,9 +93,19 @@ export const checkNewBadges = async (
   try {
     console.log('🔍 Vérification nouveaux badges...');
     
-    // ✅ Récupérer les badges déjà sauvegardés
+    // ✅ Récupérer les badges déjà sauvegardés dans Firebase
     const savedBadgeIds = await getUserUnlockedBadges();
-    console.log('📋 Badges déjà débloqués:', savedBadgeIds);
+    
+    // ✅ Compter les badges calculés comme débloqués
+    const calculatedUnlockedBadges = currentBadges.filter(b => b.unlocked);
+    
+    console.log('📊 État actuel des badges:', {
+      totalBadges: currentBadges.length,
+      calculatedUnlocked: calculatedUnlockedBadges.length,
+      savedInFirebase: savedBadgeIds.length,
+      calculatedList: calculatedUnlockedBadges.map(b => b.name),
+      savedList: savedBadgeIds
+    });
     
     const newlyUnlocked: Array<{ id: string; name: string; icon: string }> = [];
 
@@ -104,23 +114,23 @@ export const checkNewBadges = async (
       const shouldBeUnlocked = badge.unlocked;
       const isAlreadySaved = savedBadgeIds.includes(badge.id);
       
-      console.log(`🎯 Badge ${badge.name}:`, {
-        shouldBeUnlocked,
-        isAlreadySaved,
-        willSave: shouldBeUnlocked && !isAlreadySaved
-      });
-      
-      // ✅ Si débloqué MAIS pas encore sauvegardé
+      // ✅ Si débloqué MAIS pas encore sauvegardé dans Firebase
       if (shouldBeUnlocked && !isAlreadySaved) {
+        console.log(`🎉 NOUVEAU badge détecté: ${badge.name} (${badge.id})`);
         const saved = await saveBadgeUnlock(badge);
         if (saved) {
           newlyUnlocked.push(badge);
-          console.log(`🎉 Nouveau badge débloqué: ${badge.name}`);
         }
       }
     }
 
-    console.log(`✅ Total nouveaux badges: ${newlyUnlocked.length}`);
+    if (newlyUnlocked.length > 0) {
+      console.log(`✅ ${newlyUnlocked.length} nouveau(x) badge(s) débloqué(s) pendant cette session:`, 
+        newlyUnlocked.map(b => b.name));
+    } else {
+      console.log(`ℹ️ Aucun nouveau badge cette session (${calculatedUnlockedBadges.length} badge(s) déjà débloqué(s))`);
+    }
+    
     return newlyUnlocked;
   } catch (error) {
     console.error('❌ Erreur vérification badges:', error);
