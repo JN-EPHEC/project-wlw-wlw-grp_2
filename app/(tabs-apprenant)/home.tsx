@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { Video, ResizeMode, AVPlaybackStatus, Audio } from 'expo-av';
 import { 
   collection, getDocs, query, orderBy, limit, doc, updateDoc, 
   increment, arrayUnion, arrayRemove, getDoc, addDoc, serverTimestamp,
@@ -61,8 +61,11 @@ export default function HomeScreen() {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   
-  // ✅ AJOUT : État pour tracker les vidéos déjà comptées
+  // ✅ État pour tracker les vidéos déjà comptées
   const [countedVideos, setCountedVideos] = useState<Set<string>>(new Set());
+  
+  // ✅ État pour gérer l'expansion des descriptions
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
   
   // États utilisateur
   const [userProfile, setUserProfile] = useState<any>(null);
@@ -90,6 +93,25 @@ export default function HomeScreen() {
   // ========================================
   // 🔄 EFFETS
   // ========================================
+
+  // ✅ Configuration audio pour iOS
+  useEffect(() => {
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          allowsRecordingIOS: false,
+          staysActiveInBackground: false,
+          shouldDuckAndroid: false,
+          playThroughEarpieceAndroid: false,
+        });
+      } catch (error) {
+        console.error('Erreur configuration audio:', error);
+      }
+    };
+    
+    setupAudio();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -295,7 +317,6 @@ export default function HomeScreen() {
     }
   };
 
-  // ✅ MODIFIÉ : Ne plus ajouter de minutes ici
   const handleMarkAsWatched = async (videoId: string) => {
     const user = auth.currentUser;
     if (!user) return;
@@ -314,32 +335,26 @@ export default function HomeScreen() {
     }
   };
 
-  // ✅ NOUVELLE FONCTION : Compter les minutes quand la vidéo est vue
   const handleVideoCompleted = async (videoId: string, durationMillis: number) => {
     const user = auth.currentUser;
     if (!user) return;
     
-    // ✅ Vérifier si déjà comptée
     if (countedVideos.has(videoId)) {
       return;
     }
     
     try {
-      // Convertir millisecondes en minutes
       const videoDurationInMinutes = durationMillis / 60000;
       
-      // Récupérer les stats actuelles
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       const currentTotalMinutes = userDoc.exists() 
         ? (userDoc.data().stats?.totalMinutes || 0) 
         : 0;
       
-      // ✅ Mettre à jour uniquement les minutes
       await updateDoc(doc(db, 'users', user.uid), { 
         'stats.totalMinutes': currentTotalMinutes + videoDurationInMinutes
       });
       
-      // ✅ Marquer comme comptée
       setCountedVideos(prev => new Set(prev).add(videoId));
       
       console.log(`✅ Vidéo complétée : +${videoDurationInMinutes.toFixed(2)} minutes (total: ${(currentTotalMinutes + videoDurationInMinutes).toFixed(2)})`);
@@ -360,6 +375,19 @@ export default function HomeScreen() {
         setIsPlaying(true);
       }
     }
+  };
+
+  // ✅ Fonction pour toggler la description
+  const toggleDescription = (videoId: string) => {
+    setExpandedDescriptions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(videoId)) {
+        newSet.delete(videoId);
+      } else {
+        newSet.add(videoId);
+      }
+      return newSet;
+    });
   };
 
   // ========================================
@@ -598,17 +626,32 @@ export default function HomeScreen() {
     }
   };
 
+  const getBadgeInfo = (badge?: 'apprenant' | 'expert' | 'pro' | 'diplome') => {
+    switch (badge) {
+      case 'expert':
+        return { icon: 'shield-checkmark', color: '#FBA31A', label: 'EXPERT' };
+      case 'diplome':
+        return { icon: 'school', color: '#3B82F6', label: 'DIPLOMÉ' };
+      case 'pro':
+        return { icon: 'star', color: '#10B981', label: 'PRO' };
+      default:
+        return null;
+    }
+  };
+
   // ========================================
   // 🔄 RENDU
   // ========================================
 
   if (loading) {
     return (
-      <View style={styles.loading}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#7459f0" />
       </View>
     );
   }
+
+  const progressPercentage = duration > 0 ? (progress / duration) * 100 : 0;
 
   return (
     <View style={styles.container}>
@@ -650,6 +693,8 @@ export default function HomeScreen() {
         scrollEventThrottle={16}
         snapToInterval={SCREEN_HEIGHT}
         decelerationRate="fast"
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
       >
         {videos.map((video, index) => {
           const isLiked = likedVideosSet.has(video.id);
@@ -657,99 +702,109 @@ export default function HomeScreen() {
           const isFollowing = userProfile?.following?.includes(video.creatorId);
           const currentUserId = auth.currentUser?.uid;
           const isMyVideo = video.creatorId === currentUserId;
+          const badgeInfo = getBadgeInfo(video.creatorBadge);
+          const isDescriptionExpanded = expandedDescriptions.has(video.id);
           
           return (
-            <View key={video.id} style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}>
+            <View 
+              key={video.id} 
+              style={[styles.videoContainer, { width: SCREEN_WIDTH, height: SCREEN_HEIGHT }]}
+            >
               <Video
-                ref={(ref) => { videoRefs.current[video.id] = ref; }}
+                ref={(ref) => { if (ref) videoRefs.current[video.id] = ref; }}
                 source={{ uri: video.videoUrl }}
                 resizeMode={ResizeMode.COVER}
                 shouldPlay={index === currentIndex && isPlaying}
                 isLooping
-                isMuted={Platform.OS === 'web'} 
+                isMuted={false}
+                volume={1.0}
                 style={StyleSheet.absoluteFillObject}
                 onPlaybackStatusUpdate={(s) => {
                   if (index === currentIndex && s.isLoaded) {
                     setProgress(s.positionMillis);
                     setDuration(s.durationMillis || 0);
                     
-                    // ✅ AJOUT : Compter à 90% de progression
                     if (s.durationMillis && s.positionMillis >= s.durationMillis * 0.9) {
                       handleVideoCompleted(video.id, s.durationMillis);
                     }
                   }
                 }}
+                useNativeControls={false}
               />
               
               <TouchableWithoutFeedback onPress={togglePlayPause}>
                 <View style={styles.touchableOverlay}>
                   {!isPlaying && index === currentIndex && (
-                    <Ionicons name="play" size={80} color="rgba(255,255,255,0.8)" />
+                    <LinearGradient
+                      colors={['rgba(116, 89, 240, 0.3)', 'rgba(36, 42, 101, 0.3)']}
+                      style={styles.playPauseIconBg}
+                    >
+                      <Ionicons name="play" size={60} color="white" />
+                    </LinearGradient>
                   )}
                 </View>
               </TouchableWithoutFeedback>
 
               <LinearGradient 
-                colors={['transparent', 'rgba(0,0,0,0.85)']} 
-                style={styles.bottomGradient} 
+                colors={['transparent', 'rgba(0,0,0,0.9)']} 
+                style={styles.gradientOverlay} 
               />
-
+              
               {index === currentIndex && (
-                <View style={styles.progressContainer}>
-                  <View style={styles.progressBg}>
-                    <LinearGradient 
-                      colors={['#7459f0', '#9333ea', '#242A65']} 
-                      start={{ x: 0, y: 0 }} 
-                      end={{ x: 1, y: 0 }} 
-                      style={[
-                        styles.progressFill, 
-                        { width: `${duration > 0 ? (progress / duration) * 100 : 0}%` }
-                      ]} 
+                <View style={styles.progressBarContainer}>
+                  <View style={styles.progressBarBackground}>
+                    <LinearGradient
+                      colors={['#7459f0', '#9333ea', '#242A65']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={[styles.progressBarFill, { width: `${progressPercentage}%` }]}
                     />
                   </View>
                 </View>
               )}
 
               <View style={styles.leftSide}>
-                <View style={styles.creatorHeader}>
-                  <TouchableOpacity 
-                    style={styles.avatarWrapper} 
-                    onPress={() => router.push(`/profile/${video.creatorId}`)}
-                  >
-                    <Image 
-                      source={{ uri: video.creatorAvatar || 'https://via.placeholder.com/150' }} 
-                      style={styles.avatar} 
-                    />
-                  </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.creatorInfo} 
+                  onPress={() => router.push(`/profile/${video.creatorId}`)}
+                >
+                  <View style={styles.creatorAvatarWrapper}>
+                    <LinearGradient
+                      colors={['#7459f0', '#242A65']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.creatorAvatarBorder}
+                    >
+                      <View style={styles.creatorAvatar}>
+                        {video.creatorAvatar ? (
+                          <Image 
+                            source={{ uri: video.creatorAvatar }} 
+                            style={styles.avatarImage} 
+                          />
+                        ) : (
+                          <Text style={styles.creatorInitial}>
+                            {video.creatorName.charAt(0).toUpperCase()}
+                          </Text>
+                        )}
+                      </View>
+                    </LinearGradient>
+                  </View>
                   
-                  <View style={styles.creatorTextInfo}>
-                    <View style={styles.nameRow}>
-                      <TouchableOpacity 
-                        onPress={() => router.push(`/profile/${video.creatorId}`)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.creatorName}>
-                          @{video.creatorName}
-                          {isMyVideo && <Text style={styles.meLabel}> (Moi)</Text>}
-                        </Text>
-                      </TouchableOpacity>
+                  <View style={styles.creatorDetails}>
+                    <View style={styles.creatorNameRow}>
+                      <Text style={styles.creatorName}>
+                        @{video.creatorName} 
+                        {isMyVideo && <Text style={styles.meLabel}> (Moi)</Text>}
+                      </Text>
                       
-                      {video.creatorBadge === 'expert' && (
-                        <View style={styles.expertBadge}>
-                          <Text style={styles.expertText}>EXPERT</Text>
-                        </View>
-                      )}
-                      
-                      {video.creatorBadge === 'diplome' && (
-                        <View style={[styles.expertBadge, { backgroundColor: '#3B82F6' }]}>
-                          <Text style={styles.expertText}>DIPLOMÉ</Text>
-                        </View>
-                      )}
-                      
-                      {video.creatorBadge === 'pro' && (
-                        <View style={[styles.expertBadge, { backgroundColor: '#10B981' }]}>
-                          <Text style={styles.expertText}>PRO</Text>
-                        </View>
+                      {badgeInfo && (
+                        <LinearGradient
+                          colors={[badgeInfo.color, badgeInfo.color]}
+                          style={styles.badge}
+                        >
+                          <Ionicons name={badgeInfo.icon as any} size={10} color="#fff" />
+                          <Text style={styles.badgeText}>{badgeInfo.label}</Text>
+                        </LinearGradient>
                       )}
                     </View>
                     
@@ -757,110 +812,153 @@ export default function HomeScreen() {
                       <TouchableOpacity 
                         onPress={() => handleFollow(video.creatorId, video.creatorName)}
                         activeOpacity={0.8}
-                        style={styles.followButtonContainer}
                       >
                         <LinearGradient
                           colors={['#7459f0', '#9333ea', '#242A65']}
                           start={{ x: 0, y: 0 }}
                           end={{ x: 1, y: 0 }}
-                          style={styles.followButton}
+                          style={styles.followButtonProminent}
                         >
                           <Ionicons name="add" size={16} color="#fff" />
-                          <Text style={styles.followButtonText}>Suivre</Text>
+                          <Text style={styles.followButtonProminentText}>Suivre</Text>
                         </LinearGradient>
                       </TouchableOpacity>
                     )}
                   </View>
-                </View>
+                </TouchableOpacity>
                 
-                <Text style={styles.videoTitle}>{video.title}</Text>
-                <Text style={styles.videoDesc} numberOfLines={2}>
-                  {video.description}
-                </Text>
+                <Text style={styles.title} numberOfLines={2}>{video.title}</Text>
+                
+                {/* ✅ DESCRIPTION CLIQUABLE AVEC EXPANSION */}
+                <View>
+                  <TouchableOpacity 
+                    onPress={() => toggleDescription(video.id)}
+                    activeOpacity={0.9}
+                  >
+                    <Text 
+                      style={styles.description} 
+                      numberOfLines={isDescriptionExpanded ? undefined : 2}
+                    >
+                      {video.description}
+                      {!isDescriptionExpanded && video.description && video.description.length > 80 && (
+                        <Text style={styles.seeMore}> ... voir plus</Text>
+                      )}
+                    </Text>
+                    {isDescriptionExpanded && (
+                      <Text style={styles.seeLess}>voir moins</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.rightSide}>
                 <TouchableOpacity 
-                  style={styles.profileAction} 
+                  style={styles.avatarLarge} 
                   onPress={() => router.push(`/profile/${video.creatorId}`)}
                 >
-                  <View style={styles.profileCircle}>
-                    <Image 
-                      source={{ uri: video.creatorAvatar || 'https://via.placeholder.com/150' }} 
-                      style={styles.profileImg} 
-                    />
-                  </View>
-                  <View style={[
-                    styles.plusBadge, 
-                    { backgroundColor: isFollowing ? '#10B981' : '#EF4444' }
-                  ]}>
-                    <Ionicons 
-                      name={isFollowing ? "checkmark" : "add"} 
-                      size={12} 
-                      color="white" 
-                    />
-                  </View>
+                  <LinearGradient
+                    colors={['#7459f0', '#242A65']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.avatarCircleBorder}
+                  >
+                    <View style={styles.avatarCircle}>
+                      {video.creatorAvatar ? (
+                        <Image 
+                          source={{ uri: video.creatorAvatar }} 
+                          style={styles.avatarLargeImage} 
+                        />
+                      ) : (
+                        <Text style={styles.avatarText}>
+                          {video.creatorName.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                  </LinearGradient>
+                  
+                  {isFollowing && (
+                    <LinearGradient
+                      colors={['#7459f0', '#9333ea']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.checkIcon}
+                    >
+                      <Ionicons name="checkmark" size={12} color="white" />
+                    </LinearGradient>
+                  )}
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  style={styles.actionBtn} 
+                  style={styles.actionButton} 
                   onPress={() => handleLike(video.id)}
+                  activeOpacity={0.7}
                 >
-                  <LinearGradient 
-                    colors={isLiked ? ['#ef4444', '#dc2626'] : ['#7459f0', '#242A65']} 
-                    style={styles.actionCircle}
+                  <LinearGradient
+                    colors={isLiked ? ['#ef4444', '#dc2626'] : ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.actionIcon}
                   >
                     <Ionicons 
                       name={isLiked ? "heart" : "heart-outline"} 
                       size={28} 
-                      color="white" 
+                      color="#fff" 
                     />
                   </LinearGradient>
                   <Text style={styles.actionCount}>{video.likes}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  style={styles.actionBtn} 
+                  style={styles.actionButton} 
                   onPress={() => { 
                     setSelectedVideoId(video.id); 
                     setShowComments(true); 
                   }}
+                  activeOpacity={0.7}
                 >
-                  <LinearGradient 
-                    colors={['#7459f0', '#242A65']} 
-                    style={styles.actionCircle}
+                  <LinearGradient
+                    colors={['#7459f0', '#242A65']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.actionIcon}
                   >
-                    <Ionicons name="chatbubble-outline" size={26} color="white" />
+                    <Ionicons name="chatbubble-outline" size={28} color="#fff" />
                   </LinearGradient>
                   <Text style={styles.actionCount}>{video.comments || 0}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  style={styles.actionBtn} 
+                  style={styles.actionButton} 
                   onPress={() => handleFavorite(video.id)}
+                  activeOpacity={0.7}
                 >
-                  <LinearGradient 
-                    colors={isSaved ? ['#FBA31A', '#F59E0B'] : ['#7459f0', '#242A65']} 
-                    style={styles.actionCircle}
+                  <LinearGradient
+                    colors={isSaved ? ['#FBA31A', '#F59E0B'] : ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.actionIcon}
                   >
                     <Ionicons 
                       name={isSaved ? "bookmark" : "bookmark-outline"} 
-                      size={26} 
-                      color="white" 
+                      size={28} 
+                      color="#fff" 
                     />
                   </LinearGradient>
-                  <Text style={styles.actionCount}>{isSaved ? 'Favoris' : 'Sauver'}</Text>
+                  <Text style={styles.actionCount}>{isSaved ? 'Enregistré' : 'Sauver'}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity 
-                  style={styles.actionBtn} 
+                  style={styles.actionButton} 
                   onPress={() => handleShare(video)}
+                  activeOpacity={0.7}
                 >
-                  <LinearGradient 
-                    colors={['#7459f0', '#242A65']} 
-                    style={styles.actionCircle}
+                  <LinearGradient
+                    colors={['#7459f0', '#242A65']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.actionIcon}
                   >
-                    <Ionicons name="share-social-outline" size={26} color="white" />
+                    <Ionicons name="share-social-outline" size={28} color="#fff" />
                   </LinearGradient>
                   <Text style={styles.actionCount}>Partager</Text>
                 </TouchableOpacity>
@@ -1045,8 +1143,9 @@ export default function HomeScreen() {
                   </Text>
                   <Text style={styles.userRole}>
                     {item.badge === 'expert' ? '👨‍🎓 Expert' : 
+                     item.badge === 'diplome' ? '🎓 Diplomé' :
                      item.badge === 'pro' ? '⭐ Pro' : 
-                     '🎓 Apprenant'}
+                     '📚 Apprenant'}
                   </Text>
                 </View>
                 <LinearGradient
@@ -1086,29 +1185,134 @@ export default function HomeScreen() {
 }
 
 // ========================================
-// 🎨 STYLES
+// 🎨 STYLES (Design du premier code)
 // ========================================
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A2E' },
-  touchableOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 5 },
-  bottomGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%', zIndex: 10 },
-  progressContainer: { position: 'absolute', bottom: 90, left: 20, right: 20, zIndex: 40 },
-  progressBg: { height: 3, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 2, overflow: 'hidden' },
-  progressFill: { height: '100%', borderRadius: 2 },
-  leftSide: { position: 'absolute', bottom: 120, left: 20, right: 100, zIndex: 30 },
-  creatorHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  avatarWrapper: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', overflow:'hidden' },
-  avatar: { width: '100%', height: '100%' },
-  creatorTextInfo: { gap: 6, marginLeft: 12, flex: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  creatorName: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  meLabel: { fontSize: 12, color: '#aaa', fontWeight: '500' },
-  expertBadge: { backgroundColor: '#FBA31A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  expertText: { color: '#000', fontSize: 9, fontWeight: '900' },
-  followButtonContainer: { marginTop: 4 },
-  followButton: {
+  scrollView: { flex: 1 },
+  scrollViewContent: { flexGrow: 1 },
+  videoContainer: { 
+    width: '100%', 
+    height: '100%', 
+    backgroundColor: '#000', 
+    position: 'relative', 
+    overflow: 'hidden' 
+  },
+  touchableOverlay: { 
+    ...StyleSheet.absoluteFillObject, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    zIndex: 5 
+  },
+  playPauseIconBg: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  progressBarContainer: { 
+    position: 'absolute', 
+    bottom: 120, 
+    left: 0, 
+    right: 0, 
+    paddingHorizontal: 16, 
+    zIndex: 40 
+  },
+  progressBarBackground: { 
+    height: 3, 
+    backgroundColor: 'rgba(255,255,255,0.3)', 
+    borderRadius: 2, 
+    overflow: 'hidden' 
+  },
+  progressBarFill: { 
+    height: '100%', 
+    borderRadius: 2 
+  },
+  gradientOverlay: { 
+    position: 'absolute', 
+    bottom: 0, 
+    left: 0, 
+    right: 0, 
+    height: '50%', 
+    zIndex: 10 
+  },
+  
+  leftSide: { 
+    position: 'absolute', 
+    bottom: 140, 
+    left: 16, 
+    right: 100, 
+    zIndex: 30 
+  },
+  creatorInfo: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12, 
+    marginBottom: 12 
+  },
+  creatorAvatarWrapper: {
+    padding: 2
+  },
+  creatorAvatarBorder: {
+    padding: 2,
+    borderRadius: 26
+  },
+  creatorAvatar: { 
+    width: 48, 
+    height: 48, 
+    borderRadius: 24, 
+    backgroundColor: '#1a1a2e', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    overflow:'hidden' 
+  },
+  avatarImage: { width: '100%', height: '100%' },
+  creatorInitial: { 
+    color: '#fff', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
+  creatorDetails: { 
+    flex: 1, 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between' 
+  },
+  creatorNameRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 8,
+    flex: 1
+  },
+  creatorName: { 
+    color: '#fff', 
+    fontSize: 15, 
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+  meLabel: { 
+    fontSize: 12, 
+    color: '#aaa',
+    fontWeight: '500'
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  followButtonProminent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -1120,50 +1324,326 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 8,
     elevation: 8,
-    alignSelf: 'flex-start',
   },
-  followButtonText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  videoTitle: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 },
-  videoDesc: { color: '#fff', fontSize: 14, lineHeight: 20 },
-  rightSide: { position: 'absolute', bottom: 120, right: 16, gap: 24, alignItems: 'center', zIndex: 30 },
-  profileAction: { marginBottom: 8, position: 'relative' },
-  profileCircle: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#9333ea', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff', overflow: 'hidden' },
-  profileImg: { width: '100%', height: '100%' },
-  plusBadge: { position: 'absolute', bottom: -4, alignSelf: 'center', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
-  actionBtn: { alignItems: 'center', gap: 4 },
-  actionCircle: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
-  actionCount: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  shareOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  shareContentWrapper: { width: '100%', maxWidth: 400 },
-  shareContent: { backgroundColor: '#fff', borderRadius: 24, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
-  shareHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingVertical: 20 },
-  shareHeaderContent: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  shareTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  closeButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  videoPreview: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 20, backgroundColor: '#F9FAFB', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  videoPreviewIcon: { width: 56, height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  videoPreviewInfo: { flex: 1 },
-  videoPreviewTitle: { fontSize: 15, fontWeight: '600', color: '#1F2937', marginBottom: 4 },
-  videoPreviewCreator: { fontSize: 13, color: '#6B7280' },
-  shareOptionsGrid: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 30, gap: 20, justifyContent: 'space-around' },
-  shareOptionCard: { alignItems: 'center', gap: 12, flex: 1 },
-  shareIconGradient: { width: 80, height: 80, borderRadius: 24, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 12 },
-  shareOptionLabel: { fontSize: 13, fontWeight: '600', color: '#374151', textAlign: 'center' },
-  usersListContainer: { flex: 1, backgroundColor: '#F8F8F6' },
-  usersListHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 50, paddingBottom: 20 },
-  usersListTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  searchContainer: { paddingHorizontal: 20, marginVertical: 16 },
-  searchInputWrapper: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-  searchInput: { flex: 1, fontSize: 15, color: '#1F2937' },
-  userItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  userAvatarWrapper: { width: 50, height: 50, borderRadius: 25, overflow: 'hidden' },
-  userAvatarImg: { width: '100%', height: '100%' },
-  userAvatarPlaceholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center' },
-  userAvatarText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  userInfo: { flex: 1 },
-  userName: { fontSize: 16, fontWeight: '600', color: '#1F2937', marginBottom: 2 },
-  userRole: { fontSize: 13, color: '#6B7280' },
-  sendIconWrapper: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  emptyUsersList: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 64 },
-  emptyUsersText: { fontSize: 16, color: '#9CA3AF', marginTop: 16, fontWeight: '500' },
+  followButtonProminentText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  title: { 
+    color: '#fff', 
+    fontSize: 16, 
+    fontWeight: '700', 
+    marginBottom: 6,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+  description: { 
+    color: '#fff', 
+    fontSize: 14, 
+    lineHeight: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+  
+  seeMore: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    opacity: 0.8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+
+  seeLess: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+    opacity: 0.8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+  
+  rightSide: { 
+    position: 'absolute', 
+    bottom: 140, 
+    right: 16, 
+    gap: 20, 
+    alignItems: 'center', 
+    zIndex: 30 
+  },
+  avatarLarge: { 
+    marginBottom: 8, 
+    position: 'relative' 
+  },
+  avatarCircleBorder: {
+    padding: 3,
+    borderRadius: 31
+  },
+  avatarCircle: { 
+    width: 56, 
+    height: 56, 
+    borderRadius: 28, 
+    backgroundColor: '#1a1a2e', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    overflow: 'hidden' 
+  },
+  avatarLargeImage: { width: '100%', height: '100%' },
+  avatarText: { 
+    color: '#fff', 
+    fontSize: 20, 
+    fontWeight: 'bold' 
+  },
+  checkIcon: { 
+    position: 'absolute', 
+    bottom: -4, 
+    alignSelf: 'center', 
+    width: 24, 
+    height: 24, 
+    borderRadius: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderWidth: 2, 
+    borderColor: '#fff' 
+  },
+  
+  actionButton: { 
+    alignItems: 'center', 
+    gap: 6 
+  },
+  actionIcon: { 
+    width: 50, 
+    height: 50, 
+    borderRadius: 25, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8
+  },
+  actionCount: { 
+    color: '#fff', 
+    fontSize: 12, 
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+  
+  shareOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.8)', 
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  shareContentWrapper: {
+    width: '100%',
+    maxWidth: 400
+  },
+  shareContent: { 
+    backgroundColor: '#fff', 
+    borderRadius: 24, 
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10
+  },
+  shareHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 20
+  },
+  shareHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  shareTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff'
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  videoPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    padding: 20,
+    backgroundColor: '#F9FAFB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB'
+  },
+  videoPreviewIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  videoPreviewInfo: {
+    flex: 1
+  },
+  videoPreviewTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 4
+  },
+  videoPreviewCreator: {
+    fontSize: 13,
+    color: '#6B7280'
+  },
+  shareOptionsGrid: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+    gap: 20,
+    justifyContent: 'space-around'
+  },
+  shareOptionCard: {
+    alignItems: 'center',
+    gap: 12,
+    flex: 1
+  },
+  shareIconGradient: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 12
+  },
+  shareOptionLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151',
+    textAlign: 'center'
+  },
+
+  usersListContainer: {
+    flex: 1,
+    backgroundColor: '#F8F8F6'
+  },
+  usersListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20
+  },
+  usersListTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff'
+  },
+  searchContainer: {
+    paddingHorizontal: 20,
+    marginVertical: 16
+  },
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937'
+  },
+  userItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  userAvatarWrapper: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    overflow: 'hidden'
+  },
+  userAvatarImg: {
+    width: '100%',
+    height: '100%'
+  },
+  userAvatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  userAvatarText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold'
+  },
+  userInfo: {
+    flex: 1
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2
+  },
+  userRole: {
+    fontSize: 13,
+    color: '#6B7280'
+  },
+  sendIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  emptyUsersList: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64
+  },
+  emptyUsersText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    marginTop: 16,
+    fontWeight: '500'
+  },
 });

@@ -25,7 +25,7 @@ interface VideoData {
   creatorId: string;
   creatorName: string;
   creatorAvatar?: string;
-  creatorBadge?: 'apprenant' | 'expert' | 'pro';
+  creatorBadge?: 'apprenant' | 'expert' | 'pro' | 'diplome';
   videoUrl: string;
   likes: number;
   views: number;
@@ -45,7 +45,7 @@ interface UserProfile {
   interests?: string[];
   displayName?: string;
   photoURL?: string;
-  badge?: 'apprenant' | 'expert' | 'pro';
+  badge?: 'apprenant' | 'expert' | 'pro' | 'diplome';
   prenom?: string;
   nom?: string;
   role?: string;
@@ -56,7 +56,6 @@ export default function HomeScreen() {
   const params = useLocalSearchParams();
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   
-  // 🎯 GESTION DES PARAMÈTRES DE NAVIGATION
   const targetVideoId = params.videoId as string;
   const shouldOpenComments = params.openComments === 'true';
   
@@ -79,6 +78,9 @@ export default function HomeScreen() {
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);
+
+  // ✅ NOUVEL ÉTAT pour gérer l'expansion des descriptions
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Set<string>>(new Set());
 
   const scrollViewRef = useRef<ScrollView>(null);
   const videoRefs = useRef<Record<string, Video | null>>({});
@@ -149,12 +151,10 @@ export default function HomeScreen() {
     pauseOtherVideos();
   }, [currentIndex]);
 
-  // 🎯 SCROLL AUTOMATIQUE VERS LA VIDÉO CIBLÉE
   useEffect(() => {
     if (targetVideoId && videos.length > 0) {
       const targetIndex = videos.findIndex(v => v.id === targetVideoId);
       if (targetIndex !== -1 && scrollViewRef.current) {
-        // Attendre que le ScrollView soit rendu
         setTimeout(() => {
           scrollViewRef.current?.scrollTo({
             y: targetIndex * SCREEN_HEIGHT,
@@ -162,7 +162,6 @@ export default function HomeScreen() {
           });
           setCurrentIndex(targetIndex);
           
-          // Ouvrir les commentaires si demandé
           if (shouldOpenComments) {
             setTimeout(() => {
               setCurrentVideoId(targetVideoId);
@@ -217,22 +216,75 @@ export default function HomeScreen() {
     try {
       const videosQuery = query(collection(db, 'videos'), orderBy('createdAt', 'desc'), limit(20));
       const snapshot = await getDocs(videosQuery);
-      const rawVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as VideoData[];
+      const rawVideos = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
       
       const enrichedVideos = await Promise.all(rawVideos.map(async (video) => {
-          try {
-              const userDoc = await getDoc(doc(db, 'users', video.creatorId));
-              if (userDoc.exists()) {
-                  const userData = userDoc.data();
-                  return {
-                      ...video,
-                      creatorName: userData.displayName || `${userData.prenom || ''} ${userData.nom || ''}`.trim() || video.creatorName,
-                      creatorAvatar: userData.photoURL || null,
-                      creatorBadge: userData.badge || 'apprenant'
-                  };
+        try {
+          const userDoc = await getDoc(doc(db, 'users', video.creatorId));
+          if (userDoc.exists()) {
+            const uData = userDoc.data();
+            
+            let badge: 'apprenant' | 'expert' | 'pro' | 'diplome' = 'apprenant';
+            
+            if (uData.badge) {
+              badge = uData.badge;
+            }
+            else if (uData.profileLevel) {
+              switch (uData.profileLevel.toLowerCase()) {
+                case 'expert':
+                  badge = 'expert';
+                  break;
+                case 'diplome':
+                case 'diplomé':
+                  badge = 'diplome';
+                  break;
+                case 'pro':
+                case 'professionnel':
+                  badge = 'pro';
+                  break;
+                case 'amateur':
+                case 'apprenant':
+                default:
+                  badge = 'apprenant';
+                  break;
               }
-              return video;
-          } catch (e) { return video; }
+            }
+            else if (uData.statut) {
+              switch (uData.statut.toLowerCase()) {
+                case 'expert':
+                  badge = 'expert';
+                  break;
+                case 'diplome':
+                case 'diplomé':
+                  badge = 'diplome';
+                  break;
+                case 'pro':
+                case 'professionnel':
+                  badge = 'pro';
+                  break;
+                case 'amateur':
+                case 'apprenant':
+                default:
+                  badge = 'apprenant';
+                  break;
+              }
+            }
+            else if (uData.role === 'formateur') {
+              badge = 'expert';
+            }
+            
+            return {
+              ...video,
+              creatorName: uData.displayName || `${uData.prenom || ''} ${uData.nom || ''}`.trim() || video.creatorName,
+              creatorAvatar: uData.photoURL || null,
+              creatorBadge: badge
+            };
+          }
+          return video;
+        } catch (e) { 
+          console.error('Erreur enrichissement vidéo:', e);
+          return video; 
+        }
       }));
       
       setVideos(enrichedVideos);
@@ -272,6 +324,19 @@ export default function HomeScreen() {
         setIsPlaying(true); 
       }
     }
+  };
+
+  // ✅ NOUVELLE FONCTION pour toggler la description
+  const toggleDescription = (videoId: string) => {
+    setExpandedDescriptions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(videoId)) {
+        newSet.delete(videoId);
+      } else {
+        newSet.add(videoId);
+      }
+      return newSet;
+    });
   };
 
   const handleCreatorClick = (creatorId: string) => { 
@@ -502,24 +567,26 @@ export default function HomeScreen() {
     }
   };
 
-  const getBadgeInfo = (badge?: 'apprenant' | 'expert' | 'pro') => {
+  const getBadgeInfo = (badge?: 'apprenant' | 'expert' | 'pro' | 'diplome') => {
     switch (badge) {
       case 'expert':
-        return { icon: 'shield-checkmark', color: '#3B82F6', label: 'Expert' };
+        return { icon: 'shield-checkmark', color: '#FBA31A', label: 'EXPERT' };
+      case 'diplome':
+        return { icon: 'school', color: '#3B82F6', label: 'DIPLOMÉ' };
       case 'pro':
-        return { icon: 'star', color: '#FBA31A', label: 'Pro' };
+        return { icon: 'star', color: '#10B981', label: 'PRO' };
       default:
         return null;
     }
   };
 
   if (loading) {
-  return (
-    <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-      <ActivityIndicator size="large" color="#7459f0" />
-    </View>
-  );
-}
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#7459f0" />
+      </View>
+    );
+  }
 
   const progressPercentage = duration > 0 ? (progress / duration) * 100 : 0;
 
@@ -528,16 +595,16 @@ export default function HomeScreen() {
       <StatusBar barStyle="light-content" />
       
       <ScrollView
-  ref={scrollViewRef}
-  pagingEnabled
-  showsVerticalScrollIndicator={false}
-  onScroll={handleScroll}
-  scrollEventThrottle={16}
-  snapToInterval={SCREEN_HEIGHT}
-  decelerationRate="fast"
-  style={styles.scrollView}
-  contentContainerStyle={styles.scrollViewContent}
->
+        ref={scrollViewRef}
+        pagingEnabled
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        snapToInterval={SCREEN_HEIGHT}
+        decelerationRate="fast"
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollViewContent}
+      >
         {videos.map((video, index) => {
           const isLiked = likedVideosSet.has(video.id);
           const isSaved = savedVideosSet.has(video.id);
@@ -545,6 +612,7 @@ export default function HomeScreen() {
           const currentUserId = auth.currentUser?.uid;
           const isMyVideo = video.creatorId === currentUserId;
           const badgeInfo = getBadgeInfo(video.creatorBadge);
+          const isDescriptionExpanded = expandedDescriptions.has(video.id);
           
           return (
             <View 
@@ -658,7 +726,27 @@ export default function HomeScreen() {
                 </TouchableOpacity>
                 
                 <Text style={styles.title} numberOfLines={2}>{video.title}</Text>
-                <Text style={styles.description} numberOfLines={2}>{video.description}</Text>
+                
+                {/* ✅ DESCRIPTION CLIQUABLE AVEC EXPANSION - CORRIGÉE */}
+                <View>
+                  <TouchableOpacity 
+                    onPress={() => toggleDescription(video.id)}
+                    activeOpacity={0.9}
+                  >
+                    <Text 
+                      style={styles.description} 
+                      numberOfLines={isDescriptionExpanded ? undefined : 2}
+                    >
+                      {video.description}
+                      {!isDescriptionExpanded && video.description && video.description.length > 80 && (
+                        <Text style={styles.seeMore}> ... voir plus</Text>
+                      )}
+                    </Text>
+                    {isDescriptionExpanded && (
+                      <Text style={styles.seeLess}>voir moins</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.rightSide}>
@@ -950,8 +1038,9 @@ export default function HomeScreen() {
                   </Text>
                   <Text style={styles.userRole}>
                     {item.badge === 'expert' ? '👨‍🎓 Expert' : 
+                     item.badge === 'diplome' ? '🎓 Diplomé' :
                      item.badge === 'pro' ? '⭐ Pro' : 
-                     '🎓 Apprenant'}
+                     '📚 Apprenant'}
                   </Text>
                 </View>
                 <LinearGradient
@@ -1155,8 +1244,28 @@ const styles = StyleSheet.create({
   description: { 
     color: '#fff', 
     fontSize: 14, 
-    marginBottom: 8, 
     lineHeight: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+  
+  seeMore: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    opacity: 0.8,
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
+
+  seeLess: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 4,
+    opacity: 0.8,
     textShadowColor: 'rgba(0, 0, 0, 0.75)',
     textShadowOffset: {width: 0, height: 1},
     textShadowRadius: 3
