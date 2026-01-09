@@ -61,6 +61,9 @@ export default function HomeScreen() {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   
+  // ✅ AJOUT : État pour tracker les vidéos déjà comptées
+  const [countedVideos, setCountedVideos] = useState<Set<string>>(new Set());
+  
   // États utilisateur
   const [userProfile, setUserProfile] = useState<any>(null);
   const [likedVideosSet, setLikedVideosSet] = useState<Set<string>>(new Set());
@@ -88,7 +91,6 @@ export default function HomeScreen() {
   // 🔄 EFFETS
   // ========================================
 
-  // ✅ ANCIEN CODE QUI FONCTIONNAIT (avec fix TypeScript uniquement)
   useFocusEffect(
     useCallback(() => {
       const fetchUserData = async () => {
@@ -99,27 +101,25 @@ export default function HomeScreen() {
         if (userDoc.exists()) {
           const data = userDoc.data();
           setUserProfile(data);
-          // ✅ FIX : Ajout <string> pour TypeScript
           setLikedVideosSet(new Set<string>(data.likedVideos || []));
-setSavedVideosSet(new Set<string>(data.favorites || []));
+          setSavedVideosSet(new Set<string>(data.favorites || []));
         }
       };
       
       fetchUserData();
       
-    const timer = setTimeout(() => {
-  const currentVideo = videoRefs.current[videos[currentIndex]?.id];
-  if (currentVideo) {
-    currentVideo.playAsync()
-      .catch(error => {
-        // ✅ Ignore l'erreur AbortError (normale)
-        if (error.name !== 'AbortError') {
-          console.error('Erreur lecture vidéo:', error);
+      const timer = setTimeout(() => {
+        const currentVideo = videoRefs.current[videos[currentIndex]?.id];
+        if (currentVideo) {
+          currentVideo.playAsync()
+            .catch(error => {
+              if (error.name !== 'AbortError') {
+                console.error('Erreur lecture vidéo:', error);
+              }
+            });
+          setIsPlaying(true);
         }
-      });
-    setIsPlaying(true);
-  }
-}, 100);
+      }, 100);
       
       return () => {
         clearTimeout(timer);
@@ -295,18 +295,58 @@ setSavedVideosSet(new Set<string>(data.favorites || []));
     }
   };
 
+  // ✅ MODIFIÉ : Ne plus ajouter de minutes ici
   const handleMarkAsWatched = async (videoId: string) => {
     const user = auth.currentUser;
     if (!user) return;
     
-    await updateDoc(doc(db, 'users', user.uid), { 
-      watchHistory: arrayUnion(videoId),
-      lastWatchedAt: serverTimestamp() 
-    });
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { 
+        watchHistory: arrayUnion(videoId),
+        lastWatchedAt: serverTimestamp()
+      });
+      
+      await updateDoc(doc(db, 'videos', videoId), { 
+        views: increment(1) 
+      });
+    } catch (error) {
+      console.error('❌ Erreur handleMarkAsWatched:', error);
+    }
+  };
+
+  // ✅ NOUVELLE FONCTION : Compter les minutes quand la vidéo est vue
+  const handleVideoCompleted = async (videoId: string, durationMillis: number) => {
+    const user = auth.currentUser;
+    if (!user) return;
     
-    await updateDoc(doc(db, 'videos', videoId), { 
-      views: increment(1) 
-    });
+    // ✅ Vérifier si déjà comptée
+    if (countedVideos.has(videoId)) {
+      return;
+    }
+    
+    try {
+      // Convertir millisecondes en minutes
+      const videoDurationInMinutes = durationMillis / 60000;
+      
+      // Récupérer les stats actuelles
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const currentTotalMinutes = userDoc.exists() 
+        ? (userDoc.data().stats?.totalMinutes || 0) 
+        : 0;
+      
+      // ✅ Mettre à jour uniquement les minutes
+      await updateDoc(doc(db, 'users', user.uid), { 
+        'stats.totalMinutes': currentTotalMinutes + videoDurationInMinutes
+      });
+      
+      // ✅ Marquer comme comptée
+      setCountedVideos(prev => new Set(prev).add(videoId));
+      
+      console.log(`✅ Vidéo complétée : +${videoDurationInMinutes.toFixed(2)} minutes (total: ${(currentTotalMinutes + videoDurationInMinutes).toFixed(2)})`);
+      
+    } catch (error) {
+      console.error('❌ Erreur handleVideoCompleted:', error);
+    }
   };
 
   const togglePlayPause = async () => {
@@ -626,12 +666,17 @@ setSavedVideosSet(new Set<string>(data.favorites || []));
                 resizeMode={ResizeMode.COVER}
                 shouldPlay={index === currentIndex && isPlaying}
                 isLooping
-                 isMuted={Platform.OS === 'web'} 
+                isMuted={Platform.OS === 'web'} 
                 style={StyleSheet.absoluteFillObject}
                 onPlaybackStatusUpdate={(s) => {
                   if (index === currentIndex && s.isLoaded) {
                     setProgress(s.positionMillis);
                     setDuration(s.durationMillis || 0);
+                    
+                    // ✅ AJOUT : Compter à 90% de progression
+                    if (s.durationMillis && s.positionMillis >= s.durationMillis * 0.9) {
+                      handleVideoCompleted(video.id, s.durationMillis);
+                    }
                   }
                 }}
               />
