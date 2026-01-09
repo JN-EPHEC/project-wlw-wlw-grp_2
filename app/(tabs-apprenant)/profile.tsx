@@ -199,8 +199,7 @@ export default function ProfileApprenantScreen() {
   // Hooks Progression
   const { stats: progressStats, getXPProgressPercentage, getBadgesWithProgress, getBonusBadgesWithProgress } = useUserProgress();
   const xpPercentage = getXPProgressPercentage ? getXPProgressPercentage() : 0;
-  const currentLevel = userProfile?.progressData?.level || Math.floor((stats.videosWatched || 0) / 10) + 1;
-  const nextLevelVideos = (currentLevel * 10) - (stats.videosWatched || 0);
+  const currentLevel = Math.floor((stats.videosWatched || 0) / 10) + 1;  const nextLevelVideos = (currentLevel * 10) - (stats.videosWatched || 0);
 
   // --- EFFETS ---
   useFocusEffect(
@@ -208,6 +207,14 @@ export default function ProfileApprenantScreen() {
       loadProfile();
     }, [activeTab])
   );
+useEffect(() => {
+  if (userProfile && stats.videosWatched >= 0) {
+    // ✅ Petit délai pour que React finisse de mettre à jour les states
+    setTimeout(() => {
+      loadBadges();
+    }, 100);
+  }
+}, [userProfile?.uid, stats.videosWatched]);
 
   const signOut = async () => {
     try {
@@ -331,7 +338,19 @@ export default function ProfileApprenantScreen() {
         });
 
         // ✅ Appel de loadBadges qui va maintenant sauvegarder automatiquement
-        await loadBadges();
+     setStats({
+  videosWatched: watchCount,
+  streak: data.stats?.streak || 0,
+  totalMinutes: data.stats?.totalMinutes || 0,
+  followers: data.stats?.followers || 0,
+});
+
+// ❌ SUPPRIMER : await loadBadges();
+
+if (activeTab === 'playlists') await loadPlaylists(user.uid);
+if (activeTab === 'saved') setFavorites(await fetchVideosByIds(data.favorites || []));
+if (activeTab === 'history') setHistory(await fetchVideosByIds(data.watchHistory || []));
+if (activeTab === 'liked') setLikedVideos(await fetchVideosByIds(data.likedVideos || []));
 
         if (activeTab === 'playlists') await loadPlaylists(user.uid);
         if (activeTab === 'saved') setFavorites(await fetchVideosByIds(data.favorites || []));
