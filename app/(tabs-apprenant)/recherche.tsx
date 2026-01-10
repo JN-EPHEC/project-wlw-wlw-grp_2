@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   View, Text, StyleSheet, TextInput, ScrollView, 
   TouchableOpacity, Image, Platform, Modal, Dimensions, ActivityIndicator, Alert, FlatList, Clipboard, Linking,
@@ -114,6 +114,10 @@ export default function RechercheScreen() {
   // --- ÉTATS COMMENTAIRES ---
   const [showComments, setShowComments] = useState(false);
   
+  // --- ÉTATS VIDÉO ---
+  const [isPlaying, setIsPlaying] = useState(true);
+  const videoRef = useRef<Video | null>(null);
+  
   // --- ÉTATS PARTAGE ---
   const [showShareModal, setShowShareModal] = useState(false);
   const [showUsersList, setShowUsersList] = useState(false);
@@ -133,54 +137,76 @@ export default function RechercheScreen() {
     return cat ? cat.emoji : '📚';
   };
 
-  // ✅ CORRECTION 1 : CHARGEMENT USER PROFILE EN PREMIER - PRIORITAIRE
-  // ✅ CORRECTION 1 : CHARGEMENT USER PROFILE EN PREMIER - PRIORITAIRE
-useEffect(() => {
-  const fetchUserData = async () => {
-    const user = auth.currentUser;
-    if (!user) return;
-    
-    try {
-      console.log('🔄 [RECHERCHE] Chargement données utilisateur...');
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        
-        console.log('✅ [RECHERCHE] Données utilisateur chargées:', {
-          likedVideos: data.likedVideos?.length || 0,
-          favorites: data.favorites?.length || 0,
-          following: data.following?.length || 0
-        });
-        
-        setUserProfile(data);
-        
-        // ✅ FIX : Typage explicite des Sets
-        const likedSet = new Set<string>(data.likedVideos || []);
-        const savedSet = new Set<string>(data.favorites || []);
-        const followingList = data.following || [];
-        
-        setLikedVideosSet(likedSet);
-        setSavedVideosSet(savedSet);
-        setFollowedIds(followingList);
-        
-        console.log('🎯 [RECHERCHE] Sets initialisés:', {
-          likedVideosSetSize: likedSet.size,
-          savedVideosSetSize: savedSet.size,
-          followedIdsLength: followingList.length
-        });
-      }
-    } catch (error) {
-      console.error('❌ [RECHERCHE] Erreur chargement profil:', error);
+  const getBadgeInfo = (badge?: 'apprenant' | 'expert' | 'pro' | 'diplome') => {
+    switch (badge) {
+      case 'expert':
+        return { icon: 'shield-checkmark', color: '#FBA31A', label: 'EXPERT' };
+      case 'diplome':
+        return { icon: 'school', color: '#3B82F6', label: 'DIPLOMÉ' };
+      case 'pro':
+        return { icon: 'star', color: '#10B981', label: 'PRO' };
+      default:
+        return null;
     }
   };
-  
-  fetchUserData();
-}, []);
 
-  // ✅ CORRECTION 2 : CHARGEMENT VIDÉOS APRÈS USER PROFILE
+  const togglePlayPause = async () => {
+    if (videoRef.current) {
+      if (isPlaying) { 
+        await videoRef.current.pauseAsync(); 
+        setIsPlaying(false); 
+      } else { 
+        await videoRef.current.playAsync(); 
+        setIsPlaying(true); 
+      }
+    }
+  };
+
+  // ✅ CHARGEMENT USER PROFILE EN PREMIER
   useEffect(() => {
-    // ⚠️ N'exécute PAS si userProfile n'est pas encore chargé
+    const fetchUserData = async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+      
+      try {
+        console.log('🔄 [RECHERCHE] Chargement données utilisateur...');
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          
+          console.log('✅ [RECHERCHE] Données utilisateur chargées:', {
+            likedVideos: data.likedVideos?.length || 0,
+            favorites: data.favorites?.length || 0,
+            following: data.following?.length || 0
+          });
+          
+          setUserProfile(data);
+          
+          const likedSet = new Set<string>(data.likedVideos || []);
+          const savedSet = new Set<string>(data.favorites || []);
+          const followingList = data.following || [];
+          
+          setLikedVideosSet(likedSet);
+          setSavedVideosSet(savedSet);
+          setFollowedIds(followingList);
+          
+          console.log('🎯 [RECHERCHE] Sets initialisés:', {
+            likedVideosSetSize: likedSet.size,
+            savedVideosSetSize: savedSet.size,
+            followedIdsLength: followingList.length
+          });
+        }
+      } catch (error) {
+        console.error('❌ [RECHERCHE] Erreur chargement profil:', error);
+      }
+    };
+    
+    fetchUserData();
+  }, []);
+
+  // ✅ CHARGEMENT VIDÉOS APRÈS USER PROFILE
+  useEffect(() => {
     if (!userProfile) {
       console.log('⏳ [RECHERCHE] En attente du profil utilisateur...');
       return;
@@ -201,7 +227,6 @@ useEffect(() => {
           const userDoc = await getDoc(doc(db, 'users', v.creatorId));
           const uData = userDoc.exists() ? userDoc.data() : {};
           
-          // Détermine le badge
           let badge: 'apprenant' | 'expert' | 'pro' | 'diplome' = 'apprenant';
           
           if (uData.badge) {
@@ -253,11 +278,13 @@ useEffect(() => {
     };
     
     fetchVideos();
-  }, [userProfile]); // ✅ Se déclenche SEULEMENT quand userProfile est chargé
+  }, [userProfile]);
 
   // --- LISTENER TEMPS RÉEL VIDÉO SÉLECTIONNÉE ---
   useEffect(() => {
     if (!selectedVideo?.id) return;
+    
+    setIsPlaying(true);
     
     const unsubscribe = onSnapshot(
       doc(db, 'videos', selectedVideo.id),
@@ -271,7 +298,6 @@ useEffect(() => {
             comments: data.comments || 0
           } : null);
           
-          // Met à jour aussi dans la liste
           setVideos(prev => prev.map(v => 
             v.id === selectedVideo.id 
               ? { ...v, likes: data.likes || 0, comments: data.comments || 0 }
@@ -583,7 +609,6 @@ useEffect(() => {
 
   // --- NAVIGATION ---
   const handleVideoPress = (video: VideoData) => {
-    // ✅ Debug : Vérifier les états au moment du clic
     console.log(`🎬 [RECHERCHE] Ouverture vidéo:`, {
       videoId: video.id,
       videoTitle: video.title,
@@ -648,7 +673,6 @@ useEffect(() => {
         ) : (
           activeTab === 'videos' ? (
             filteredVideos.map((video, index) => {
-              // ✅ Debug : Logs pour chaque vidéo affichée
               const isLiked = likedVideosSet.has(video.id);
               const isSaved = savedVideosSet.has(video.id);
               const isFollowing = followedIds.includes(video.creatorId);
@@ -703,18 +727,30 @@ useEffect(() => {
         )}
       </ScrollView>
 
-      {/* MODAL VIDÉO COMPLET - FORMAT CORRIGÉ */}
+      {/* MODAL VIDÉO PLEIN ÉCRAN - STYLE TIKTOK */}
       <Modal 
         visible={selectedVideo !== null} 
         animationType="slide" 
         presentationStyle="fullScreen"
-        onRequestClose={() => setSelectedVideo(null)}
+        onRequestClose={() => {
+          setSelectedVideo(null);
+          setIsPlaying(true);
+          if (videoRef.current) {
+            videoRef.current.pauseAsync();
+          }
+        }}
       >
         {selectedVideo && (
           <View style={styles.videoModalContainer}>
             <TouchableOpacity 
               style={styles.closeButton} 
-              onPress={() => setSelectedVideo(null)}
+              onPress={() => {
+                setSelectedVideo(null);
+                setIsPlaying(true);
+                if (videoRef.current) {
+                  videoRef.current.pauseAsync();
+                }
+              }}
             >
               <LinearGradient 
                 colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0.3)']} 
@@ -725,16 +761,26 @@ useEffect(() => {
             </TouchableOpacity>
 
             <Video
+              ref={videoRef}
               source={{ uri: selectedVideo.videoUrl }}
               style={StyleSheet.absoluteFillObject}
               resizeMode={ResizeMode.COVER}
-              shouldPlay
+              shouldPlay={isPlaying}
               isLooping
               useNativeControls={false}
             />
 
-            <TouchableWithoutFeedback>
-              <View style={{ ...StyleSheet.absoluteFillObject, zIndex: 1 }} />
+            <TouchableWithoutFeedback onPress={togglePlayPause}>
+              <View style={styles.touchableOverlay}>
+                {!isPlaying && (
+                  <LinearGradient
+                    colors={['rgba(116, 89, 240, 0.3)', 'rgba(36, 42, 101, 0.3)']}
+                    style={styles.playPauseIconBg}
+                  >
+                    <Ionicons name="play" size={60} color="white" />
+                  </LinearGradient>
+                )}
+              </View>
             </TouchableWithoutFeedback>
 
             <LinearGradient 
@@ -762,23 +808,20 @@ useEffect(() => {
                   <View style={styles.nameWithBadge}>
                     <Text style={styles.modalCreatorName}>@{selectedVideo.creatorName}</Text>
                     
-                    {selectedVideo.creatorBadge === 'expert' && (
-                      <View style={styles.badgeContainer}>
-                        <Text style={styles.badgeText}>EXPERT</Text>
-                      </View>
-                    )}
-                    
-                    {selectedVideo.creatorBadge === 'diplome' && (
-                      <View style={[styles.badgeContainer, { backgroundColor: '#3B82F6' }]}>
-                        <Text style={styles.badgeText}>DIPLOMÉ</Text>
-                      </View>
-                    )}
-                    
-                    {selectedVideo.creatorBadge === 'pro' && (
-                      <View style={[styles.badgeContainer, { backgroundColor: '#10B981' }]}>
-                        <Text style={styles.badgeText}>PRO</Text>
-                      </View>
-                    )}
+                    {(() => {
+                      const badgeInfo = getBadgeInfo(selectedVideo.creatorBadge);
+                      if (!badgeInfo) return null;
+                      
+                      return (
+                        <LinearGradient
+                          colors={[badgeInfo.color, badgeInfo.color]}
+                          style={styles.badgeContainerModal}
+                        >
+                          <Ionicons name={badgeInfo.icon as any} size={10} color="#fff" />
+                          <Text style={styles.badgeTextModal}>{badgeInfo.label}</Text>
+                        </LinearGradient>
+                      );
+                    })()}
                   </View>
                   
                   {selectedVideo.creatorId !== auth.currentUser?.uid && !followedIds.includes(selectedVideo.creatorId) && (
@@ -808,87 +851,125 @@ useEffect(() => {
               )}
             </LinearGradient>
 
-            <View style={styles.actionsContainer}>
+            {/* ✅ NOUVEAUX BOUTONS STYLE TIKTOK */}
+            <View style={styles.rightSideActions}>
               <TouchableOpacity 
+                style={styles.avatarLargeAction} 
                 onPress={() => {
                   setSelectedVideo(null);
                   router.push(`/profile/${selectedVideo.creatorId}`);
                 }}
               >
-                <View style={styles.actionCircleWrapper}>
-                  {selectedVideo.creatorAvatar ? (
-                    <Image source={{ uri: selectedVideo.creatorAvatar }} style={styles.actionProfileImg} />
-                  ) : (
-                    <View style={[styles.actionProfileImg, {backgroundColor: '#7459f0', justifyContent: 'center', alignItems: 'center'}]}>
-                      <Ionicons name="person" size={20} color="white" />
-                    </View>
-                  )}
-                  <View style={[styles.plusBadge, { backgroundColor: followedIds.includes(selectedVideo.creatorId) ? '#10B981' : '#EF4444' }]}>
-                    <Ionicons name={followedIds.includes(selectedVideo.creatorId) ? "checkmark" : "add"} size={10} color="white" />
+                <LinearGradient
+                  colors={['#7459f0', '#242A65']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.avatarCircleBorder}
+                >
+                  <View style={styles.avatarCircleAction}>
+                    {selectedVideo.creatorAvatar ? (
+                      <Image 
+                        source={{ uri: selectedVideo.creatorAvatar }} 
+                        style={styles.avatarLargeImage} 
+                      />
+                    ) : (
+                      <Text style={styles.avatarTextAction}>
+                        {selectedVideo.creatorName.charAt(0).toUpperCase()}
+                      </Text>
+                    )}
                   </View>
-                </View>
+                </LinearGradient>
+                
+                {followedIds.includes(selectedVideo.creatorId) && (
+                  <LinearGradient
+                    colors={['#7459f0', '#9333ea']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.checkIconAction}
+                  >
+                    <Ionicons name="checkmark" size={12} color="white" />
+                  </LinearGradient>
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={styles.actionBtn} 
+                style={styles.actionButtonModal} 
                 onPress={() => handleLike(selectedVideo.id)}
+                activeOpacity={0.7}
               >
                 <LinearGradient 
-                  colors={likedVideosSet.has(selectedVideo.id) ? ['#ef4444', '#dc2626'] : ['#7459f0', '#242A65']} 
-                  style={styles.actionCircle}
+                  colors={likedVideosSet.has(selectedVideo.id) ? ['#ef4444', '#dc2626'] : ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.actionIconModal}
                 >
                   <Ionicons 
                     name={likedVideosSet.has(selectedVideo.id) ? "heart" : "heart-outline"} 
-                    size={24} 
-                    color="white" 
+                    size={28} 
+                    color="#fff" 
                   />
                 </LinearGradient>
-                <Text style={styles.actionCount}>{selectedVideo.likes || 0}</Text>
+                <Text style={styles.actionCountModal}>{selectedVideo.likes || 0}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={styles.actionBtn} 
-                onPress={() => setShowComments(true)}
+                style={styles.actionButtonModal} 
+                onPress={() => {
+                  setShowComments(true);
+                  if (videoRef.current && isPlaying) {
+                    videoRef.current.pauseAsync();
+                    setIsPlaying(false);
+                  }
+                }}
+                activeOpacity={0.7}
               >
                 <LinearGradient 
-                  colors={['#7459f0', '#242A65']} 
-                  style={styles.actionCircle}
+                  colors={['#7459f0', '#242A65']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.actionIconModal}
                 >
-                  <Ionicons name="chatbubble-outline" size={22} color="white" />
+                  <Ionicons name="chatbubble-outline" size={28} color="#fff" />
                 </LinearGradient>
-                <Text style={styles.actionCount}>{selectedVideo.comments || 0}</Text>
+                <Text style={styles.actionCountModal}>{selectedVideo.comments || 0}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={styles.actionBtn} 
+                style={styles.actionButtonModal} 
                 onPress={() => handleFavorite(selectedVideo.id)}
+                activeOpacity={0.7}
               >
                 <LinearGradient 
-                  colors={savedVideosSet.has(selectedVideo.id) ? ['#FBA31A', '#F59E0B'] : ['#7459f0', '#242A65']} 
-                  style={styles.actionCircle}
+                  colors={savedVideosSet.has(selectedVideo.id) ? ['#FBA31A', '#F59E0B'] : ['rgba(255,255,255,0.25)', 'rgba(255,255,255,0.15)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.actionIconModal}
                 >
                   <Ionicons 
                     name={savedVideosSet.has(selectedVideo.id) ? "bookmark" : "bookmark-outline"} 
-                    size={22} 
-                    color="white" 
+                    size={28} 
+                    color="#fff" 
                   />
                 </LinearGradient>
-                <Text style={styles.actionCount}>
-                  {savedVideosSet.has(selectedVideo.id) ? 'Sauvé' : 'Sauver'}
+                <Text style={styles.actionCountModal}>
+                  {savedVideosSet.has(selectedVideo.id) ? 'Enregistré' : 'Sauver'}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity 
-                style={styles.actionBtn} 
+                style={styles.actionButtonModal} 
                 onPress={() => handleShare(selectedVideo)}
+                activeOpacity={0.7}
               >
                 <LinearGradient 
-                  colors={['#7459f0', '#242A65']} 
-                  style={styles.actionCircle}
+                  colors={['#7459f0', '#242A65']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.actionIconModal}
                 >
-                  <Ionicons name="share-social-outline" size={22} color="white" />
+                  <Ionicons name="share-social-outline" size={28} color="#fff" />
                 </LinearGradient>
-                <Text style={styles.actionCount}>Partager</Text>
+                <Text style={styles.actionCountModal}>Partager</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -902,7 +983,15 @@ useEffect(() => {
           videoId={selectedVideo.id} 
           creatorId={selectedVideo.creatorId}
           videoTitle={selectedVideo.title}
-          onClose={() => setShowComments(false)}
+          onClose={() => {
+            setShowComments(false);
+            if (videoRef.current && !isPlaying) {
+              setTimeout(() => {
+                videoRef.current?.playAsync();
+                setIsPlaying(true);
+              }, 300);
+            }
+          }}
           onCommentAdded={() => handleCommentAdded(selectedVideo.id)}
           onCommentDeleted={() => handleCommentDeleted(selectedVideo.id)}
         />
@@ -1166,26 +1255,117 @@ const styles = StyleSheet.create({
   videoModalContainer: { flex: 1, backgroundColor: '#000' },
   closeButton: { position: 'absolute', top: Platform.OS === 'ios' ? 60 : 40, left: 20, zIndex: 100 },
   closeButtonGradient: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  
+  touchableOverlay: { 
+    ...StyleSheet.absoluteFillObject, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    zIndex: 5 
+  },
+  playPauseIconBg: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  
   videoInfoOverlay: { position: 'absolute', bottom: 0, left: 0, right: 100, padding: 20, paddingBottom: 40, zIndex: 20 },
   creatorInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   creatorAvatarContainer: { marginRight: 12 },
   creatorAvatar: { width: 48, height: 48, borderRadius: 24, borderWidth: 2, borderColor: '#fff' },
   nameWithBadge: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  badgeContainer: { backgroundColor: '#FBA31A', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  badgeText: { color: '#000', fontSize: 9, fontWeight: '900' },
+  badgeContainerModal: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  badgeTextModal: { 
+    color: '#fff', 
+    fontSize: 10, 
+    fontWeight: '700' 
+  },
   miniFollowButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, alignSelf: 'flex-start' },
   miniFollowText: { color: '#fff', fontSize: 12, fontWeight: '700' },
   modalVideoTitle: { fontSize: 18, fontWeight: 'bold', color: '#FFF', marginBottom: 6 },
   modalCreatorName: { fontSize: 16, color: '#FFF', fontWeight: '700' },
   modalDescription: { fontSize: 14, color: '#FFF', opacity: 0.8, lineHeight: 20 },
   
-  actionsContainer: { position: 'absolute', bottom: 100, right: 16, gap: 20, alignItems: 'center', zIndex: 50 },
-  actionCircleWrapper: { position: 'relative', marginBottom: 8 },
-  actionProfileImg: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#fff' },
-  plusBadge: { position: 'absolute', bottom: -4, alignSelf: 'center', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
-  actionBtn: { alignItems: 'center', gap: 4 },
-  actionCircle: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
-  actionCount: { color: '#fff', fontSize: 11, fontWeight: '600', textAlign: 'center' },
+  // ✅ NOUVEAUX STYLES BOUTONS TIKTOK
+  rightSideActions: { 
+    position: 'absolute', 
+    bottom: 140, 
+    right: 16, 
+    gap: 20, 
+    alignItems: 'center', 
+    zIndex: 50 
+  },
+  avatarLargeAction: { 
+    marginBottom: 8, 
+    position: 'relative' 
+  },
+  avatarCircleBorder: {
+    padding: 3,
+    borderRadius: 31
+  },
+  avatarCircleAction: { 
+    width: 56, 
+    height: 56, 
+    borderRadius: 28, 
+    backgroundColor: '#1a1a2e', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    overflow: 'hidden' 
+  },
+  avatarLargeImage: { 
+    width: '100%', 
+    height: '100%' 
+  },
+  avatarTextAction: { 
+    color: '#fff', 
+    fontSize: 20, 
+    fontWeight: 'bold' 
+  },
+  checkIconAction: { 
+    position: 'absolute', 
+    bottom: -4, 
+    alignSelf: 'center', 
+    width: 24, 
+    height: 24, 
+    borderRadius: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderWidth: 2, 
+    borderColor: '#fff' 
+  },
+  
+  actionButtonModal: { 
+    alignItems: 'center', 
+    gap: 6 
+  },
+  actionIconModal: { 
+    width: 50, 
+    height: 50, 
+    borderRadius: 25, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8
+  },
+  actionCountModal: { 
+    color: '#fff', 
+    fontSize: 12, 
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: {width: 0, height: 1},
+    textShadowRadius: 3
+  },
   
   shareOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   shareContentWrapper: { width: '100%', maxWidth: 400 },

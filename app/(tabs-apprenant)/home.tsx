@@ -764,68 +764,71 @@ export default function HomeScreen() {
               )}
 
               <View style={styles.leftSide}>
-                <TouchableOpacity 
-                  style={styles.creatorInfo} 
-                  onPress={() => router.push(`/profile/${video.creatorId}`)}
-                >
-                  <View style={styles.creatorAvatarWrapper}>
-                    <LinearGradient
-                      colors={['#7459f0', '#242A65']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.creatorAvatarBorder}
-                    >
-                      <View style={styles.creatorAvatar}>
-                        {video.creatorAvatar ? (
-                          <Image 
-                            source={{ uri: video.creatorAvatar }} 
-                            style={styles.avatarImage} 
-                          />
-                        ) : (
-                          <Text style={styles.creatorInitial}>
-                            {video.creatorName.charAt(0).toUpperCase()}
-                          </Text>
-                        )}
-                      </View>
-                    </LinearGradient>
-                  </View>
-                  
-                  <View style={styles.creatorDetails}>
-                    <View style={styles.creatorNameRow}>
-                      <Text style={styles.creatorName}>
-                        @{video.creatorName} 
-                        {isMyVideo && <Text style={styles.meLabel}> (Moi)</Text>}
-                      </Text>
-                      
-                      {badgeInfo && (
-                        <LinearGradient
-                          colors={[badgeInfo.color, badgeInfo.color]}
-                          style={styles.badge}
-                        >
-                          <Ionicons name={badgeInfo.icon as any} size={10} color="#fff" />
-                          <Text style={styles.badgeText}>{badgeInfo.label}</Text>
-                        </LinearGradient>
-                      )}
+                <View style={styles.creatorInfo}>
+                  <TouchableOpacity 
+                    style={styles.creatorInfoTop}
+                    onPress={() => router.push(`/profile/${video.creatorId}`)}
+                  >
+                    <View style={styles.creatorAvatarWrapper}>
+                      <LinearGradient
+                        colors={['#7459f0', '#242A65']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.creatorAvatarBorder}
+                      >
+                        <View style={styles.creatorAvatar}>
+                          {video.creatorAvatar ? (
+                            <Image 
+                              source={{ uri: video.creatorAvatar }} 
+                              style={styles.avatarImage} 
+                            />
+                          ) : (
+                            <Text style={styles.creatorInitial}>
+                              {video.creatorName.charAt(0).toUpperCase()}
+                            </Text>
+                          )}
+                        </View>
+                      </LinearGradient>
                     </View>
                     
-                    {!isMyVideo && !isFollowing && (
-                      <TouchableOpacity 
-                        onPress={() => handleFollow(video.creatorId, video.creatorName)}
-                        activeOpacity={0.8}
+                    <View style={styles.creatorDetails}>
+                      <View style={styles.creatorNameRow}>
+                        <Text style={styles.creatorName}>
+                          @{video.creatorName} 
+                          {isMyVideo && <Text style={styles.meLabel}> (Moi)</Text>}
+                        </Text>
+                        
+                        {badgeInfo && (
+                          <LinearGradient
+                            colors={[badgeInfo.color, badgeInfo.color]}
+                            style={styles.badge}
+                          >
+                            <Ionicons name={badgeInfo.icon as any} size={10} color="#fff" />
+                            <Text style={styles.badgeText}>{badgeInfo.label}</Text>
+                          </LinearGradient>
+                        )}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                  
+                  {!isMyVideo && !isFollowing && (
+                    <TouchableOpacity 
+                      onPress={() => handleFollow(video.creatorId, video.creatorName)}
+                      activeOpacity={0.8}
+                      style={styles.followButtonContainer}
+                    >
+                      <LinearGradient
+                        colors={['#7459f0', '#9333ea', '#242A65']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.followButtonProminent}
                       >
-                        <LinearGradient
-                          colors={['#7459f0', '#9333ea', '#242A65']}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                          style={styles.followButtonProminent}
-                        >
-                          <Ionicons name="add" size={16} color="#fff" />
-                          <Text style={styles.followButtonProminentText}>Suivre</Text>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </TouchableOpacity>
+                        <Ionicons name="add" size={16} color="#fff" />
+                        <Text style={styles.followButtonProminentText}>Suivre</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  )}
+                </View>
                 
                 <Text style={styles.title} numberOfLines={2}>{video.title}</Text>
                 
@@ -1185,7 +1188,7 @@ export default function HomeScreen() {
 }
 
 // ========================================
-// 🎨 STYLES (Design du premier code)
+// 🎨 STYLES
 // ========================================
 
 const styles = StyleSheet.create({
@@ -1247,10 +1250,13 @@ const styles = StyleSheet.create({
     zIndex: 30 
   },
   creatorInfo: { 
+    marginBottom: 12 
+  },
+  creatorInfoTop: {
     flexDirection: 'row', 
     alignItems: 'center', 
-    gap: 12, 
-    marginBottom: 12 
+    gap: 12,
+    marginBottom: 8
   },
   creatorAvatarWrapper: {
     padding: 2
@@ -1275,16 +1281,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold' 
   },
   creatorDetails: { 
-    flex: 1, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between' 
+    flex: 1
   },
   creatorNameRow: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     gap: 8,
-    flex: 1
+    flexWrap: 'wrap'
   },
   creatorName: { 
     color: '#fff', 
@@ -1311,6 +1314,10 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 10,
     fontWeight: '700',
+  },
+  followButtonContainer: {
+    alignSelf: 'flex-start',
+    marginLeft: 60
   },
   followButtonProminent: {
     flexDirection: 'row',
