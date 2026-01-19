@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  Image, Dimensions, ActivityIndicator, Alert, Modal, StatusBar, TextInput
+  Image, Dimensions, ActivityIndicator, Alert, Modal, StatusBar, TextInput, Platform, Linking, Clipboard
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode } from 'expo-av';
 import { 
-  doc, collection, query, where, getDocs, updateDoc, 
+  doc, collection, query, where, updateDoc, 
   arrayUnion, arrayRemove, increment, onSnapshot, getDoc, deleteDoc, addDoc, serverTimestamp
 } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
@@ -20,6 +20,15 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_COUNT = 3;
 const GRID_SPACING = 2;
 const ITEM_WIDTH = (SCREEN_WIDTH - (GRID_SPACING * (COLUMN_COUNT + 1))) / COLUMN_COUNT;
+
+const INTEREST_CONFIG: Record<string, { icon: string, color: string, label: string }> = {
+  'digital-marketing': { icon: '📱', color: '#E0F2FE', label: 'Marketing' },
+  'ia': { icon: '🤖', color: '#F3E8FF', label: 'IA' },
+  'ecommerce': { icon: '🛒', color: '#FEF3C7', label: 'E-commerce' },
+  'design': { icon: '🎨', color: '#FCE7F3', label: 'Design' },
+  'dev': { icon: '💻', color: '#DCFCE7', label: 'Dev' },
+  'business': { icon: '📊', color: '#FFEDD5', label: 'Business' },
+};
 
 interface UserData { 
   uid: string; 
@@ -33,6 +42,8 @@ interface UserData {
   followers?: string[]; 
   following?: string[]; 
   stats?: { videosWatched: number; }; 
+  interests?: string[];
+  createdAt?: any;
 }
 
 interface VideoData { 
@@ -46,6 +57,7 @@ interface VideoData {
   description?: string; 
   creatorId: string; 
   tags?: string[]; 
+  category?: string;
   isPinned?: boolean; 
   createdAt?: any; 
 }
@@ -57,6 +69,8 @@ export default function PublicProfileScreen() {
 
   const [profile, setProfile] = useState<UserData | null>(null);
   const [videos, setVideos] = useState<VideoData[]>([]);
+  const [filteredVideos, setFilteredVideos] = useState<VideoData[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
@@ -77,11 +91,40 @@ export default function PublicProfileScreen() {
   const [editDescription, setEditDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  
+  const [showShareModal, setShowShareModal] = useState(false);
 
   const totalViews = videos.reduce((acc, curr) => acc + (curr.views || 0), 0);
   const totalLikes = videos.reduce((acc, curr) => acc + (curr.likes || 0), 0);
 
-  const canInteract = !(currentUserRole === 'formateur' && profile?.role === 'formateur');
+  const canInteract = true;
+
+  const categories: string[] = ['all', ...Array.from(new Set(videos.map(v => v.category).filter((c): c is string => Boolean(c))))];
+  
+  const formatMemberSince = (createdAt: any): string => {
+    if (!createdAt) return '';
+    
+    try {
+      let date: Date;
+      
+      if (typeof createdAt.toDate === 'function') {
+        date = createdAt.toDate();
+      } else if (createdAt instanceof Date) {
+        date = createdAt;
+      } else if (typeof createdAt === 'string' || typeof createdAt === 'number') {
+        date = new Date(createdAt);
+      } else if (createdAt.seconds) {
+        date = new Date(createdAt.seconds * 1000);
+      } else {
+        return '';
+      }
+      
+      return date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    } catch (error) {
+      console.error('Erreur formatage date:', error);
+      return '';
+    }
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -121,19 +164,44 @@ export default function PublicProfileScreen() {
         });
     }
 
-    const loadVideos = async () => {
-        try {
-            const vQuery = query(collection(db, 'videos'), where('creatorId', '==', id));
-            const vSnapshot = await getDocs(vQuery);
-            const videosData = vSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as VideoData));
-            videosData.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-            setVideos(videosData);
-        } catch (e) { console.error(e); }
-    };
-    loadVideos();
+    // ✅ VIDÉOS EN TEMPS RÉEL (UN SEUL BLOC)
+    const vQuery = query(
+        collection(db, 'videos'), 
+        where('creatorId', '==', id)
+    );
 
-    return () => unsubProfile();
+    const unsubVideos = onSnapshot(vQuery, (snapshot) => {
+        const videosData = snapshot.docs.map(d => ({ 
+            id: d.id, 
+            ...d.data() 
+        } as VideoData));
+        
+        // ✅ Tri en JavaScript
+        videosData.sort((a, b) => {
+            const aTime = a.createdAt?.seconds || 0;
+            const bTime = b.createdAt?.seconds || 0;
+            return bTime - aTime;
+        });
+        
+        setVideos(videosData);
+        setFilteredVideos(videosData);
+    }, (error) => {
+        console.error('Erreur chargement vidéos:', error);
+    });
+
+    return () => {
+        unsubProfile();
+        unsubVideos();
+    };
   }, [id, currentUserId]);
+
+  useEffect(() => {
+    if (!selectedCategory || selectedCategory === 'all') {
+      setFilteredVideos(videos);
+    } else {
+      setFilteredVideos(videos.filter(v => v.category === selectedCategory));
+    }
+  }, [selectedCategory, videos]);
 
   const handleUpdateVideo = async () => {
     if (!selectedVideo || !editTitle.trim()) return;
@@ -180,12 +248,10 @@ export default function PublicProfileScreen() {
       if (isFollowing) {
         await updateDoc(myRef, { following: arrayRemove(profile.uid) });
         await updateDoc(targetRef, { followers: arrayRemove(currentUserId) });
-        setFollowersCount(prev => Math.max(0, prev - 1));
         Alert.alert('✓', `Vous ne suivez plus ${profile.displayName || profile.prenom}`);
       } else {
         await updateDoc(myRef, { following: arrayUnion(profile.uid) });
         await updateDoc(targetRef, { followers: arrayUnion(currentUserId) });
-        setFollowersCount(prev => prev + 1);
         
         await addDoc(collection(db, 'notifications'), {
           userId: profile.uid,
@@ -221,12 +287,74 @@ export default function PublicProfileScreen() {
       } catch (e) { console.error(e); }
   };
 
+  const handleVideoSave = async () => {
+    if (!currentUserId || !selectedVideo || !canInteract) return;
+    const isSaved = mySavedVideos.has(selectedVideo.id);
+    
+    try {
+      const uRef = doc(db, 'users', currentUserId);
+      if (isSaved) {
+        await updateDoc(uRef, { favorites: arrayRemove(selectedVideo.id) });
+        Alert.alert("✓", "Retiré des favoris");
+      } else {
+        await updateDoc(uRef, { favorites: arrayUnion(selectedVideo.id) });
+        Alert.alert("✓", "Ajouté aux favoris !");
+      }
+    } catch (e) { 
+      console.error(e); 
+      Alert.alert("Erreur", "Impossible de sauvegarder");
+    }
+  };
+
+  const handleShareProfile = () => {
+    setShowShareModal(true);
+  };
+
+  const shareOnWhatsApp = async () => {
+    if (!profile) return;
+    
+    const message = `🎓 Découvre le profil de ${profile.displayName || profile.prenom} sur SwipeSkills!\n\n👤 ${videos.length} vidéos | ${followersCount} abonnés\n\n👉 Ouvre l'app pour le découvrir!`;
+    const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
+    
+    try {
+      const supported = await Linking.canOpenURL(whatsappUrl);
+      if (supported) {
+        await Linking.openURL(whatsappUrl);
+        setShowShareModal(false);
+      } else {
+        Alert.alert("Erreur", "WhatsApp n'est pas installé");
+      }
+    } catch (error) {
+      Alert.alert("Erreur", "Impossible d'ouvrir WhatsApp");
+    }
+  };
+
+  const handleCopyProfileLink = async () => {
+    if (!profile) return;
+    
+    const profileLink = `https://swipeskills.app/profile/${profile.uid}`;
+    const shareMessage = `🎓 Découvre le profil de ${profile.displayName || profile.prenom} sur SwipeSkills!\n\n👤 ${videos.length} vidéos | ${followersCount} abonnés\n\n🔗 ${profileLink}`;
+    
+    try {
+      if (Platform.OS === 'web') {
+        await navigator.clipboard.writeText(shareMessage);
+        alert('✓ Lien copié !');
+      } else {
+        Clipboard.setString(shareMessage);
+        Alert.alert('✓', 'Lien copié dans le presse-papier !');
+      }
+      setShowShareModal(false);
+    } catch (error) {
+      Alert.alert('Erreur', 'Impossible de copier le lien');
+    }
+  };
+
   const getBadgeInfo = (badge?: 'apprenant' | 'expert' | 'pro') => {
     switch (badge) {
       case 'expert':
-        return { icon: 'shield-checkmark', color: '#3B82F6', label: 'Expert' };
+        return { icon: 'shield-checkmark', color: '#3B82F6', label: 'Expert Certifié' };
       case 'pro':
-        return { icon: 'star', color: '#FBA31A', label: 'Pro' };
+        return { icon: 'star', color: '#FBA31A', label: 'Professionnel' };
       default:
         return null;
     }
@@ -258,18 +386,22 @@ export default function PublicProfileScreen() {
       <StatusBar barStyle="light-content" />
       
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* HEADER AVEC AVATAR INTÉGRÉ */}
         <View style={styles.headerSection}>
           <LinearGradient 
             colors={['#7459f0', '#9333ea', '#242a65']} 
             locations={[0, 0.5, 1]}
             style={styles.headerGradient}
           >
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
+            <View style={styles.topActions}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <Ionicons name="arrow-back" size={24} color="white" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity onPress={handleShareProfile} style={styles.shareButton}>
+                <Ionicons name="share-social-outline" size={24} color="white" />
+              </TouchableOpacity>
+            </View>
             
-            {/* AVATAR DANS LE HEADER */}
             <View style={styles.avatarContainer}>
               <View style={styles.avatarBorder}>
                 {profile.photoURL ? (
@@ -282,26 +414,29 @@ export default function PublicProfileScreen() {
                   </View>
                 )}
               </View>
+              
+              {badgeInfo && (
+                <View style={[styles.badgeLarge, { backgroundColor: badgeInfo.color }]}>
+                  <Ionicons name={badgeInfo.icon as any} size={16} color="#fff" />
+                  <Text style={styles.badgeLargeText}>{badgeInfo.label}</Text>
+                </View>
+              )}
             </View>
 
-            {/* NOM + ROLE DANS LE HEADER */}
             <View style={styles.headerInfo}>
-              <View style={styles.nameRow}>
-                <Text style={styles.nameWhite}>{profile.displayName || `${profile.prenom} ${profile.nom}`}</Text>
-                {badgeInfo && (
-                  <View style={[styles.badge, { backgroundColor: badgeInfo.color }]}>
-                    <Ionicons name={badgeInfo.icon as any} size={12} color="#fff" />
-                    <Text style={styles.badgeText}>{badgeInfo.label}</Text>
-                  </View>
-                )}
-              </View>
+              <Text style={styles.nameWhite}>{profile.displayName || `${profile.prenom} ${profile.nom}`}</Text>
               
               <View style={styles.roleTagWhite}>
                 <Ionicons name="school" size={14} color="#fff" />
                 <Text style={styles.roleWhiteText}>Formateur</Text>
               </View>
+              
+              {profile.createdAt && formatMemberSince(profile.createdAt) && (
+                <Text style={styles.memberSince}>
+                  Membre depuis {formatMemberSince(profile.createdAt)}
+                </Text>
+              )}
 
-              {/* STATS DANS LE HEADER */}
               <View style={styles.headerStats}>
                 <View style={styles.headerStatItem}>
                   <Text style={styles.headerStatValue}>{videos.length}</Text>
@@ -323,83 +458,122 @@ export default function PublicProfileScreen() {
             </View>
           </LinearGradient>
 
-          {/* BOUTONS S'ABONNER ET MESSAGE */}
           {!isOwnProfile && (
-            canInteract ? (
-              <View style={styles.actionButtonsContainer}>
-                <TouchableOpacity 
-                  style={[styles.followBtn, isFollowing && styles.followBtnActive]} 
-                  onPress={handleFollow}
-                >
-                  <Ionicons 
-                    name={isFollowing ? "checkmark-circle" : "person-add"} 
-                    size={20} 
-                    color={isFollowing ? "#7459f0" : "#fff"} 
-                  />
-                  <Text style={[styles.followBtnText, isFollowing && styles.followBtnTextActive]}>
-                    {isFollowing ? "Abonné" : "Suivre"}
-                  </Text>
-                </TouchableOpacity>
+            <View style={styles.actionButtonsContainer}>
+              <TouchableOpacity 
+                style={[styles.followBtn, isFollowing && styles.followBtnActive]} 
+                onPress={handleFollow}
+              >
+                <Ionicons 
+                  name={isFollowing ? "checkmark-circle" : "person-add"} 
+                  size={20} 
+                  color={isFollowing ? "#7459f0" : "#fff"} 
+                />
+                <Text style={[styles.followBtnText, isFollowing && styles.followBtnTextActive]}>
+                  {isFollowing ? "Abonné" : "Suivre"}
+                </Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity style={styles.messageBtn} onPress={handleMessage}>
-                  <Ionicons name="chatbubble-outline" size={20} color="#7459f0" />
-                  <Text style={styles.messageBtnText}>Message</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.restrictedBanner}>
-                <Ionicons name="lock-closed" size={16} color="#9CA3AF" />
-                <Text style={styles.restrictedText}>Collaboration entre formateurs restreinte</Text>
-              </View>
-            )
+              <TouchableOpacity style={styles.messageBtn} onPress={handleMessage}>
+                <Ionicons name="chatbubble-outline" size={20} color="#7459f0" />
+                <Text style={styles.messageBtnText}>Message</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
-        {/* VIDÉOS */}
+        {profile.bio && (
+          <View style={styles.aboutSection}>
+            <Text style={styles.sectionTitle}>À propos</Text>
+            <Text style={styles.bioText}>{profile.bio}</Text>
+          </View>
+        )}
+
+        {profile.interests && profile.interests.length > 0 && (
+          <View style={styles.interestsSection}>
+            <Text style={styles.sectionTitle}>Domaines d'expertise</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.interestsScroll}>
+              {profile.interests.map((interest) => {
+                const conf = INTEREST_CONFIG[interest] || { icon: '📚', color: '#F3F4F6', label: interest };
+                return (
+                  <View key={interest} style={[styles.interestChip, { backgroundColor: conf.color }]}>
+                    <Text style={styles.interestIcon}>{conf.icon}</Text>
+                    <Text style={styles.interestLabel}>{conf.label}</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {categories.length > 1 && (
+          <View style={styles.filterSection}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
+              {categories.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.filterChip, selectedCategory === cat && styles.filterChipActive]}
+                  onPress={() => setSelectedCategory(cat)}
+                >
+                  <Text style={[styles.filterChipText, selectedCategory === cat && styles.filterChipTextActive]}>
+                    {cat === 'all' ? 'Toutes' : cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         <View style={styles.videosSection}>
           <View style={styles.videosHeader}>
             <Text style={styles.videosTitle}>Vidéos publiées</Text>
             <View style={styles.videosCount}>
-              <Text style={styles.videosCountText}>{videos.length}</Text>
+              <Text style={styles.videosCountText}>{filteredVideos.length}</Text>
             </View>
           </View>
 
-          <View style={styles.videosGrid}>
-            {videos.map((video) => (
-              <TouchableOpacity 
-                key={video.id} 
-                style={styles.videoItem} 
-                onPress={() => { 
-                  setSelectedVideo(video); 
-                  setShowPlayer(true); 
-                }}
-              >
-                {video.thumbnail ? (
-                  <Image source={{ uri: video.thumbnail }} style={styles.videoThumbnail} />
-                ) : (
-                  <View style={styles.videoPlaceholder}>
-                    <Ionicons name="videocam" size={40} color="rgba(255,255,255,0.5)" />
-                  </View>
-                )}
-                
-                <LinearGradient 
-                  colors={['transparent', 'rgba(0,0,0,0.8)']} 
-                  style={styles.videoGradient}
+          {filteredVideos.length === 0 ? (
+            <View style={styles.emptyVideos}>
+              <Ionicons name="videocam-off-outline" size={48} color="#ccc" />
+              <Text style={styles.emptyVideosText}>Aucune vidéo dans cette catégorie</Text>
+            </View>
+          ) : (
+            <View style={styles.videosGrid}>
+              {filteredVideos.map((video) => (
+                <TouchableOpacity 
+                  key={video.id} 
+                  style={styles.videoItem} 
+                  onPress={() => { 
+                    setSelectedVideo(video); 
+                    setShowPlayer(true); 
+                  }}
                 >
-                  <View style={styles.playIconContainer}>
-                    <Ionicons name="play" size={16} color="#fff" />
-                  </View>
-                  <Text style={styles.videoViews}>{video.views}</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ))}
-          </View>
+                  {video.thumbnail ? (
+                    <Image source={{ uri: video.thumbnail }} style={styles.videoThumbnail} />
+                  ) : (
+                    <View style={styles.videoPlaceholder}>
+                      <Ionicons name="videocam" size={40} color="rgba(255,255,255,0.5)" />
+                    </View>
+                  )}
+                  
+                  <LinearGradient 
+                    colors={['transparent', 'rgba(0,0,0,0.8)']} 
+                    style={styles.videoGradient}
+                  >
+                    <View style={styles.playIconContainer}>
+                      <Ionicons name="play" size={16} color="#fff" />
+                    </View>
+                    <Text style={styles.videoViews}>{video.views}</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
         
         <View style={{height: 40}} />
       </ScrollView>
 
-      {/* PLAYER MODAL */}
       <Modal visible={showPlayer && selectedVideo !== null} animationType="slide">
         <View style={styles.playerContainer}>
           {selectedVideo && (
@@ -440,6 +614,17 @@ export default function PublicProfileScreen() {
                     </View>
                     <Text style={styles.playerActionText}>{selectedVideo.comments}</Text>
                   </TouchableOpacity>
+                  
+                  <TouchableOpacity style={styles.playerAction} onPress={handleVideoSave}>
+                    <View style={[styles.playerActionIcon, mySavedVideos.has(selectedVideo.id) && styles.playerActionIconSaved]}>
+                      <Ionicons 
+                        name={mySavedVideos.has(selectedVideo.id) ? "bookmark" : "bookmark-outline"} 
+                        size={28} 
+                        color="#fff" 
+                      />
+                    </View>
+                    <Text style={styles.playerActionText}>Sauver</Text>
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -453,7 +638,70 @@ export default function PublicProfileScreen() {
         </View>
       </Modal>
 
-      {/* MODAL OPTIONS */}
+      <Modal visible={showShareModal} transparent animationType="fade">
+        <TouchableOpacity 
+          style={styles.shareOverlay} 
+          activeOpacity={1} 
+          onPress={() => setShowShareModal(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.shareContentWrapper}>
+            <View style={styles.shareContent}>
+              <LinearGradient 
+                colors={['#7459f0', '#9333ea', '#242A65']} 
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.shareHeader}
+              >
+                <View style={styles.shareHeaderContent}>
+                  <Ionicons name="share-social" size={24} color="white" />
+                  <Text style={styles.shareTitle}>Partager le profil</Text>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => setShowShareModal(false)}
+                  style={styles.shareCloseButton}
+                >
+                  <Ionicons name="close" size={24} color="white" />
+                </TouchableOpacity>
+              </LinearGradient>
+
+              <View style={styles.shareOptionsGrid}>
+                <TouchableOpacity 
+                  style={styles.shareOptionCard} 
+                  onPress={shareOnWhatsApp}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient 
+                    colors={['#25D366', '#128C7E']} 
+                    style={styles.shareIconGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="logo-whatsapp" size={36} color="white" />
+                  </LinearGradient>
+                  <Text style={styles.shareOptionLabel}>WhatsApp</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.shareOptionCard} 
+                  onPress={handleCopyProfileLink}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient 
+                    colors={['#3B82F6', '#2563EB']} 
+                    style={styles.shareIconGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="link" size={36} color="white" />
+                  </LinearGradient>
+                  <Text style={styles.shareOptionLabel}>Copier le lien</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       <Modal visible={showOptions} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowOptions(false)}>
           <View style={styles.modalContent}>
@@ -500,7 +748,6 @@ export default function PublicProfileScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL ÉDITION */}
       <Modal visible={isEditing} transparent animationType="slide">
         <View style={styles.editOverlay}>
           <View style={styles.editContent}>
@@ -579,7 +826,6 @@ const styles = StyleSheet.create({
     marginTop: 16 
   },
   
-  // Header Section
   headerSection: {
     marginBottom: 20
   },
@@ -588,19 +834,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 30
   },
+  topActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20
+  },
   backButton: { 
     backgroundColor: 'rgba(255,255,255,0.2)', 
     width: 40, 
     height: 40, 
     borderRadius: 12, 
     justifyContent: 'center', 
-    alignItems: 'center',
-    marginBottom: 20
+    alignItems: 'center'
+  },
+  shareButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)', 
+    width: 40, 
+    height: 40, 
+    borderRadius: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center'
   },
   
   avatarContainer: { 
     alignItems: 'center', 
-    marginBottom: 16
+    marginBottom: 16,
+    position: 'relative'
   },
   avatarBorder: { 
     width: 100, 
@@ -635,33 +895,35 @@ const styles = StyleSheet.create({
     color: '#fff', 
     fontWeight: 'bold' 
   },
+  badgeLarge: {
+    position: 'absolute',
+    bottom: -10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4
+  },
+  badgeLargeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700'
+  },
   
   headerInfo: {
     alignItems: 'center'
   },
-  nameRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 8, 
-    marginBottom: 8 
-  },
   nameWhite: { 
     fontSize: 22, 
     fontWeight: 'bold', 
-    color: '#fff' 
-  },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeText: {
     color: '#fff',
-    fontSize: 11,
-    fontWeight: '700',
+    marginBottom: 8
   },
   
   roleTagWhite: {
@@ -672,12 +934,17 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.2)',
-    marginBottom: 20
+    marginBottom: 8
   },
   roleWhiteText: {
     color: '#fff',
     fontSize: 13,
     fontWeight: '600'
+  },
+  memberSince: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    marginBottom: 16
   },
   
   headerStats: {
@@ -698,7 +965,6 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   
-  // Action Buttons
   actionButtonsContainer: {
     flexDirection: 'row',
     gap: 12,
@@ -752,24 +1018,76 @@ const styles = StyleSheet.create({
     fontSize: 15
   },
   
-  restrictedBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#F3F4F6',
-    padding: 12,
-    borderRadius: 12,
-    marginHorizontal: 20,
-    marginTop: -20
+  aboutSection: {
+    paddingHorizontal: 20,
+    marginBottom: 20
   },
-  restrictedText: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#242a65',
+    marginBottom: 12
+  },
+  bioText: {
+    fontSize: 14,
     color: '#6B7280',
-    fontSize: 12,
-    fontWeight: '500'
+    lineHeight: 22
   },
   
-  // Videos Section
+  interestsSection: {
+    paddingLeft: 20,
+    marginBottom: 20
+  },
+  interestsScroll: {
+    paddingRight: 20,
+    gap: 10
+  },
+  interestChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20
+  },
+  interestIcon: {
+    fontSize: 16
+  },
+  interestLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#374151'
+  },
+  
+  filterSection: {
+    paddingLeft: 20,
+    marginBottom: 16
+  },
+  filterScroll: {
+    paddingRight: 20,
+    gap: 8
+  },
+  filterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E5E7EB'
+  },
+  filterChipActive: {
+    backgroundColor: '#7459f0',
+    borderColor: '#7459f0'
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280'
+  },
+  filterChipTextActive: {
+    color: '#fff'
+  },
+  
   videosSection: {
     paddingHorizontal: 20
   },
@@ -794,6 +1112,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '700'
+  },
+  
+  emptyVideos: {
+    alignItems: 'center',
+    paddingVertical: 40
+  },
+  emptyVideosText: {
+    color: '#9CA3AF',
+    fontSize: 14,
+    marginTop: 12
   },
   
   videosGrid: { 
@@ -843,7 +1171,6 @@ const styles = StyleSheet.create({
     fontWeight: '700' 
   },
   
-  // Player
   playerContainer: { 
     flex: 1, 
     backgroundColor: '#000' 
@@ -883,6 +1210,9 @@ const styles = StyleSheet.create({
   playerActionIconActive: {
     backgroundColor: '#EF4444'
   },
+  playerActionIconSaved: {
+    backgroundColor: '#FBA31A'
+  },
   playerActionText: { 
     color: '#fff', 
     fontSize: 13, 
@@ -903,7 +1233,83 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   
-  // Modals
+  shareOverlay: { 
+    flex: 1, 
+    backgroundColor: 'rgba(0,0,0,0.8)', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 20 
+  },
+  shareContentWrapper: { 
+    width: '100%', 
+    maxWidth: 400 
+  },
+  shareContent: { 
+    backgroundColor: '#fff', 
+    borderRadius: 24, 
+    overflow: 'hidden', 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 10 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 20, 
+    elevation: 10 
+  },
+  shareHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 24, 
+    paddingVertical: 20 
+  },
+  shareHeaderContent: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: 12 
+  },
+  shareTitle: { 
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    color: '#fff' 
+  },
+  shareCloseButton: { 
+    width: 36, 
+    height: 36, 
+    borderRadius: 18, 
+    backgroundColor: 'rgba(255,255,255,0.2)', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  shareOptionsGrid: { 
+    flexDirection: 'row', 
+    paddingHorizontal: 20, 
+    paddingVertical: 30, 
+    gap: 20, 
+    justifyContent: 'space-around' 
+  },
+  shareOptionCard: { 
+    alignItems: 'center', 
+    gap: 12, 
+    flex: 1 
+  },
+  shareIconGradient: { 
+    width: 80, 
+    height: 80, 
+    borderRadius: 24, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 8 }, 
+    shadowOpacity: 0.3, 
+    shadowRadius: 12, 
+    elevation: 12 
+  },
+  shareOptionLabel: { 
+    fontSize: 13, 
+    fontWeight: '600', 
+    color: '#374151', 
+    textAlign: 'center' 
+  },
+  
   modalOverlay: { 
     flex: 1, 
     backgroundColor: 'rgba(0,0,0,0.7)', 
@@ -938,7 +1344,6 @@ const styles = StyleSheet.create({
     fontWeight: '500' 
   },
   
-  // Edit Modal
   editOverlay: { 
     flex: 1, 
     backgroundColor: 'rgba(0,0,0,0.8)', 
