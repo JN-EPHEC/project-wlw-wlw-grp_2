@@ -10,7 +10,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { 
   collection, getDocs, query, orderBy, limit, doc, updateDoc, 
-  increment, arrayUnion, arrayRemove, getDoc, addDoc, serverTimestamp
+  increment, arrayUnion, arrayRemove, getDoc, addDoc, serverTimestamp,
+  onSnapshot  // ✅ DOIT ÊTRE LÀ
 } from 'firebase/firestore';
 import { db, auth } from '../../firebaseConfig';
 import { useFocusEffect } from '@react-navigation/native';
@@ -197,7 +198,42 @@ export default function HomeScreen() {
       console.error("Erreur chargement utilisateurs:", e);
     }
   };
-
+// ✅ AJOUTER CE LISTENER pour synchroniser TOUTES les vidéos
+useEffect(() => {
+    if (videos.length === 0) return;
+    
+    const unsubscribers: (() => void)[] = [];
+    
+    videos.forEach((video) => {
+        const unsub = onSnapshot(
+            doc(db, 'videos', video.id),
+            (docSnapshot) => {
+                if (docSnapshot.exists()) {
+                    const data = docSnapshot.data();
+                    
+                    setVideos(prev => prev.map(v => {
+                        if (v.id !== video.id) return v;
+                        
+                        return {
+                            ...v,
+                            likes: data.likes || 0,
+                            comments: data.comments || 0
+                        };
+                    }));
+                }
+            },
+            (error) => {
+                console.error('Erreur listener vidéo:', error);
+            }
+        );
+        
+        unsubscribers.push(unsub);
+    });
+    
+    return () => {
+        unsubscribers.forEach(unsub => unsub());
+    };
+}, [videos.length]); // ⚠️ NE PAS mettre "videos" entier sinon boucle infinie
   useEffect(() => {
     if (searchQuery.trim() === '') {
       setFilteredUsers(allUsers);
