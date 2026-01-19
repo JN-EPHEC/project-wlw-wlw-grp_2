@@ -164,7 +164,6 @@ export default function PublicProfileScreen() {
         });
     }
 
-    // ✅ VIDÉOS EN TEMPS RÉEL (UN SEUL BLOC)
     const vQuery = query(
         collection(db, 'videos'), 
         where('creatorId', '==', id)
@@ -176,7 +175,6 @@ export default function PublicProfileScreen() {
             ...d.data() 
         } as VideoData));
         
-        // ✅ Tri en JavaScript
         videosData.sort((a, b) => {
             const aTime = a.createdAt?.seconds || 0;
             const bTime = b.createdAt?.seconds || 0;
@@ -185,6 +183,14 @@ export default function PublicProfileScreen() {
         
         setVideos(videosData);
         setFilteredVideos(videosData);
+        
+        // ✅ MISE À JOUR DU COMPTEUR EN TEMPS RÉEL si video ouverte
+        if (selectedVideo) {
+          const updated = videosData.find(v => v.id === selectedVideo.id);
+          if (updated) {
+            setSelectedVideo(updated);
+          }
+        }
     }, (error) => {
         console.error('Erreur chargement vidéos:', error);
     });
@@ -253,6 +259,7 @@ export default function PublicProfileScreen() {
         await updateDoc(myRef, { following: arrayUnion(profile.uid) });
         await updateDoc(targetRef, { followers: arrayUnion(currentUserId) });
         
+        // ✅ FIX: Envoi notification sans videoThumb
         await addDoc(collection(db, 'notifications'), {
           userId: profile.uid,
           fromUserId: currentUserId,
@@ -271,20 +278,79 @@ export default function PublicProfileScreen() {
   };
 
   const handleVideoLike = async () => {
-      if (!currentUserId || !selectedVideo || !canInteract) return;
-      const isLiked = myLikedVideos.has(selectedVideo.id);
-      try {
-          const vRef = doc(db, 'videos', selectedVideo.id);
-          const uRef = doc(db, 'users', currentUserId);
+    if (!currentUserId || !selectedVideo || !canInteract) return;
+    const isLiked = myLikedVideos.has(selectedVideo.id);
+    
+    setMyLikedVideos(prev => { 
+      const s = new Set(prev); 
+      if (isLiked) {
+        s.delete(selectedVideo.id);
+      } else {
+        s.add(selectedVideo.id);
+      }
+      return s; 
+    });
+    
+    setSelectedVideo(prev => prev ? {
+      ...prev,
+      likes: isLiked ? prev.likes - 1 : prev.likes + 1
+    } : null);
+    
+    setVideos(prevVideos => prevVideos.map(v => 
+      v.id === selectedVideo.id 
+        ? { ...v, likes: isLiked ? v.likes - 1 : v.likes + 1 }
+        : v
+    ));
+    
+    try {
+        const vRef = doc(db, 'videos', selectedVideo.id);
+        const uRef = doc(db, 'users', currentUserId);
+        
+        if (isLiked) {
+            await updateDoc(uRef, { likedVideos: arrayRemove(selectedVideo.id) });
+            await updateDoc(vRef, { likes: increment(-1) });
+        } else {
+            await updateDoc(uRef, { likedVideos: arrayUnion(selectedVideo.id) });
+            await updateDoc(vRef, { likes: increment(1) });
+            
+            // ✅ FIX: Notification avec données obligatoires seulement
+            await addDoc(collection(db, 'notifications'), {
+              userId: selectedVideo.creatorId,
+              fromUserId: currentUserId,
+              fromUserName: currentUserName,
+              type: 'like',
+              videoId: selectedVideo.id,
+              videoTitle: selectedVideo.title,
+              read: false,
+              createdAt: serverTimestamp()
+            });
+        }
+    } catch (e) { 
+        console.error('Erreur like:', e);
+        
+        setMyLikedVideos(prev => { 
+          const s = new Set(prev); 
           if (isLiked) {
-              await updateDoc(uRef, { likedVideos: arrayRemove(selectedVideo.id) });
-              await updateDoc(vRef, { likes: increment(-1) });
+            s.add(selectedVideo.id);
           } else {
-              await updateDoc(uRef, { likedVideos: arrayUnion(selectedVideo.id) });
-              await updateDoc(vRef, { likes: increment(1) });
-              await sendNotification(selectedVideo.creatorId, 'like', { videoId: selectedVideo.id, videoTitle: selectedVideo.title, senderName: currentUserName, senderId: currentUserId });
+            s.delete(selectedVideo.id);
           }
-      } catch (e) { console.error(e); }
+          return s; 
+        });
+        
+        setSelectedVideo(prev => prev ? {
+          ...prev,
+          likes: isLiked ? prev.likes + 1 : prev.likes - 1
+        } : null);
+        
+        setVideos(prevVideos => prevVideos.map(v => 
+          v.id === selectedVideo.id 
+            ? { ...v, likes: isLiked ? v.likes + 1 : v.likes - 1 }
+            : v
+        ));
+        
+        Alert.alert('Erreur', 'Impossible de mettre à jour le like');
+    }
   };
 
   const handleVideoSave = async () => {
@@ -543,9 +609,26 @@ export default function PublicProfileScreen() {
                 <TouchableOpacity 
                   key={video.id} 
                   style={styles.videoItem} 
-                  onPress={() => { 
-                    setSelectedVideo(video); 
-                    setShowPlayer(true); 
+                  onPress={async () => { 
+                    try {
+                      const videoDoc = await getDoc(doc(db, 'videos', video.id));
+                      if (videoDoc.exists()) {
+                        const freshData = videoDoc.data();
+                        setSelectedVideo({
+                          ...video,
+                          likes: freshData.likes || 0,
+                          comments: freshData.comments || 0,
+                          views: freshData.views || 0
+                        });
+                      } else {
+                        setSelectedVideo(video);
+                      }
+                      setShowPlayer(true);
+                    } catch (error) {
+                      console.error('Erreur chargement vidéo:', error);
+                      setSelectedVideo(video);
+                      setShowPlayer(true);
+                    }
                   }}
                 >
                   {video.thumbnail ? (
@@ -574,6 +657,7 @@ export default function PublicProfileScreen() {
         <View style={{height: 40}} />
       </ScrollView>
 
+      {/* ✅ MODAL PLAYER CORRIGÉE */}
       <Modal visible={showPlayer && selectedVideo !== null} animationType="slide">
         <View style={styles.playerContainer}>
           {selectedVideo && (
@@ -586,7 +670,20 @@ export default function PublicProfileScreen() {
                 shouldPlay 
                 isLooping 
               />
+              
+              {/* ✅ INFO VIDÉO REPOSITIONNÉE */}
+              <View style={styles.playerBottomInfo}>
+                <Text style={styles.playerTitle} numberOfLines={2}>
+                  {selectedVideo.title}
+                </Text>
+                {selectedVideo.description && (
+                  <Text style={styles.playerDescription} numberOfLines={3}>
+                    {selectedVideo.description}
+                  </Text>
+                )}
+              </View>
 
+              {/* ✅ OPTIONS (UNE SEULE FOIS) */}
               {currentUserId === selectedVideo.creatorId && (
                 <TouchableOpacity style={styles.optionsButton} onPress={() => setShowOptions(true)}>
                   <View style={styles.optionsIcon}>
@@ -595,6 +692,7 @@ export default function PublicProfileScreen() {
                 </TouchableOpacity>
               )}
               
+              {/* ✅ ACTIONS */}
               {canInteract && (
                 <View style={styles.playerActions}>
                   <TouchableOpacity style={styles.playerAction} onPress={handleVideoLike}>
@@ -924,6 +1022,31 @@ const styles = StyleSheet.create({
     fontWeight: 'bold', 
     color: '#fff',
     marginBottom: 8
+  },
+
+  // ✅ INFO VIDÉO REPOSITIONNÉE ET STYLISÉE
+  playerBottomInfo: {
+    position: 'absolute',
+    bottom: 140,
+    left: 20,
+    right: 100,
+    zIndex: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12
+  },
+  playerTitle: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 6,
+    lineHeight: 22
+  },
+  playerDescription: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 14,
+    lineHeight: 20
   },
   
   roleTagWhite: {

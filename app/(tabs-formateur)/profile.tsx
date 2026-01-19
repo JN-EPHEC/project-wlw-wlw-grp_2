@@ -12,7 +12,7 @@ import SettingsScreen from '../../components/SettingsScreen';
 // ===== IMPORTS FIREBASE =====
 import { auth, db, storage } from '../../firebaseConfig'; 
 import { 
-  doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, serverTimestamp, deleteDoc, arrayUnion, arrayRemove, orderBy, limit
+  doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, serverTimestamp, deleteDoc, arrayUnion, arrayRemove, limit
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { signOut as firebaseSignOut } from 'firebase/auth';
@@ -149,24 +149,40 @@ export default function ProfileFormateurScreen() {
           setMyPlaylists(pSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Playlist)));
       } catch (e) { console.log("Erreur playlists:", e); }
 
-      // Historique
+      // ✅ HISTORIQUE CORRIGÉ
       try {
         const historyRef = collection(db, 'watchHistory');
+        // ✅ SANS orderBy pour éviter l'erreur d'index composite
         const historyQuery = query(
           historyRef, 
-          where('userId', '==', user.uid), 
-          orderBy('watchedAt', 'desc'),
+          where('userId', '==', user.uid),
           limit(50)
         );
         const historySnapshot = await getDocs(historyQuery);
-        const historyVideoIds = historySnapshot.docs.map(d => d.data().videoId);
+        
+        // ✅ Récupérer les données avec timestamp
+        const historyData = historySnapshot.docs.map(d => ({
+          videoId: d.data().videoId,
+          watchedAt: d.data().watchedAt
+        }));
+        
+        // ✅ Trier par date en JavaScript (du plus récent au plus ancien)
+        historyData.sort((a, b) => {
+          const aTime = a.watchedAt?.seconds || 0;
+          const bTime = b.watchedAt?.seconds || 0;
+          return bTime - aTime;
+        });
+        
+        const historyVideoIds = historyData.map(h => h.videoId);
         
         if (historyVideoIds.length > 0) {
           const historyVideos = await fetchVideosByIds(historyVideoIds);
           setWatchHistory(historyVideos);
+        } else {
+          setWatchHistory([]);
         }
       } catch (e) { 
-        console.log("Erreur historique:", e);
+        console.error("Erreur historique:", e);
         setWatchHistory([]);
       }
 
